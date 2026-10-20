@@ -15,6 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useMe, useRoles, useSections } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { can, fromMatrix, toMatrix, type MatrixChoice } from "@/lib/permissions";
+import { submitOnce } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { RoleRow, SectionInfo } from "@/lib/types";
 
@@ -117,7 +118,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
             color="primary"
             isDisabled={!dirty || !name.trim()}
             isLoading={save.isPending}
-            onPress={() => save.mutate()}
+            onPress={() => submitOnce(save.isPending, () => save.mutate())()}
           >
             Сохранить
           </Button>
@@ -140,7 +141,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
         isOpen={confirmDelete}
         title="Удалить роль"
         onClose={() => setConfirmDelete(false)}
-        onConfirm={() => remove.mutate()}
+        onConfirm={() => submitOnce(remove.isPending, () => remove.mutate())()}
       >
         Роль «{role.name}» будет удалена. Если она назначена пользователям, сначала смените им роль.
       </ConfirmModal>
@@ -169,7 +170,7 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => create.mutate()}>
+          <Button color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => submitOnce(create.isPending, () => create.mutate())()}>
             Создать
           </Button>
         </>
@@ -180,10 +181,7 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       onClose={onClose}
     >
       <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) create.mutate();
-        }}
+        onSubmit={submitOnce(create.isPending || !name.trim(), () => create.mutate())}
       >
         <Input autoFocus isRequired label="Название" value={name} onValueChange={setName} />
         <p className="mt-2 text-xs text-default-500">Права отметите после создания.</p>

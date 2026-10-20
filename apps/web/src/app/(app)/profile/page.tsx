@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PasswordField } from "@/components/PasswordField";
 import { ME_KEY, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
+import { submitOnce } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Me } from "@/lib/types";
 
@@ -33,10 +34,7 @@ function ProfileForm({ me }: { me: Me }) {
   return (
     <form
       className="space-y-4 rounded-2xl bg-content1 p-5"
-      onSubmit={(e: FormEvent) => {
-        e.preventDefault();
-        save.mutate();
-      }}
+      onSubmit={submitOnce(save.isPending, () => save.mutate())}
     >
       <h2 className="text-lg font-semibold">Данные</h2>
       <Input isReadOnly label="Логин" value={me.login} />
@@ -77,10 +75,7 @@ function PasswordForm() {
   return (
     <form
       className="space-y-4 rounded-2xl bg-content1 p-5"
-      onSubmit={(e: FormEvent) => {
-        e.preventDefault();
-        change.mutate();
-      }}
+      onSubmit={submitOnce(change.isPending, () => change.mutate())}
     >
       <h2 className="text-lg font-semibold">Смена пароля</h2>
       <PasswordField

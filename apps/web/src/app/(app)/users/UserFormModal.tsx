@@ -9,6 +9,7 @@ import { AppModal } from "@/components/AppModal";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe, useRoles } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
+import { submitOnce } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
 
@@ -69,7 +70,7 @@ export function UserFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submitOnce(save.isPending, () => save.mutate())()}>
             {user ? "Сохранить" : "Создать"}
           </Button>
         </>
@@ -81,10 +82,7 @@ export function UserFormModal({
       <form
         className="space-y-4"
         id="user-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submitOnce(save.isPending || !valid, () => save.mutate())}
       >
         <Input
           autoComplete="off"
@@ -109,7 +107,9 @@ export function UserFormModal({
         <SelectField
           isRequired
           label="Роль"
-          options={roles.map((r) => ({ key: r.id, label: r.name }))}
+          options={roles
+            .filter((r) => r.assignable || r.id === user?.role_id)
+            .map((r) => ({ key: r.id, label: r.name }))}
           value={roleId}
           onChange={setRoleId}
         />

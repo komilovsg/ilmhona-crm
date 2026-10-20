@@ -11,8 +11,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
 import { SelectField } from "@/components/SelectField";
 import { api } from "@/lib/api";
+import { diffLines, type Names } from "@/lib/audit";
 import { formatDateTime } from "@/lib/format";
-import type { AuditRow, Paged, UserRow } from "@/lib/types";
+import type { AuditPage, AuditRow, Paged, UserRow } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 
@@ -38,28 +39,18 @@ const ACTIONS: Record<string, string> = {
 
 type Filters = { user: string | null; entity: string | null; action: string | null };
 
-function show(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+function Diff({ diff, names, sections }: { diff: Record<string, unknown>; names: Names; sections: Names }) {
+  const lines = diffLines(diff, names, sections);
 
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
-}
-
-function Diff({ diff }: { diff: Record<string, unknown> }) {
-  const entries = Object.entries(diff);
-
-  if (!entries.length) return <span className="text-default-500">—</span>;
+  if (!lines.length) return <span className="text-default-500">—</span>;
 
   return (
     <ul className="space-y-0.5 text-xs">
-      {entries.map(([field, change]) => {
-        const [before, after] = Array.isArray(change) ? change : [undefined, change];
-
-        return (
-          <li key={field} className="break-words">
-            <span className="text-default-500">{field}:</span> {show(before)} → {show(after)}
-          </li>
-        );
-      })}
+      {lines.map((l, i) => (
+        <li key={i} className="break-words">
+          <span className="text-default-500">{l.label}:</span> {l.before} → {l.after}
+        </li>
+      ))}
     </ul>
   );
 }
@@ -110,7 +101,7 @@ export default function AuditPage() {
   const list = useQuery({
     queryKey: ["audit", filters, page],
     queryFn: () =>
-      api<Paged<AuditRow>>("/api/v1/audit", {
+      api<AuditPage>("/api/v1/audit", {
         params: {
           user_id: filters.user ?? undefined,
           entity: filters.entity ?? undefined,
@@ -127,7 +118,16 @@ export default function AuditPage() {
   };
   const rows = list.data?.items ?? [];
   const activeFilters = Object.values(filters).filter(Boolean).length;
+  const names = list.data?.names ?? {};
+  const sections = list.data?.sections ?? {};
   const who = (r: AuditRow) => r.user_name ?? "Система";
+  // «Изменён пользователь · Камол»: the action plus the entity it touched
+  const what = (r: AuditRow) => {
+    const target = r.entity_id ? names[r.entity_id] : undefined;
+    const action = ACTIONS[r.action] ?? r.action;
+
+    return target ? `${action} · ${target}` : action;
+  };
 
   return (
     <>
@@ -164,9 +164,9 @@ export default function AuditPage() {
                   <tr key={r.id} className="border-b border-divider align-top last:border-0">
                     <td className="whitespace-nowrap px-4 py-3 text-default-600">{formatDateTime(r.at)}</td>
                     <td className="px-4 py-3">{who(r)}</td>
-                    <td className="px-4 py-3">{ACTIONS[r.action] ?? r.action}</td>
+                    <td className="px-4 py-3">{what(r)}</td>
                     <td className="px-4 py-3">
-                      <Diff diff={r.diff} />
+                      <Diff diff={r.diff} names={names} sections={sections} />
                     </td>
                   </tr>
                 ))}
@@ -180,9 +180,9 @@ export default function AuditPage() {
                   <span>{formatDateTime(r.at)}</span>
                   <span>{who(r)}</span>
                 </div>
-                <div className="mt-1 font-medium">{ACTIONS[r.action] ?? r.action}</div>
+                <div className="mt-1 font-medium">{what(r)}</div>
                 <div className="mt-2">
-                  <Diff diff={r.diff} />
+                  <Diff diff={r.diff} names={names} sections={sections} />
                 </div>
               </li>
             ))}
