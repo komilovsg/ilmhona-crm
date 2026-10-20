@@ -116,7 +116,9 @@ async def test_bug_25_every_update_endpoint_checks_the_version(admin: httpx.Asyn
     cohort = await make_cohort(admin, course, room)
     student = await make_student("Студент")
     enrolled = (
-        await admin.post(f"/api/v1/cohorts/{cohort['id']}/enrollments", json={"student_id": str(student)})
+        await admin.post(
+            f"/api/v1/cohorts/{cohort['id']}/enrollments", json={"student_id": str(student)}
+        )
     ).json()
     lesson = (await admin.get(f"/api/v1/cohorts/{cohort['id']}/lessons")).json()[0]
     role = (await admin.post("/api/v1/roles", json={"name": "Гонка", "permissions": {}})).json()
@@ -142,7 +144,9 @@ async def test_bug_25_every_update_endpoint_checks_the_version(admin: httpx.Asyn
     assert me["version"] == 1
     # the role matrix save follows the same rule, and a matrix-only change bumps the role
     put = {"name": "Гонка", "permissions": {"leads": "view"}}
-    assert (await admin.put(f"/api/v1/roles/{role['id']}", json=put, no_version=True)).status_code == 428
+    assert (
+        await admin.put(f"/api/v1/roles/{role['id']}", json=put, no_version=True)
+    ).status_code == 428
     stale = await admin.put(f"/api/v1/roles/{role['id']}", json=put, headers=at(99))
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     assert stale.json()["params"]["current"]["permissions"] == {}
