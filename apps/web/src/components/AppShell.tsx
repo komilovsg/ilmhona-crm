@@ -155,8 +155,18 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { data: me, isPending } = useMe();
+  const { data: me, isPending, isError, refetch } = useMe();
 
+  if (isError && !me) {
+    return (
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-4 text-center">
+        <p className="text-default-600">Не удалось загрузить данные. Проверьте связь с сервером.</p>
+        <Button color="primary" onPress={() => void refetch()}>
+          Повторить
+        </Button>
+      </div>
+    );
+  }
   if (isPending || !me) {
     return (
       <div className="flex min-h-dvh items-center justify-center">
