@@ -48,9 +48,9 @@ function Cell({ student, lesson }: { student: GridStudent; lesson: AttendanceGri
 
 function Unmarked({ n }: { n: number }) {
   return n > 0 ? (
-    <span className="rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium text-secondary">не отмечено: {n}</span>
+    <span className="whitespace-nowrap rounded-full bg-secondary/15 px-2 py-0.5 text-xs font-medium text-secondary">не отмечено: {n}</span>
   ) : (
-    <span className="text-xs text-default-400">всё отмечено</span>
+    <span className="whitespace-nowrap text-xs text-default-400">всё отмечено</span>
   );
 }
 
@@ -109,8 +109,8 @@ function Grid({
           <thead className="text-xs text-default-500">
             <tr>
               <th className="sticky left-0 z-10 min-w-48 border-b border-divider bg-content1 px-4 py-3 font-medium">Студент</th>
-              <th className="border-b border-divider px-3 py-3 text-right font-medium">Посещ.</th>
-              <th className="border-b border-divider px-3 py-3 font-medium">Не отмечено</th>
+              <th className="min-w-28 whitespace-nowrap border-b border-divider px-3 py-3 text-right font-medium">Посещ.</th>
+              <th className="min-w-40 whitespace-nowrap border-b border-divider px-3 py-3 font-medium">Не отмечено</th>
               {lessons.map((l) => (
                 <th
                   key={l.id}
@@ -120,7 +120,7 @@ function Grid({
                     l.cancelled && "line-through opacity-60",
                   )}
                 >
-                  {canMark && !l.cancelled ? (
+                  {canMark && !l.cancelled && l.date <= today ? (
                     <Link
                       aria-label={`Отметить урок ${dayTitle(l.date)}`}
                       className="block rounded-md px-1.5 py-0.5 hover:bg-default-100"
@@ -145,13 +145,13 @@ function Grid({
                   <div className="truncate">{s.student_name}</div>
                   {s.status !== "активный" && <PersonStatus status={s.status} />}
                 </th>
-                <td className="border-b border-divider px-3 py-2 text-right tabular-nums">
+                <td className="min-w-28 whitespace-nowrap border-b border-divider px-3 py-2 text-right tabular-nums">
                   <div className="font-medium">{percentLabel(s.percent)}</div>
                   <div className="text-xs text-default-500">
                     {s.present} из {s.held}
                   </div>
                 </td>
-                <td className="border-b border-divider px-3 py-2">
+                <td className="min-w-40 whitespace-nowrap border-b border-divider px-3 py-2">
                   <Unmarked n={s.unmarked} />
                 </td>
                 {lessons.map((l) => (
@@ -191,16 +191,16 @@ function Grid({
                     !l.cancelled && state === "none" && (l.held ? "bg-secondary/15 text-secondary" : "bg-default-100 text-default-500"),
                   )}
                 >
-                  {l.cancelled ? "отменён" : !l.held && p.marked === 0 ? "ещё не был" : markedLabel(p.marked, p.total)}
+                  {l.cancelled ? "отменён" : l.date > today ? "ещё впереди" : !l.held && p.marked === 0 ? "ещё не был" : markedLabel(p.marked, p.total)}
                 </span>
-                {canMark && !l.cancelled && <Icon className="text-default-400" name="chevron-right" size={18} />}
+                {canMark && !l.cancelled && l.date <= today && <Icon className="text-default-400" name="chevron-right" size={18} />}
               </div>
             </>
           );
 
           return (
             <li key={l.id}>
-              {canMark && !l.cancelled ? (
+              {canMark && !l.cancelled && l.date <= today ? (
                 <Link className="flex min-h-16 items-center justify-between gap-2 rounded-2xl bg-content1 p-4" href={`/lessons/${l.id}`}>
                   {inner}
                 </Link>

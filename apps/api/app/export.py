@@ -33,7 +33,7 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 MONEY_FORMAT = '#,##0.00 "TJS"'
 EXPORT_TOO_LARGE = errors.define("export_too_large", 422, "Too many rows for one Excel file")
 
-Kind = Literal["text", "int", "date", "datetime", "money", "bool"]
+Kind = Literal["text", "int", "date", "datetime", "money", "bool", "percent"]
 _FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 _PHONE = re.compile(r"^\+\d[\d ()-]*$")
 
@@ -61,6 +61,8 @@ def _cell(value: Any, kind: Kind) -> tuple[Any, str | None]:
         return ("Да" if value else "Нет"), None
     if kind == "money":
         return float(Decimal(value)), MONEY_FORMAT
+    if kind == "percent":  # given as 55.6 (percent), stored as a real percentage cell
+        return float(Decimal(value) / 100), "0.0%"
     if kind == "int":
         return int(value), "0"
     if kind == "datetime":

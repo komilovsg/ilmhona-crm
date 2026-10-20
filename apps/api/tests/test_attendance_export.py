@@ -33,11 +33,14 @@ async def test_tabel_export_equals_the_grid(admin: httpx.AsyncClient, login_as: 
         "Проведено уроков",
         "Присутствовал",
         "Не отмечено",
-        "Посещаемость, %",
+        "Посещаемость",
     )
     assert len(rows[0]) == 6 + len(grid["lessons"])
     assert "(отм.)" in rows[0][6 + 2]  # the cancelled lesson is named in its header
     by_name = {row[0]: row for row in rows[1:]}
+    cell = ws["F2"]  # a numeric percentage cell, not text
+    assert isinstance(cell.value, float) and cell.number_format == "0.0%"
+    assert abs(by_name["Алиев"][5] - 1 / 8) < 1e-9
     for s in grid["students"]:
         row = by_name[s["student_name"]]
         assert (row[2], row[3], row[4]) == (s["held"], s["present"], s["unmarked"])

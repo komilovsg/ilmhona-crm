@@ -27,7 +27,12 @@ from app.cohorts import status as st
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.versioning import Version, check_version
-from app.education.errors import COHORT_CLOSED, ENROLLED_AFTER_LESSON, LESSON_CANCELLED
+from app.education.errors import (
+    COHORT_CLOSED,
+    ENROLLED_AFTER_LESSON,
+    LESSON_CANCELLED,
+    LESSON_NOT_HELD,
+)
 from app.education.scope import check_cohort_visible, cohort_filters
 from app.export import Col, check_cap, xlsx_response
 from app.metrics import (
@@ -113,6 +118,10 @@ def _writable(lesson: Lesson, cohort: Cohort) -> None:
         raise DomainError(LESSON_CANCELLED)
     if cohort.status == st.CANCELLED:
         raise DomainError(COHORT_CLOSED)
+    # today's lesson takes marks from the morning on, a later one none: a mark pins a lesson
+    # through every schedule rebuild
+    if lesson.lesson_date > st.today():
+        raise DomainError(LESSON_NOT_HELD)
 
 
 async def _eligible(db: AsyncSession, lesson: Lesson) -> list[tuple[Enrollment, Student]]:
@@ -216,7 +225,11 @@ async def mark_cell(
         await db.execute(
             select(Enrollment, Student.full_name, enrolled_by(lesson.lesson_date))
             .join(Student, Student.id == Enrollment.student_id)
-            .where(Enrollment.id == enrollment_id, Enrollment.cohort_id == lesson.cohort_id)
+            .where(
+                Enrollment.id == enrollment_id,
+                Enrollment.cohort_id == lesson.cohort_id,
+                Enrollment.status != EXPELLED,  # not on the lesson screen: not markable either
+            )
         )
     ).first()
     if row is None:
@@ -401,7 +414,7 @@ async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         Col("Проведено уроков", lambda s: s["held"], "int"),
         Col("Присутствовал", lambda s: s["present"], "int"),
         Col("Не отмечено", lambda s: s["unmarked"], "int"),
-        Col("Посещаемость, %", lambda s: s["percent"] if s["percent"] is not None else "", "text"),
+        Col("Посещаемость", lambda s: s["percent"], "percent"),
     ]
     columns += [
         Col(
@@ -494,11 +507,11 @@ async def set_grade(
     before = {"homework": grade.homework, "final": grade.final}
     for field in body.model_fields_set:
         setattr(grade, field, getattr(body, field))
-    grade.updated_at = _now()
-    await db.flush()
     after = {"homework": grade.homework, "final": grade.final}
     diff = {k: [before[k], after[k]] for k in after if before[k] != after[k]}
-    if diff:
+    if diff:  # nothing changed: no new version, so nobody else's save goes stale for nothing
+        grade.updated_at = _now()
+        await db.flush()
         await record(
             db, p.id, "grade.update", "enrollment", enrollment.id, diff, branch_id=cohort.branch_id
         )

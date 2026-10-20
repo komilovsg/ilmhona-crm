@@ -295,7 +295,13 @@ async def test_rebuild_keeps_lessons_with_marks(admin: httpx.AsyncClient) -> Non
     e = await enroll(admin, cohort, "Алиев")
     lessons = (await admin.get(f"{C}/{cohort['id']}/lessons")).json()
     marked = lessons[1]  # a Wednesday
-    assert (await mark(admin, marked["id"], e)).status_code == 200
+    # the API marks a lesson from its day on (a lesson of today that has not started yet is
+    # still ahead for the rebuild); the mark is put in directly to keep the dates simple
+    await sql(
+        "INSERT INTO attendance (lesson_id, enrollment_id, present) VALUES (:l, :e, true)",
+        l=marked["id"],
+        e=e,
+    )
     r = await admin.patch(f"{C}/{cohort['id']}", json={"weekdays": [2, 4]})
     assert r.status_code == 200, r.text
     after = (await admin.get(f"{C}/{cohort['id']}/lessons")).json()

@@ -46,6 +46,7 @@ export const apiErrors: Record<string, string> = {
   cohort_closed: "Поток завершён или отменён, изменить его нельзя.",
   cohort_not_cancelled: "Поток не отменён.",
   lesson_cancelled: "Урок отменён.",
+  lesson_not_held: "Урок ещё впереди: отметить можно с дня урока.",
   enrolled_after_lesson: "Студент зачислен позже этого урока: отметка невозможна.",
   instructor_invalid: "Инструктор должен быть активным сотрудником с ролью «Инструктор» из этого филиала.",
   room_branch_mismatch: "Аудитория из другого филиала.",
