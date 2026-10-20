@@ -82,8 +82,8 @@ async def test_branch_bound_manager_creates_into_own_branch_only(
         C, json=body(course, istar_room, branch_id=str(await branch_id("Истаравшан")))
     )
     assert (r.status_code, r.json()["code"]) == (403, "branch_forbidden")
-    r = await mgr.post(C, json=body(course, istar_room))  # no branch: own, but the room is not
-    assert (r.status_code, r.json()["code"]) == (422, "room_branch_mismatch")
+    r = await mgr.post(C, json=body(course, istar_room))  # no branch: own; the room is unseen
+    assert (r.status_code, r.json()["code"]) == (404, "not_found")
     r = await mgr.post(
         STUDENTS, json={"full_name": "Новый", "branch_id": str(await branch_id("Истаравшан"))}
     )

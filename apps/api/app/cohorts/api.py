@@ -31,6 +31,7 @@ from app.education.errors import (
     INSTRUCTOR_INVALID,
     LESSON_CANCELLED,
     ROOM_BRANCH_MISMATCH,
+    STUDENT_BRANCH_MISMATCH,
 )
 from app.education.scope import (
     branch_for_write,
@@ -272,10 +273,14 @@ async def _check_instructor(
         raise DomainError(INSTRUCTOR_INVALID)
 
 
-async def _room_in_branch(db: AsyncSession, room_id: uuid.UUID, branch_id: uuid.UUID) -> Room:
+async def _room_in_branch(
+    db: AsyncSession, p: Principal, room_id: uuid.UUID, branch_id: uuid.UUID
+) -> Room:
+    """A room outside the user's scope is 404 like a missing one (no probing other branches)."""
     room = (await db.execute(select(Room).where(Room.id == room_id))).scalar_one_or_none()
     if room is None:
         raise DomainError(NOT_FOUND)
+    p.check_scope(room.branch_id)
     if room.branch_id != branch_id:
         raise DomainError(ROOM_BRANCH_MISMATCH)
     return room
@@ -362,7 +367,7 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
     ).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)
-    await _room_in_branch(db, body.room_id, branch_id)
+    await _room_in_branch(db, p, body.room_id, branch_id)
     await _check_instructor(db, body.instructor_id, branch_id)
     cohort = Cohort(
         course_id=course.id,
@@ -431,7 +436,7 @@ async def update_cohort(
     if cohort.capacity < (await cohort_enrolled(db, [cohort.id]))[cohort.id]:
         raise DomainError(COHORT_FULL)
     if "room_id" in sent and body.room_id is not None:
-        await _room_in_branch(db, body.room_id, cohort.branch_id)
+        await _room_in_branch(db, p, body.room_id, cohort.branch_id)
         cohort.room_id = body.room_id
     if "instructor_id" in sent and body.instructor_id != cohort.instructor_id:
         await _check_instructor(db, body.instructor_id, cohort.branch_id)
@@ -588,7 +593,7 @@ async def add_lesson(cohort_id: uuid.UUID, body: LessonIn, p: Change, db: DB) ->
     if cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)
     room_id = body.room_id or cohort.room_id
-    await _room_in_branch(db, room_id, cohort.branch_id)
+    await _room_in_branch(db, p, room_id, cohort.branch_id)
     starts, ends = local_dt(body.date, body.start_time), local_dt(body.date, body.end_time)
     await check_room_free(db, room_id, [(starts, ends)])
     lesson = Lesson(
@@ -642,7 +647,7 @@ async def move_lesson(lesson_id: uuid.UUID, body: LessonMove, p: Change, db: DB)
     if window_problem(start, end) or not MIN_DATE <= day <= MAX_DATE:
         raise DomainError(VALIDATION_FAILED)
     room_id = body.room_id or lesson.room_id
-    await _room_in_branch(db, room_id, cohort.branch_id)
+    await _room_in_branch(db, p, room_id, cohort.branch_id)
     starts, ends = local_dt(day, start), local_dt(day, end)
     await check_room_free(db, room_id, [(starts, ends)], ignore_lesson=lesson.id)
     lesson.source = "manual"  # a moved lesson is no longer the schedule's to rebuild
@@ -745,6 +750,8 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Change, db: DB) -> dic
         if found is None:
             raise DomainError(NOT_FOUND)
         p.check_scope(found.branch_id)
+        if found.branch_id != cohort.branch_id:
+            raise DomainError(STUDENT_BRANCH_MISMATCH)
         student = found
     enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id)
     db.add(enrollment)

@@ -44,6 +44,7 @@ export const apiErrors: Record<string, string> = {
   lesson_cancelled: "Урок отменён.",
   instructor_invalid: "Инструктор должен быть активным сотрудником с ролью «Инструктор» из этого филиала.",
   room_branch_mismatch: "Аудитория из другого филиала.",
+  student_branch_mismatch: "Студент из другого филиала.",
 };
 
 // Raised by the browser side only (no response from the API).

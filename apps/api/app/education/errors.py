@@ -17,6 +17,9 @@ INSTRUCTOR_INVALID = errors.define(
     "instructor_invalid", 422, "Instructor must be an active instructor of the cohort's branch"
 )
 ROOM_BRANCH_MISMATCH = errors.define("room_branch_mismatch", 422, "Room is in another branch")
+STUDENT_BRANCH_MISMATCH = errors.define(
+    "student_branch_mismatch", 422, "Student is in another branch than the cohort"
+)
 
 errors.on_constraint("room_branch_name_key", ROOM_NAME_TAKEN)
 errors.on_constraint("course_name_key", COURSE_NAME_TAKEN)
