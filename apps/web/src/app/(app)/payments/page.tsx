@@ -339,7 +339,7 @@ export default function PaymentsPage() {
     mutationFn: ({ p, to }: { p: PaymentRow; to: "confirm" | "unconfirm" }) => {
       setBusy(p.id);
 
-      return api(`/api/v1/payments/${p.id}/${to}`, { method: "POST" });
+      return api(`/api/v1/payments/${p.id}/${to}`, { method: "POST", version: p.version });
     },
     onSuccess: (_, { to }) => notify(to === "confirm" ? "Оплата подтверждена" : "Подтверждение снято"),
     onError: notifyError,

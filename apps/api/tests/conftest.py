@@ -124,6 +124,15 @@ class Browser(httpx.AsyncClient):
             version = rows[0][0] if rows else 1
         kw["headers"] = {**headers, "If-Match": str(version)}
 
+    async def post(self, url: Any, **kw: Any) -> httpx.Response:
+        parts = str(url).split("?")[0].rstrip("/").split("/")
+        if parts[-1] in ("confirm", "unconfirm") and parts[-3] == "payments":
+            headers = dict(kw.get("headers") or {})
+            if not kw.pop("no_version", False) and "If-Match" not in headers:
+                rows = await sql("SELECT version FROM payment WHERE id = :i", i=parts[-2])
+                kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+        return await super().post(url, **kw)
+
     async def patch(self, url: Any, **kw: Any) -> httpx.Response:
         await self._with_version(str(url), kw)
         return await super().patch(url, **kw)

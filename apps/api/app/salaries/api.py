@@ -313,7 +313,7 @@ async def list_payouts(
     cohort_id: uuid.UUID | None = None,
     branch_id: uuid.UUID | None = None,
     month: MonthOnly = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
     where = _payout_where(p, instructor_id, cohort_id, branch_id, month)

@@ -279,7 +279,7 @@ async def list_leads(
     callback: bool = False,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
     where = lead_where(

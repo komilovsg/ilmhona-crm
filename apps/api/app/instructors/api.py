@@ -25,6 +25,7 @@ from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
 from app.metrics.money import cohort_income, instructor_stats
 from app.models import AppUser, Branch, Cohort, Course, Role
+from app.users.errors import BRANCH_FORBIDDEN
 
 router = APIRouter(
     prefix="/api/v1/instructors", tags=["instructors"], dependencies=[Depends(require_csrf_header)]
@@ -170,6 +171,9 @@ async def update_instructor(
     user_id: uuid.UUID, body: RateUpdate, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     u, branch = await _load(db, p, user_id)
+    if p.branch_id is not None and u.branch_id != p.branch_id:
+        # an instructor of all branches: their default rate seeds the other branch's cohorts too
+        raise DomainError(BRANCH_FORBIDDEN)
     await check_version(db, u, version, "app_user", lambda: _detail(db, p, u, branch))
     before = {"default_rate": str(u.default_rate)}
     u.default_rate = body.default_rate
