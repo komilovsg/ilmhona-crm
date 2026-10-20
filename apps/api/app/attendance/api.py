@@ -414,7 +414,7 @@ async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         Col("Проведено уроков", lambda s: s["held"], "int"),
         Col("Присутствовал", lambda s: s["present"], "int"),
         Col("Не отмечено", lambda s: s["unmarked"], "int"),
-        Col("Посещаемость, %", lambda s: s["percent"] if s["percent"] is not None else "", "text"),
+        Col("Посещаемость", lambda s: s["percent"], "percent"),
     ]
     columns += [
         Col(
