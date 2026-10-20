@@ -44,6 +44,7 @@ from app.core.security import (
     token_hash,
     verify_password,
 )
+from app.core.versioning import Version, check_version
 from app.models import AppUser, Branch, RefreshToken, Role
 
 router = APIRouter(
@@ -71,9 +72,12 @@ class ChangePasswordIn(Strict):
 
 
 class ProfileIn(Strict):
-    full_name: Annotated[
-        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
-    ]
+    """Only the fields present change."""
+
+    full_name: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
     phone: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)] | None = None
     email: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
 
@@ -82,6 +86,7 @@ def me_out(p: Principal, branch_name: str | None) -> dict[str, Any]:
     u = p.user
     return {
         "id": u.id,
+        "version": u.version,
         "login": u.login,
         "full_name": u.full_name,
         "phone": u.phone,
@@ -144,20 +149,31 @@ async def revoke_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
 
 
 async def _record_failure(db: AsyncSession, login: str) -> None:
-    await db.execute(
-        text(
-            """
-            INSERT INTO login_attempt (login, failures) VALUES (:l, 1)
-            ON CONFLICT (login) DO UPDATE SET
-              failures = CASE WHEN login_attempt.failures + 1 >= :max THEN 0
-                              ELSE login_attempt.failures + 1 END,
-              locked_until = CASE WHEN login_attempt.failures + 1 >= :max
-                                  THEN now() + make_interval(mins => :mins)
-                                  ELSE login_attempt.locked_until END
-            """
-        ),
-        {"l": login, "max": settings.max_failed_logins, "mins": settings.lockout_minutes},
-    )
+    """Count a failed login, lock the name after too many, and put both in the audit log
+    (the login name only, never the password)."""
+    row = (
+        await db.execute(
+            text(
+                """
+                INSERT INTO login_attempt (login, failures) VALUES (:l, 1)
+                ON CONFLICT (login) DO UPDATE SET
+                  failures = CASE WHEN login_attempt.failures + 1 >= :max THEN 0
+                                  ELSE login_attempt.failures + 1 END,
+                  locked_until = CASE WHEN login_attempt.failures + 1 >= :max
+                                      THEN now() + make_interval(mins => :mins)
+                                      ELSE login_attempt.locked_until END
+                RETURNING failures
+                """
+            ),
+            {"l": login, "max": settings.max_failed_logins, "mins": settings.lockout_minutes},
+        )
+    ).one()
+    name = login[:64]
+    await record(db, None, "auth.login_failed", "login", name)
+    if row.failures == 0:  # this failure tripped the lock
+        await record(
+            db, None, "auth.locked", "login", name, {"minutes": [None, settings.lockout_minutes]}
+        )
     await db.commit()  # the failure must outlive the error response
 
 
@@ -263,12 +279,21 @@ async def me(p: CurrentUser, db: DB) -> dict[str, Any]:
 
 
 @router.patch("/me")
-async def update_me(body: ProfileIn, p: CurrentUser, db: DB) -> dict[str, Any]:
+async def update_me(body: ProfileIn, version: Version, p: CurrentUser, db: DB) -> dict[str, Any]:
     u = p.user
+
+    async def current() -> dict[str, Any]:
+        return me_out(p, await _branch_name(db, u.branch_id))
+
+    await check_version(db, u, version, "app_user", current)
     before = {"full_name": u.full_name, "phone": u.phone, "email": u.email}
-    u.full_name = body.full_name
-    u.phone = body.phone or None
-    u.email = body.email or None
+    sent = body.model_fields_set
+    if "full_name" in sent and body.full_name:
+        u.full_name = body.full_name
+    if "phone" in sent:
+        u.phone = body.phone or None
+    if "email" in sent:
+        u.email = body.email or None
     u.updated_at = datetime.now(UTC)
     await db.flush()  # a taken phone number is a 409 through the constraint map
     after = {"full_name": u.full_name, "phone": u.phone, "email": u.email}

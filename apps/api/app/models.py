@@ -11,6 +11,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    FetchedValue,
     ForeignKey,
     Integer,
     LargeBinary,
@@ -32,13 +33,24 @@ class Base(DeclarativeBase):
     pass
 
 
+class Versioned:
+    """`version` counts the changes of a row (bumped by a database trigger): a client that edits
+    a row sends the version it loaded, and an older one is a conflict (#25)."""
+
+    # eager_defaults: the trigger's new version comes back with the UPDATE, no lazy reload
+    __mapper_args__ = {"eager_defaults": True}  # noqa: RUF012
+    version: Mapped[int] = mapped_column(
+        Integer, server_default=text("1"), server_onupdate=FetchedValue()
+    )
+
+
 class Branch(Base):
     __tablename__ = "branch"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     name: Mapped[str] = mapped_column(Text, unique=True)
 
 
-class Role(Base):
+class Role(Versioned, Base):
     __tablename__ = "role"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     name: Mapped[str] = mapped_column(Text, unique=True)
@@ -57,7 +69,7 @@ class RolePermission(Base):
     level: Mapped[str] = mapped_column(Text)
 
 
-class AppUser(Base):
+class AppUser(Versioned, Base):
     __tablename__ = "app_user"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     login: Mapped[str] = mapped_column(CITEXT, unique=True)
@@ -86,6 +98,8 @@ class AuditLog(Base):
     # branch of the changed row: a branch-scoped user reads only their branch's entries
     branch_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("branch.id"))
     diff: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    # display name of the entity when the entry was written (the row may be gone or renamed later)
+    label: Mapped[str | None] = mapped_column(Text)
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
@@ -112,7 +126,7 @@ class LoginAttempt(Base):
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
-class Room(Base):
+class Room(Versioned, Base):
     __tablename__ = "room"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
@@ -121,7 +135,7 @@ class Room(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Course(Base):
+class Course(Versioned, Base):
     __tablename__ = "course"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     name: Mapped[str] = mapped_column(Text, unique=True)
@@ -132,7 +146,7 @@ class Course(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Cohort(Base):
+class Cohort(Versioned, Base):
     __tablename__ = "cohort"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     # 'G-NNN' from cohort_code_seq (database default)
@@ -155,7 +169,7 @@ class Cohort(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Lesson(Base):
+class Lesson(Versioned, Base):
     __tablename__ = "lesson"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id", ondelete="CASCADE"))
@@ -169,7 +183,7 @@ class Lesson(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Student(Base):
+class Student(Versioned, Base):
     __tablename__ = "student"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     full_name: Mapped[str] = mapped_column(Text)
@@ -180,7 +194,7 @@ class Student(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Enrollment(Base):
+class Enrollment(Versioned, Base):
     __tablename__ = "enrollment"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))

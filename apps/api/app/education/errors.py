@@ -4,6 +4,9 @@ ROOM_NAME_TAKEN = errors.define("room_name_taken", 409, "Room name already used 
 COURSE_NAME_TAKEN = errors.define("course_name_taken", 409, "Course name already used")
 ROOM_IN_USE = errors.define("room_in_use", 409, "Room has cohorts or lessons")
 COURSE_IN_USE = errors.define("course_in_use", 409, "Course has cohorts")
+COURSE_GLOBAL_ONLY = errors.define(
+    "course_global_only", 403, "Courses are shared: only users without a branch change them"
+)
 COHORT_IN_USE = errors.define("cohort_in_use", 409, "Cohort has enrollments")
 STUDENT_IN_USE = errors.define("student_in_use", 409, "Student has enrollments")
 # params: cohort (code of the cohort that holds the room), date, start, end
