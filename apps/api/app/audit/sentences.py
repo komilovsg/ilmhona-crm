@@ -181,14 +181,17 @@ def value_text(field: str, value: Any, names: dict[str, str]) -> str:
 
 
 def _money(value: Any) -> str:
-    """`500.00` -> `500`, `650.5` -> `650.50`: money reads the same in every diff."""
+    """`500.00` -> `500`, `1234.5` -> `1 234,50`: money reads the same in every diff."""
     if value is None or value == "":
         return NONE
     try:
         d = Decimal(str(value))
     except InvalidOperation:
         return str(value)
-    return f"{d:.0f}" if d == d.to_integral() else f"{d:.2f}"
+    text = f"{d:.0f}" if d == d.to_integral() else f"{d:.2f}"
+    whole, _, kopecks = text.partition(".")
+    whole = f"{int(whole):,}".replace(",", " ")
+    return f"{whole},{kopecks}" if kopecks else whole
 
 
 def _pair(change: Any) -> tuple[Any, Any]:

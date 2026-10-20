@@ -182,8 +182,16 @@ def test_money_reads_the_same_everywhere() -> None:
     assert sentence(e).endswith("цена в месяц 500 → 650 TJS")
     diff = {"default_price_month": ["500.00", "650.50"]}
     assert sentence(Entry("К", "course.update", "course", "Python", diff)).endswith(
-        "500 → 650.50 TJS"
+        "500 → 650,50 TJS"
     )
+
+
+def test_money_has_one_formatter() -> None:
+    def text(old: str, new: str) -> str:
+        return sentence(Entry("К", "cohort.update", "cohort", "G", {"price_month": [old, new]}))
+
+    assert text("1234.50", "650.00").endswith("1 234,50 → 650 TJS")
+    assert text("500.00", "1234567.00").endswith("500 → 1 234 567 TJS")
 
 
 def test_export_sentence() -> None:

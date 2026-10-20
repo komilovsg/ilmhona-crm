@@ -224,3 +224,23 @@ async def test_export_reads_as_a_sentence_in_the_audit(admin: httpx.AsyncClient)
     assert [i["text"] for i in items] == [
         "User root — выгрузка в Excel: студенты, 1 строка (фильтры: поиск ali)"
     ]
+
+
+def test_date_cells_use_the_dushanbe_day() -> None:
+    from datetime import UTC
+
+    from app.export import _cell
+
+    # 00:30 and 23:30 on 21.10 in Dushanbe (UTC+5) are 19:30 on the 20th and 18:30 on the 21st UTC
+    for utc in (
+        datetime(2026, 10, 20, 19, 30, tzinfo=UTC),
+        datetime(2026, 10, 21, 18, 30, tzinfo=UTC),
+    ):
+        assert _cell(utc, "date")[0] == date(2026, 10, 21)
+
+
+async def test_lesson_source_is_russian(admin: httpx.AsyncClient) -> None:
+    course, room = await make_course(), await make_room()
+    cohort = await make_cohort(admin, course, room)
+    rows = sheet(await admin.get(f"{C}/{cohort['id']}/lessons/export"))
+    assert {r[5] for r in rows[1:]} == {"Из расписания"}
