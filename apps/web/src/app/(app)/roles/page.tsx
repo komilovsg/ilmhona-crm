@@ -15,7 +15,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useMe, useRoles, useSections } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { can, fromMatrix, toMatrix, type MatrixChoice } from "@/lib/permissions";
-import { submitOnce } from "@/lib/submit";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { RoleRow, SectionInfo } from "@/lib/types";
 
@@ -64,6 +64,9 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
       notifyError(e);
     },
   });
+
+  const submitSave = useSubmit(() => save.mutateAsync());
+  const submitRemove = useSubmit(() => remove.mutateAsync());
 
   return (
     <section className="rounded-2xl bg-content1 p-5">
@@ -118,7 +121,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
             color="primary"
             isDisabled={!dirty || !name.trim()}
             isLoading={save.isPending}
-            onPress={() => submitOnce(save.isPending, () => save.mutate())()}
+            onPress={() => submitSave()}
           >
             Сохранить
           </Button>
@@ -141,7 +144,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
         isOpen={confirmDelete}
         title="Удалить роль"
         onClose={() => setConfirmDelete(false)}
-        onConfirm={() => submitOnce(remove.isPending, () => remove.mutate())()}
+        onConfirm={() => submitRemove()}
       >
         Роль «{role.name}» будет удалена. Если она назначена пользователям, сначала смените им роль.
       </ConfirmModal>
@@ -163,6 +166,8 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
     onError: (e) => setError(messageOf(e)),
   });
 
+  const submitCreate = useSubmit(() => create.mutateAsync(), !name.trim());
+
   return (
     <AppModal
       footer={
@@ -170,7 +175,7 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => submitOnce(create.isPending, () => create.mutate())()}>
+          <Button color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => submitCreate()}>
             Создать
           </Button>
         </>
@@ -181,7 +186,7 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       onClose={onClose}
     >
       <form
-        onSubmit={submitOnce(create.isPending || !name.trim(), () => create.mutate())}
+        onSubmit={submitCreate}
       >
         <Input autoFocus isRequired label="Название" value={name} onValueChange={setName} />
         <p className="mt-2 text-xs text-default-500">Права отметите после создания.</p>
@@ -235,7 +240,7 @@ export default function RolesPage() {
                   onClick={() => setSelectedId(r.id)}
                 >
                   <span className="font-medium">{r.name}</span>
-                  <span className="text-xs text-default-500">{r.users_count}</span>
+                  <span className="text-xs">{r.users_count}</span>
                 </button>
               </li>
             ))}

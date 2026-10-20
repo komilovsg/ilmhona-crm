@@ -136,3 +136,15 @@ async def test_guards_against_locking_everyone_out(admin: httpx.AsyncClient) -> 
     r = await admin.patch(f"{U}/{me}", json={"role_id": str(await role_id("manager"))})
     assert r.json()["code"] == "last_superadmin"
     assert root_only
+
+
+async def test_concurrent_role_saves_never_answer_500(admin: httpx.AsyncClient) -> None:
+    import asyncio
+
+    rid = (await admin.post("/api/v1/roles", json={"name": "Гонка", "permissions": {}})).json()[
+        "id"
+    ]
+    body = {"name": "Гонка", "permissions": {"leads": "view", "payments": "change"}}
+    rs = await asyncio.gather(*(admin.put(f"/api/v1/roles/{rid}", json=body) for _ in range(6)))
+    assert {r.status_code for r in rs} <= {200, 409}
+    assert 200 in {r.status_code for r in rs}

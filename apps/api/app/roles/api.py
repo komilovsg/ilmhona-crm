@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, permissions_of, require, require_csrf_header
 from app.core.db import DB
-from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError, errors
+from app.core.errors import CONCURRENT_CHANGE, FORBIDDEN, NOT_FOUND, DomainError, errors
 from app.models import AppUser, Role, RolePermission
 from app.permissions import LEVELS, SECTIONS, SUPERADMIN_CODE
 from app.users.errors import BRANCH_FORBIDDEN, ROLE_NOT_ASSIGNABLE
@@ -26,6 +26,9 @@ ROLE_IN_USE = errors.define("role_in_use", 409, "Role is assigned to users")
 ROLE_LOCKED = errors.define("role_locked", 403, "The superadmin role cannot be changed")
 ROLE_SYSTEM = errors.define("role_system", 403, "A system role cannot be deleted")
 errors.on_constraint("role_name_key", NAME_TAKEN)
+# two saves of one role at once insert the same permission row (or the role vanished meanwhile)
+errors.on_constraint("role_permission_pkey", CONCURRENT_CHANGE)
+errors.on_constraint("role_permission_role_id_fkey", CONCURRENT_CHANGE)
 
 router = APIRouter(
     prefix="/api/v1/roles", tags=["roles"], dependencies=[Depends(require_csrf_header)]

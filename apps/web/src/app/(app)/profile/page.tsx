@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { PasswordField } from "@/components/PasswordField";
 import { ME_KEY, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
-import { submitOnce } from "@/lib/submit";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Me } from "@/lib/types";
 
@@ -31,10 +31,12 @@ function ProfileForm({ me }: { me: Me }) {
     onError: notifyError,
   });
 
+  const submit = useSubmit(() => save.mutateAsync());
+
   return (
     <form
       className="space-y-4 rounded-2xl bg-content1 p-5"
-      onSubmit={submitOnce(save.isPending, () => save.mutate())}
+      onSubmit={submit}
     >
       <h2 className="text-lg font-semibold">Данные</h2>
       <Input isReadOnly label="Логин" value={me.login} />
@@ -72,10 +74,12 @@ function PasswordForm() {
     onError: (e) => setError(messageOf(e)),
   });
 
+  const submit = useSubmit(() => change.mutateAsync());
+
   return (
     <form
       className="space-y-4 rounded-2xl bg-content1 p-5"
-      onSubmit={submitOnce(change.isPending, () => change.mutate())}
+      onSubmit={submit}
     >
       <h2 className="text-lg font-semibold">Смена пароля</h2>
       <PasswordField

@@ -45,4 +45,9 @@ for (const theme of ["light", "dark"] as const) {
       assert.ok(ratio(text, bg) >= 4.5, `${text} on ${bg}`);
     }
   });
+  test(`${theme}: role chip user count (selected: brand text on tint, idle: foreground on card)`, () => {
+    // roles/page.tsx: the count has no colour of its own, it inherits the chip's text colour
+    assert.ok(ratio(c.foreground, c.content1) >= 4.5);
+    assert.ok(ratio(text, over(c.primary.DEFAULT, c.content1, 0.1)) >= 4.5);
+  });
 }

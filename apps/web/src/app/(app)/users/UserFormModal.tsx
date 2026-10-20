@@ -9,7 +9,7 @@ import { AppModal } from "@/components/AppModal";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe, useRoles } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
-import { submitOnce } from "@/lib/submit";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
 
@@ -62,6 +62,7 @@ export function UserFormModal({
   });
 
   const valid = fullName.trim() && roleId && (user || login.trim().length >= 3);
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -70,7 +71,7 @@ export function UserFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submitOnce(save.isPending, () => save.mutate())()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {user ? "Сохранить" : "Создать"}
           </Button>
         </>
@@ -82,7 +83,7 @@ export function UserFormModal({
       <form
         className="space-y-4"
         id="user-form"
-        onSubmit={submitOnce(save.isPending || !valid, () => save.mutate())}
+        onSubmit={submit}
       >
         <Input
           autoComplete="off"
