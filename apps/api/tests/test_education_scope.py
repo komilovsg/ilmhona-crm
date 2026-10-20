@@ -207,6 +207,13 @@ async def test_instructor_of_a_cohort_must_be_an_active_instructor_of_its_branch
     assert r.json()["code"] == "instructor_invalid"
     r = await admin.patch(f"{C}/{ok2['id']}", json={"instructor_id": None})
     assert r.status_code == 200 and r.json()["instructor_id"] is None
+    # the form's choices: active instructors of the branch (and unbound ones), nobody else
+    dush = str(await branch_id("Душанбе"))
+    names = [
+        i["full_name"]
+        for i in (await admin.get(f"{C}/instructors", params={"branch_id": dush})).json()
+    ]
+    assert names == ["User anywhere", "User good"]
 
 
 async def test_room_must_belong_to_the_cohorts_branch(admin: httpx.AsyncClient) -> None:

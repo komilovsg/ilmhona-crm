@@ -334,6 +334,26 @@ async def list_cohorts(
     }
 
 
+@router.get("/cohorts/instructors")
+async def list_instructors(
+    p: View, db: DB, branch_id: uuid.UUID | None = None
+) -> list[dict[str, Any]]:
+    """Active instructors who may teach in `branch_id` (their branch, or all branches): the
+    choices of the cohort form. Not the users section: a manager needs no rights on it."""
+    where = [Role.code == "instructor", AppUser.is_active]
+    if p.branch_id is not None:
+        branch_id = p.branch_id
+    if branch_id:
+        where.append(or_(AppUser.branch_id.is_(None), AppUser.branch_id == branch_id))
+    rows = await db.execute(
+        select(AppUser.id, AppUser.full_name, AppUser.branch_id)
+        .join(Role, Role.id == AppUser.role_id)
+        .where(*where)
+        .order_by(AppUser.full_name)
+    )
+    return [{"id": i, "full_name": n, "branch_id": b} for i, n, b in rows.all()]
+
+
 @router.post("/cohorts", status_code=201)
 async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]:
     branch_id = branch_for_write(p, body.branch_id)
