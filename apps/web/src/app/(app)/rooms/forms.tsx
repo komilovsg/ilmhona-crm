@@ -15,6 +15,7 @@ import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: () => void }) {
   const refresh = useRefreshEducation();
@@ -59,9 +60,9 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {room ? "Сохранить" : "Добавить"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
@@ -170,9 +171,9 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {course ? "Сохранить" : "Добавить"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
@@ -197,7 +198,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
         />
         <div className="grid grid-cols-2 gap-3">
           <Input
-            endContent={<span className="text-xs text-default-500">TJS</span>}
+            endContent={<span className="text-xs text-default-600">TJS</span>}
             label="Цена в месяц"
             min={0}
             type="number"

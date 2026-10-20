@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any, Self
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -40,6 +40,7 @@ from app.education.scope import (
     cohort_filters,
     writer,
 )
+from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled, cohort_fill
 from app.models import AppUser, Branch, Cohort, Course, Enrollment, Lesson, Role, Room, Student
 from app.permissions import allows
@@ -55,6 +56,7 @@ Day = Annotated[date, Field(ge=MIN_DATE, le=MAX_DATE)]
 Capacity = Annotated[int, Field(ge=1, le=100)]
 Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
+WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 ENROLLMENT_STATUSES = ("активный", "завершил", "выпускник", "отчислен")
 
 
@@ -295,6 +297,26 @@ def _now() -> datetime:
 # ---- cohorts -----------------------------------------------------------------------------
 
 
+def _cohort_where(
+    p: Principal, status: str | None, branch_id: uuid.UUID | None, q: str | None
+) -> list[Any]:
+    where: list[Any] = list(cohort_filters(p))
+    if status:
+        where.append(Cohort.status == status)
+    if branch_id:
+        where.append(Cohort.branch_id == branch_id)
+    if q and q.strip():
+        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
+        where.append(
+            or_(Cohort.code.ilike(like), Course.name.ilike(like), AppUser.full_name.ilike(like))
+        )
+    return where
+
+
+def _cohort_ordered(where: list[Any]) -> Any:
+    return _select().where(*where).order_by(Cohort.start_date.desc(), Cohort.code)
+
+
 @router.get("/cohorts")
 async def list_cohorts(
     p: View,
@@ -305,16 +327,7 @@ async def list_cohorts(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 24,
 ) -> dict[str, Any]:
-    where = cohort_filters(p)
-    if status:
-        where.append(Cohort.status == status)
-    if branch_id:
-        where.append(Cohort.branch_id == branch_id)
-    if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(Cohort.code.ilike(like), Course.name.ilike(like), AppUser.full_name.ilike(like))
-        )
+    where = _cohort_where(p, status, branch_id, q)
     total = (
         await db.execute(
             select(func.count())
@@ -325,13 +338,7 @@ async def list_cohorts(
         )
     ).scalar_one()
     rows = (
-        await db.execute(
-            _select()
-            .where(*where)
-            .order_by(Cohort.start_date.desc(), Cohort.code)
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
+        await db.execute(_cohort_ordered(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     return {
         "items": await _outs(db, list(rows)),
@@ -339,6 +346,50 @@ async def list_cohorts(
         "page": page,
         "page_size": page_size,
     }
+
+
+def _days(c: dict[str, Any]) -> str:
+    return ", ".join(WEEKDAY_NAMES[d - 1] for d in sorted(c["weekdays"]))
+
+
+COHORT_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Код", lambda c: c["code"]),
+    Col("Курс", lambda c: c["course_name"]),
+    Col("Филиал", lambda c: c["branch_name"]),
+    Col("Инструктор", lambda c: c["instructor_name"]),
+    Col("Аудитория", lambda c: c["room_name"]),
+    Col("Начало", lambda c: c["start_date"], "date"),
+    Col("Конец", lambda c: c["end_date"], "date"),
+    Col("Дни", _days),
+    Col("Время", lambda c: f"{c['start_time']}–{c['end_time']}"),
+    Col("Студентов", lambda c: c["fill"]["enrolled"], "int"),
+    Col("Мест", lambda c: c["fill"]["capacity"], "int"),
+    Col("Цена за месяц", lambda c: c["price_month"], "money"),
+    Col("Статус", lambda c: c["status"]),
+]
+
+
+@router.get("/cohorts/export")
+async def export_cohorts(
+    p: View,
+    db: DB,
+    status: str | None = None,
+    branch_id: uuid.UUID | None = None,
+    q: str | None = None,
+) -> Response:
+    where = _cohort_where(p, status, branch_id, q)
+    rows = (await db.execute(_cohort_ordered(where).limit(MAX_ROWS + 1))).all()
+    check_cap(rows)
+    return await xlsx_response(
+        db,
+        p,
+        entity="cohort",
+        slug="potoki",
+        title="Потоки",
+        columns=COHORT_COLUMNS,
+        rows=await _outs(db, list(rows)),
+        filters={"status": status, "branch_id": branch_id, "q": q},
+    )
 
 
 @router.get("/cohorts/instructors")
@@ -579,16 +630,47 @@ def _lesson_snapshot(le: Lesson) -> dict[str, Any]:
     }
 
 
+def _lesson_select(cohort_id: uuid.UUID) -> Any:
+    return (
+        select(Lesson, Room.name)
+        .join(Room, Room.id == Lesson.room_id)
+        .where(Lesson.cohort_id == cohort_id)
+        .order_by(Lesson.starts_at)
+    )
+
+
 @router.get("/cohorts/{cohort_id}/lessons")
 async def list_lessons(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
     cohort = await _load(db, p, cohort_id)
-    rows = await db.execute(
-        select(Lesson, Room.name)
-        .join(Room, Room.id == Lesson.room_id)
-        .where(Lesson.cohort_id == cohort.id)
-        .order_by(Lesson.starts_at)
-    )
+    rows = await db.execute(_lesson_select(cohort.id))
     return [_lesson_out(le, room) for le, room in rows.all()]
+
+
+LESSON_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Дата", lambda r: r["date"], "date"),
+    Col("Начало", lambda r: r["start"]),
+    Col("Конец", lambda r: r["end"]),
+    Col("Аудитория", lambda r: r["room_name"]),
+    Col("Отменён", lambda r: r["cancelled"], "bool"),
+    Col("Источник", lambda r: "Вручную" if r["source"] == "manual" else "Из расписания"),
+]
+
+
+@router.get("/cohorts/{cohort_id}/lessons/export")
+async def export_lessons(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
+    cohort = await _load(db, p, cohort_id)
+    rows = (await db.execute(_lesson_select(cohort.id).limit(MAX_ROWS + 1))).all()
+    check_cap(rows)
+    return await xlsx_response(
+        db,
+        p,
+        entity="lesson",
+        slug=f"uroki_{cohort.code}",
+        title="Уроки",
+        columns=LESSON_COLUMNS,
+        rows=[_lesson_out(le, room) for le, room in rows],
+        filters={"cohort": cohort.code},
+    )
 
 
 @router.post("/cohorts/{cohort_id}/lessons", status_code=201)
@@ -712,16 +794,45 @@ def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
     }
 
 
+def _enrollment_select(cohort_id: uuid.UUID) -> Any:
+    return (
+        select(Enrollment, Student)
+        .join(Student, Student.id == Enrollment.student_id)
+        .where(Enrollment.cohort_id == cohort_id)
+        .order_by(Student.full_name, Enrollment.id)
+    )
+
+
 @router.get("/cohorts/{cohort_id}/enrollments")
 async def list_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
     cohort = await _load(db, p, cohort_id)
-    rows = await db.execute(
-        select(Enrollment, Student)
-        .join(Student, Student.id == Enrollment.student_id)
-        .where(Enrollment.cohort_id == cohort.id)
-        .order_by(Student.full_name, Enrollment.id)
-    )
+    rows = await db.execute(_enrollment_select(cohort.id))
     return [_enrollment_out(e, s) for e, s in rows.all()]
+
+
+ENROLLMENT_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Студент", lambda r: r["student_name"]),
+    Col("Телефон", lambda r: r["phone"]),
+    Col("Статус", lambda r: r["status"]),
+    Col("Зачислен", lambda r: r["enrolled_at"], "date"),
+]
+
+
+@router.get("/cohorts/{cohort_id}/enrollments/export")
+async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
+    cohort = await _load(db, p, cohort_id)
+    rows = (await db.execute(_enrollment_select(cohort.id).limit(MAX_ROWS + 1))).all()
+    check_cap(rows)
+    return await xlsx_response(
+        db,
+        p,
+        entity="enrollment",
+        slug=f"studenty_{cohort.code}",
+        title="Студенты потока",
+        columns=ENROLLMENT_COLUMNS,
+        rows=[_enrollment_out(e, s) for e, s in rows],
+        filters={"cohort": cohort.code},
+    )
 
 
 @router.post("/cohorts/{cohort_id}/enrollments", status_code=201)

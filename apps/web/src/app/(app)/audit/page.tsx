@@ -5,11 +5,13 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { Input } from "@heroui/input";
-import { Spinner } from "@heroui/spinner";
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon";
+import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { Bone } from "@/components/Skeletons";
 import { Pager } from "@/components/Pager";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe } from "@/hooks/queries";
@@ -203,7 +205,23 @@ export default function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Журнал" />
+      <PageHeader
+        actions={
+          <ExportButton
+            params={{
+              date_from: filters.from,
+              date_to: filters.to,
+              section: filters.section,
+              branch_id: filters.branch,
+              user_id: filters.user,
+              action: filters.action,
+              q,
+            }}
+            path="/api/v1/audit/export"
+          />
+        }
+        title="Журнал"
+      />
       <div className="mb-4 flex items-center gap-3">
         <Input
           isClearable
@@ -227,13 +245,23 @@ export default function AuditPage() {
         )}
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Записей нет.</p>
-      ) : (
+      <QueryState
+        empty={<EmptyState title="Записей нет" />}
+        isEmpty={(d) => d.items.length === 0}
+        query={list}
+        skeleton={
+          <div>
+            <Bone className="mb-2 h-5 w-24" />
+            <ul className="divide-y divide-divider overflow-hidden rounded-2xl bg-content1">
+              {Array.from({ length: 8 }, (_, i) => (
+                <li key={i} className="px-4 py-3">
+                  <Bone className="h-5 w-2/3" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
+      >
         <>
           {groups.map((g) => (
             <section key={g.day} className="mb-5">
@@ -247,7 +275,7 @@ export default function AuditPage() {
           ))}
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
-      )}
+      </QueryState>
 
       <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>

@@ -15,6 +15,7 @@ import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { StudentRow } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 export function StudentFormModal({ student, onClose }: { student: StudentRow | null; onClose: () => void }) {
   const refresh = useRefreshEducation();
@@ -63,9 +64,9 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={pending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={pending} onPress={() => submit()}>
             {student ? "Сохранить" : "Добавить"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen

@@ -6,13 +6,15 @@ import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Input } from "@heroui/input";
 import { Radio, RadioGroup } from "@heroui/radio";
-import { Spinner } from "@heroui/spinner";
 
 import { AppModal } from "@/components/AppModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { ExportButton } from "@/components/ExportButton";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import { QueryState } from "@/components/QueryState";
+import { Bone } from "@/components/Skeletons";
 import { useMe, useRoles, useSections } from "@/hooks/queries";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
@@ -20,6 +22,7 @@ import { can, fromMatrix, toMatrix, type MatrixChoice } from "@/lib/permissions"
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { RoleRow, SectionInfo } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 const CHOICES: { value: MatrixChoice; label: string }[] = [
   { value: "none", label: "Нет" },
@@ -140,14 +143,14 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
       <ConflictDialog save={save} />
       {!readOnly && (
         <div className="mt-4 flex flex-wrap justify-between gap-2">
-          <Button
+          <LoadingButton
             color="primary"
             isDisabled={!dirty || !name.trim()}
             isLoading={save.pending}
             onPress={() => submitSave()}
           >
             Сохранить
-          </Button>
+          </LoadingButton>
           {!role.is_system && (
             <Button
               color="danger"
@@ -198,9 +201,9 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => submitCreate()}>
+          <LoadingButton color="primary" isDisabled={!name.trim()} isLoading={create.isPending} onPress={() => submitCreate()}>
             Создать
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
@@ -225,7 +228,8 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
 
 export default function RolesPage() {
   const { data: me } = useMe();
-  const { data: roles, isPending } = useRoles();
+  const rolesQuery = useRoles();
+  const roles = rolesQuery.data;
   const { data: sections } = useSections();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -237,18 +241,33 @@ export default function RolesPage() {
     <>
       <PageHeader
         actions={
-          canChange && (
-            <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
-              Роль
-            </Button>
-          )
+          <>
+            <ExportButton path="/api/v1/roles/export" />
+            {canChange && (
+              <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
+                Роль
+              </Button>
+            )}
+          </>
         }
         title="Роли и права"
       />
-      {isPending || !sections ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
+      {!roles || !sections ? (
+        <QueryState
+          query={rolesQuery}
+          skeleton={
+            <div className="grid items-start gap-5 md:grid-cols-[18rem_1fr]">
+              <div className="space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <Bone key={i} className="h-12 w-full rounded-xl" />
+                ))}
+              </div>
+              <Bone className="h-96 w-full rounded-2xl" />
+            </div>
+          }
+        >
+          {null}
+        </QueryState>
       ) : (
         <div className="grid items-start gap-5 md:grid-cols-[18rem_1fr]">
           <ul className="space-y-2" aria-label="Роли">

@@ -6,15 +6,17 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { Input } from "@heroui/input";
-import { Spinner } from "@heroui/spinner";
 
 import { CohortFormModal } from "./CohortFormModal";
 
+import { ExportButton } from "@/components/ExportButton";
 import { FillBar } from "@/components/FillBar";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
+import { CardGridSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
@@ -130,15 +132,22 @@ export default function CohortsPage() {
     <>
       <PageHeader
         actions={
-          canChange && (
-            <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
-              Поток
-            </Button>
-          )
+          <>
+            <ExportButton
+              params={{ q: filters.q.trim(), status: filters.status, branch_id: filters.branch }}
+              path="/api/v1/cohorts/export"
+            />
+            {canChange && (
+              <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
+                Поток
+              </Button>
+            )}
+          </>
         }
         title="Потоки"
       />
 
+      {!counts && <PillsSkeleton />}
       {counts && (
         <div className="mb-4 flex flex-wrap gap-2 text-sm">
           <span className="rounded-full bg-content1 px-3 py-1">
@@ -174,13 +183,24 @@ export default function CohortsPage() {
         </Button>
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : cohorts.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Потоков не найдено.</p>
-      ) : (
+      <QueryState
+        empty={
+          <EmptyState
+            action={
+              canChange && activeFilters === 0 && !filters.q.trim() ? (
+                <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
+                  Поток
+                </Button>
+              ) : undefined
+            }
+            hint={activeFilters || filters.q.trim() ? "Измените поиск или фильтры." : undefined}
+            title={activeFilters || filters.q.trim() ? "Потоков не найдено" : "Нет потоков"}
+          />
+        }
+        isEmpty={(d) => d.items.length === 0}
+        query={list}
+        skeleton={<CardGridSkeleton />}
+      >
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {cohorts.map((c) => (
@@ -189,7 +209,7 @@ export default function CohortsPage() {
           </div>
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
-      )}
+      </QueryState>
 
       <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>

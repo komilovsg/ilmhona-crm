@@ -1,4 +1,5 @@
 import { errorText } from "./api-errors";
+import { trackRequest } from "./wakeup";
 
 /** An API error as thrown by `api()`: HTTP status + the code of the problem+json body. */
 export type ApiError = {
@@ -68,6 +69,7 @@ export async function api<T = void>(path: string, options: Options = {}, retried
   if (version !== undefined) headers["If-Match"] = String(version);
 
   let response: Response;
+  const done = trackRequest();
 
   try {
     response = await fetch(query ? `${path}?${query}` : path, {
@@ -76,7 +78,10 @@ export async function api<T = void>(path: string, options: Options = {}, retried
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "same-origin",
     });
+    // a gateway error is the proxy answering for a sleeping server, not the server itself
+    done(![502, 503, 504].includes(response.status));
   } catch {
+    done(false);
     throw { status: 0, code: "network_error" } satisfies ApiError;
   }
 
@@ -102,4 +107,40 @@ export async function api<T = void>(path: string, options: Options = {}, retried
     params: data?.params,
     fields: (data?.errors as { loc: string[] }[] | undefined)?.map((e) => String(e.loc.at(-1))),
   } satisfies ApiError;
+}
+
+/**
+ * Download an `.xlsx` the API builds from the same filters as the list (`<list>/export`).
+ * Same refresh-once handling as `api()`; the file name comes from Content-Disposition.
+ */
+export async function downloadExport(path: string, params: Record<string, string | undefined> = {}): Promise<void> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter((e): e is [string, string] => !!e[1]),
+  ).toString();
+  const url = query ? `${path}?${query}` : path;
+  const done = trackRequest();
+  let response: Response;
+
+  try {
+    response = await fetch(url, { credentials: "same-origin" });
+    if (response.status === 401 && (await refreshSession())) response = await fetch(url, { credentials: "same-origin" });
+    done(![502, 503, 504].includes(response.status));
+  } catch {
+    done(false);
+    throw { status: 0, code: "network_error" } satisfies ApiError;
+  }
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+
+    throw { status: response.status, code: data?.code ?? "internal_error", params: data?.params } satisfies ApiError;
+  }
+
+  const name = (response.headers.get("content-disposition") ?? "").match(/filename="([^"]+)"/)?.[1] ?? "export.xlsx";
+  const link = document.createElement("a");
+
+  link.href = URL.createObjectURL(await response.blob());
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 }

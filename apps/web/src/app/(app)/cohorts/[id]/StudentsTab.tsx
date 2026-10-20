@@ -5,15 +5,18 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
-import { Spinner } from "@heroui/spinner";
 
 import { EnrollModal } from "./modals";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
+import { telHref } from "@/lib/format";
 import { ENROLLMENT_STATUSES } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -78,7 +81,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const rows = list.data ?? [];
   const phone = (r: EnrollmentRow) =>
     r.phone ? (
-      <a className="text-brand-text" href={`tel:${r.phone}`}>
+      <a className="text-brand-text" href={telHref(r.phone)}>
         {r.phone}
       </a>
     ) : (
@@ -99,20 +102,33 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         <p className="text-sm text-default-600">
           Студентов: <b>{cohort.fill.enrolled}</b> из {cohort.fill.capacity}
         </p>
-        {canChange && open && (
-          <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
-            Добавить студента
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton path={`/api/v1/cohorts/${cohort.id}/enrollments/export`} />
+          {canChange && open && (
+            <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
+              Добавить студента
+            </Button>
+          )}
+        </div>
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">В потоке пока нет студентов.</p>
-      ) : (
+      <QueryState
+        empty={
+          <EmptyState
+            action={
+              canChange && open ? (
+                <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
+                  Добавить студента
+                </Button>
+              ) : undefined
+            }
+            title="В потоке пока нет студентов"
+          />
+        }
+        isEmpty={(d) => d.length === 0}
+        query={list}
+        skeleton={<ListSkeleton cols={4} rows={5} />}
+      >
         <>
           <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
@@ -155,7 +171,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
             ))}
           </ul>
         </>
-      )}
+      </QueryState>
 
       {enrolling && <EnrollModal cohort={cohort} onClose={() => setEnrolling(false)} />}
       {removing && (

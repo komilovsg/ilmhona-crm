@@ -25,15 +25,16 @@ def test_sentences_read_like_russian() -> None:
         {"phone": ["+992900000001", "+992930000002"]},
     )
     assert (
-        sentence(e) == "Курбон изменил студента Алиев Алишер: телефон +992900000001 → +992930000002"
+        sentence(e)
+        == "Курбон: изменён студент Алиев Алишер — телефон +992900000001 → +992930000002"
     )
     assert (
         sentence(Entry("Курбон", "cohort.create", "cohort", "G-012", {}))
-        == "Курбон создал поток G-012"
+        == "Курбон: создан поток G-012"
     )
     assert (
         sentence(Entry("Курбон", "auth.login", "app_user", "Курбон", {}))
-        == "Курбон вошёл в систему"
+        == "Курбон — вход в систему"
     )
     assert (
         sentence(Entry(None, "auth.login_failed", "login", "ali", {}))
@@ -52,16 +53,18 @@ async def test_entries_of_the_app_read_as_sentences(admin: httpx.AsyncClient) ->
     await admin.patch(f"/api/v1/students/{sid}", json={"phone": "+992930000002"})
     await admin.post(f"/api/v1/cohorts/{cohort['id']}/enrollments", json={"student_id": str(sid)})
     texts = await _texts(admin)
-    assert "User root изменил студента Алиев Алишер: телефон +992900000001 → +992930000002" in texts
-    assert f"User root создал поток {cohort['code']}" in texts
-    assert f"User root зачислил студента Алиев Алишер в поток {cohort['code']}" in texts
+    assert (
+        "User root: изменён студент Алиев Алишер — телефон +992900000001 → +992930000002" in texts
+    )
+    assert f"User root: создан поток {cohort['code']}" in texts
+    assert f"User root: зачислен студент Алиев Алишер в поток {cohort['code']}" in texts
     await admin.post(f"/api/v1/cohorts/{cohort['id']}/cancel")
     gone = await make_student("Удалённый Студент")
     assert (await admin.delete(f"/api/v1/students/{gone}")).status_code == 204
     texts = await _texts(admin)
-    assert f"User root отменил поток {cohort['code']}" in texts
+    assert f"User root: отменён поток {cohort['code']}" in texts
     # a deleted row keeps its name in the log
-    assert "User root удалил студента Удалённый Студент" in texts
+    assert "User root: удалён студент Удалённый Студент" in texts
 
 
 async def test_failed_logins_and_lockout_are_logged_without_the_password(
@@ -74,7 +77,7 @@ async def test_failed_logins_and_lockout_are_logged_without_the_password(
     texts = await _texts(admin)
     assert texts.count("Неудачная попытка входа для логина ghost") == 5
     assert "Логин ghost заблокирован на 15 минут" in texts
-    assert "User root вошёл в систему" in texts
+    assert "User root — вход в систему" in texts
     assert secret not in str(await sql("SELECT diff::text, label, entity_id FROM audit_log"))
     # a locked login is refused before it is counted: no extra entry
     await client.post("/api/v1/auth/login", json={"login": "ghost", "password": secret})
@@ -93,7 +96,7 @@ async def test_filters_period_section_branch_user_action_text_and_paging(
     assert all("студент" in t for t in await _texts(admin, section="students"))
     assert any("поток" in t for t in await _texts(admin, section="cohorts"))
     assert await _texts(admin, section="cohorts", user_id=root, action="student.update") == []
-    assert any("вошёл" in t for t in await _texts(admin, section="auth"))
+    assert any("вход в систему" in t for t in await _texts(admin, section="auth"))
     assert await _texts(admin, q="Алиев") and not await _texts(admin, q="нет-такого")
     assert await _texts(admin, q="+992900000001")  # searches the changed values too
     assert await _texts(admin, date_from="2020-01-01", date_to="2099-01-01")
@@ -145,3 +148,57 @@ async def test_branch_bound_reader_sees_only_their_branch_and_no_login_noise(
     assert not any("ghost" in t for t in mine)  # entries without a branch stay with the superadmin
     everything = await _texts(admin)
     assert any("Истаравшанец" in t for t in everything) and any("ghost" in t for t in everything)
+
+
+def test_sentences_are_gender_neutral() -> None:
+    """No «вошёл / изменил / создал» for a woman, no «Система создал»."""
+    for who in ("Каримова Мадина", None):
+        for action, entity, label in (
+            ("student.create", "student", "Алиев Алишер"),
+            ("student.update", "student", "Алиев Алишер"),
+            ("room.create", "room", "Lovelace"),
+            ("role.delete", "role", "Помощник"),
+            ("cohort.cancel", "cohort", "G-001"),
+            ("auth.login", "app_user", "x"),
+            ("auth.change_password", "app_user", "x"),
+            ("profile.update", "app_user", "x"),
+            ("enrollment.create", "enrollment", None),
+        ):
+            diff = {"student": [None, "A"], "cohort": [None, "G"]} if "enrollment" in action else {}
+            text = sentence(Entry(who, action, entity, label, diff))
+            assert text.startswith(who or "Система"), text
+            for bad in ("вошёл", "вошла", "изменил", "создал", "удалил", "сменил", "зачислил"):
+                assert bad not in text, text
+    login = Entry("Каримова Мадина", "auth.login", "app_user", "x", {})
+    assert sentence(login) == "Каримова Мадина — вход в систему"
+    assert (
+        sentence(Entry(None, "cohort.create", "cohort", "G-012", {}))
+        == "Система: создан поток G-012"
+    )
+
+
+def test_money_reads_the_same_everywhere() -> None:
+    e = Entry("К", "cohort.update", "cohort", "G-1", {"price_month": ["500.00", "650.00"]})
+    assert sentence(e).endswith("цена в месяц 500 → 650 TJS")
+    diff = {"default_price_month": ["500.00", "650.50"]}
+    assert sentence(Entry("К", "course.update", "course", "Python", diff)).endswith(
+        "500 → 650,50 TJS"
+    )
+
+
+def test_money_has_one_formatter() -> None:
+    def text(old: str, new: str) -> str:
+        return sentence(Entry("К", "cohort.update", "cohort", "G", {"price_month": [old, new]}))
+
+    assert text("1234.50", "650.00").endswith("1 234,50 → 650 TJS")
+    assert text("500.00", "1234567.00").endswith("500 → 1 234 567 TJS")
+
+
+def test_export_sentence() -> None:
+    diff = {"rows": 3, "filters": {"q": "али", "status": "активный"}}
+    e = Entry("Каримова Мадина", "export", "student", None, diff)
+    assert sentence(e) == (
+        "Каримова Мадина — выгрузка в Excel: студенты, 3 строки (фильтры: поиск али, статус активный)"
+    )
+    plain = Entry(None, "export", "audit_log", None, {"rows": 21, "filters": {}})
+    assert sentence(plain) == "Система — выгрузка в Excel: журнал, 21 строка"

@@ -3,6 +3,7 @@
 // Keep one `code: "text",` per line — that test reads this file.
 export const apiErrors: Record<string, string> = {
   validation_failed: "Проверьте заполнение полей.",
+  export_too_large: "Слишком много строк для Excel (больше 50 000). Сузьте фильтры.",
   internal_error: "Что-то пошло не так. Попробуйте ещё раз.",
   bad_request: "Некорректный запрос.",
   not_found: "Не найдено.",
