@@ -1,0 +1,6 @@
+version: 2
+secret:
+  # test suites use made-up passwords; real secrets live only in Vercel/Render/GitHub
+  ignored_paths:
+    - "apps/api/tests/**"
+    - "apps/web/**/*.test.ts"
