@@ -47,7 +47,7 @@ function show(value: unknown): string {
 function Diff({ diff }: { diff: Record<string, unknown> }) {
   const entries = Object.entries(diff);
 
-  if (!entries.length) return <span className="text-default-400">—</span>;
+  if (!entries.length) return <span className="text-default-500">—</span>;
 
   return (
     <ul className="space-y-0.5 text-xs">
