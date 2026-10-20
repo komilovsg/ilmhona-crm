@@ -119,34 +119,6 @@ FILTERS = {
 }
 MONEY = {"default_price_month", "price_month", "amount", "default_rate", "instructor_rate"}
 
-# table (the `entity` of an `export` entry) -> Russian name
-TABLES: dict[str, str] = {
-    "app_user": "пользователи",
-    "role": "роли и права",
-    "audit_log": "журнал",
-    "room": "аудитории",
-    "course": "курсы",
-    "lesson": "расписание",
-    "cohort": "потоки",
-    "enrollment": "студенты потока",
-    "student": "студенты",
-}
-FILTERS = {
-    "q": "поиск",
-    "section": "раздел",
-    "date_from": "с",
-    "date_to": "по",
-    "since": "с",
-    "until": "по",
-    "user_id": "пользователь",
-    "is_active": "активен",
-    "cohort": "поток",
-    "entity": "объект",
-    "entity_id": "ID объекта",
-    "action": "действие",
-}
-MONEY = {"default_price_month", "price_month"}
-
 FIELDS: dict[str, str] = {
     "login": "логин",
     "full_name": "ФИО",
