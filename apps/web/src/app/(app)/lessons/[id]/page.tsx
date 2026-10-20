@@ -16,7 +16,7 @@ import { Bone } from "@/components/Skeletons";
 import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
-import { dayTitle, fullDate } from "@/lib/education";
+import { dayTitle, fullDate, todayIso } from "@/lib/education";
 import { notify, notifyError } from "@/lib/toast";
 import type { LessonAttendance, MarkRow } from "@/lib/types";
 
@@ -179,7 +179,8 @@ function LessonMark({ data }: { data: LessonAttendance }) {
   const seqs = useRef<Record<string, number>>({});
   const chains = useRef<Record<string, Promise<unknown>>>({});
   const [bulk, setBulk] = useState(false);
-  const disabled = lesson.cancelled;
+  const ahead = lesson.date > todayIso(); // the API takes marks from the lesson's day on
+  const disabled = lesson.cancelled || ahead;
 
   const patchCache = useCallback(
     (enrollmentId: string, present: boolean, reason: string | null) =>
@@ -294,7 +295,9 @@ function LessonMark({ data }: { data: LessonAttendance }) {
       )}
       {!lesson.cancelled && !lesson.held && (
         <p className="mb-4 rounded-xl bg-warning/15 p-3 text-sm text-default-700">
-          Урок ещё не начался: пока он не пройдёт, отметки не попадают в процент посещаемости.
+          {ahead
+            ? "Урок ещё впереди: отметить можно с дня урока."
+            : "Урок ещё не начался: пока он не пройдёт, отметки не попадают в процент посещаемости."}
         </p>
       )}
 

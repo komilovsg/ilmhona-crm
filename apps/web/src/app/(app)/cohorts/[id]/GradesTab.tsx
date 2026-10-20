@@ -5,14 +5,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshAttendance } from "@/hooks/attendance";
-import { api, isApiError } from "@/lib/api";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
+import { api } from "@/lib/api";
 import { GRADE_MAX, PASS_TOTAL, parseGrade, percentLabel } from "@/lib/attendance";
-import { notifyError } from "@/lib/toast";
 import type { GradeRow } from "@/lib/types";
 
 type Field = "homework" | "final";
@@ -72,10 +73,19 @@ function Total({ row }: { row: GradeRow }) {
   );
 }
 
+type GradeValues = { homework: number | null; final: number | null };
+
+const fieldValue = (draft: string, fallback: number | null) => {
+  const parsed = parseGrade(draft);
+
+  return parsed.ok ? parsed.value : fallback;
+};
+
 /**
- * One student: Д/З and финал inputs. Each saves on blur with the grade's version (#25); the saves
- * of one row go one after another, each with the latest version, so two quick edits never
- * conflict with each other, only with somebody else.
+ * One student: Д/З and финал inputs. Each saves on blur through `useVersionedSave` (#25): the
+ * version of the grade goes in `If-Match`, and a 409 opens the shared conflict dialog, where
+ * «Обновить и повторить» keeps the typed value on top of what the other user saved. A save made
+ * while another is still in flight waits for it, so two quick edits never conflict with each other.
  */
 function useGradeRow(cohortId: string, row: GradeRow) {
   const queryClient = useQueryClient();
@@ -85,9 +95,12 @@ function useGradeRow(cohortId: string, row: GradeRow) {
   const [focus, setFocus] = useState<Field | null>(null);
   const [invalid, setInvalid] = useState<Field | null>(null);
   const [saved, setSaved] = useState<Saved>("idle");
-  const version = useRef(row.version);
-  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const queued = useRef<GradeValues | null>(null);
   const key = ["grades", cohortId];
+  const values: GradeValues = {
+    homework: fieldValue(draft.homework, row.homework),
+    final: fieldValue(draft.final, row.final),
+  };
 
   // the server's values changed (a save, a refetch): refresh every field that is not being typed in
   if (row.homework !== seen.homework || row.final !== seen.final) {
@@ -97,50 +110,54 @@ function useGradeRow(cohortId: string, row: GradeRow) {
       final: focus === "final" ? d.final : text(row.final),
     }));
   }
-  useEffect(() => {
-    version.current = Math.max(version.current, row.version);
-  }, [row.version]);
 
-  const commit = (field: Field) => {
-    setFocus(null);
-    const parsed = parseGrade(draft[field]);
+  const edit = useVersionedSave<GradeRow, GradeValues>({
+    record: row,
+    values,
+    toValues: (r) => ({ homework: r.homework, final: r.final }),
+    apply: (v) => setDraft({ homework: text(v.homework), final: text(v.final) }),
+    request: (changed, version) =>
+      api<GradeRow>(`/api/v1/enrollments/${row.enrollment_id}/grade`, { method: "PATCH", body: changed, version }),
+    labels: { homework: "Д/З", final: "Финал" },
+    onSaved: (result) => {
+      if (result) {
+        const out = result as GradeRow;
 
-    if (!parsed.ok) {
-      setInvalid(field);
-
-      return;
-    }
-    setInvalid(null);
-    if (parsed.value === (queryClient.getQueryData<GradeRow[]>(key)?.find((r) => r.enrollment_id === row.enrollment_id)?.[field] ?? null))
-      return;
-    setSaved("saving");
-    const run = async () => {
-      try {
-        const out = await api<GradeRow>(`/api/v1/enrollments/${row.enrollment_id}/grade`, {
-          method: "PATCH",
-          body: { [field]: parsed.value },
-          version: version.current,
-        });
-
-        version.current = out.version;
         queryClient.setQueryData<GradeRow[]>(key, (rows) =>
           rows?.map((r) => (r.enrollment_id === out.enrollment_id ? { ...r, ...out } : r)),
         );
         setSaved("saved");
         void refreshAttendance();
-      } catch (e) {
-        setSaved("error");
-        notifyError(e);
-        // a 409: somebody saved first. Show what is there now; the typed value is not applied.
-        if (isApiError(e) && e.status === 409) void queryClient.invalidateQueries({ queryKey: key });
-        setDraft((d) => ({ ...d, [field]: text(row[field]) }));
       }
-    };
+    },
+  });
 
-    chain.current = chain.current.then(run, run);
+  // run the save that waited for the previous one (with the fresh version of that one)
+  useEffect(() => {
+    const next = queued.current;
+
+    if (next && !edit.pending) {
+      queued.current = null;
+      void edit.save(next);
+    }
+  }, [edit]);
+
+  const commit = (field: Field) => {
+    setFocus(null);
+    if (!parseGrade(draft[field]).ok) {
+      setInvalid(field);
+
+      return;
+    }
+    setInvalid(null);
+    setSaved("saving");
+    if (edit.pending) queued.current = values;
+    else void edit.save(values);
   };
 
-  return { draft, setDraft, setFocus, invalid, saved, commit };
+  const shown: Saved = edit.error ? "error" : edit.pending ? "saving" : saved;
+
+  return { draft, setDraft, setFocus, invalid, saved: shown, commit, edit };
 }
 
 function SavedMark({ saved }: { saved: Saved }) {
@@ -153,8 +170,40 @@ function SavedMark({ saved }: { saved: Saved }) {
   );
 }
 
-function RowFields({ row, canMark, cohortId, layout }: { row: GradeRow; canMark: boolean; cohortId: string; layout: "table" | "card" }) {
+/** Remounts the editor after «Отменить» in the conflict dialog, so it starts from the fresh record. */
+function RowFields(props: { row: GradeRow; canMark: boolean; cohortId: string; layout: "table" | "card" }) {
+  const [epoch, setEpoch] = useState(0);
+
+  return <RowEditor key={epoch} {...props} onDiscard={() => setEpoch((e) => e + 1)} />;
+}
+
+function RowEditor({
+  row,
+  canMark,
+  cohortId,
+  layout,
+  onDiscard,
+}: {
+  row: GradeRow;
+  canMark: boolean;
+  cohortId: string;
+  layout: "table" | "card";
+  onDiscard: () => void;
+}) {
+  const queryClient = useQueryClient();
   const g = useGradeRow(cohortId, row);
+  const dialog = (
+    <ConflictDialog
+      save={{
+        ...g.edit,
+        cancel: () => {
+          g.edit.cancel();
+          void queryClient.invalidateQueries({ queryKey: ["grades", cohortId] });
+          onDiscard();
+        },
+      }}
+    />
+  );
   const input = (field: Field, label: string) =>
     canMark ? (
       <ScoreInput
@@ -193,6 +242,8 @@ function RowFields({ row, canMark, cohortId, layout }: { row: GradeRow; canMark:
             <Total row={row} />
             <SavedMark saved={g.saved} />
           </div>
+          {g.edit.error && <p className="mt-1 text-xs text-danger">{g.edit.error}</p>}
+          {dialog}
         </td>
       </>
     );
@@ -224,6 +275,8 @@ function RowFields({ row, canMark, cohortId, layout }: { row: GradeRow; canMark:
           <SavedMark saved={g.saved} />
         </span>
       </div>
+      {g.edit.error && <p className="text-xs text-danger">{g.edit.error}</p>}
+      {dialog}
     </div>
   );
 }
