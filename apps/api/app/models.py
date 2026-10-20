@@ -201,3 +201,35 @@ class Enrollment(Versioned, Base):
     student_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("student.id"))
     status: Mapped[str] = mapped_column(Text, server_default=text("'активный'"))
     enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Attendance(Base):
+    """One cell of the attendance grid. Cells are written one by one (never a whole lesson in one
+    statement), so two people marking the same lesson never overwrite each other's other cells."""
+
+    __tablename__ = "attendance"
+    lesson_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("lesson.id", ondelete="RESTRICT"), primary_key=True
+    )
+    enrollment_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
+    )
+    present: Mapped[bool] = mapped_column(Boolean)
+    reason: Mapped[str | None] = mapped_column(Text)
+    marked_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    marked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Grade(Versioned, Base):
+    """Homework and final (0-40 each, empty = not graded yet). The attendance part (0-20) is
+    never stored: it is computed from the attendance cells (`app.metrics`)."""
+
+    __tablename__ = "grade"
+    enrollment_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
+    )
+    homework: Mapped[int | None] = mapped_column(SmallInteger)
+    final: Mapped[int | None] = mapped_column(SmallInteger)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

@@ -40,7 +40,7 @@ from app.education.scope import (
     cohort_filters,
     writer,
 )
-from app.metrics import cohort_enrolled, cohort_fill
+from app.metrics import cohort_enrolled, cohort_fill, has_marks
 from app.models import AppUser, Branch, Cohort, Course, Enrollment, Lesson, Role, Room, Student
 from app.permissions import allows
 
@@ -446,7 +446,7 @@ async def update_cohort(
         cohort.instructor_id = body.instructor_id
     lessons_note: list[int] | None = None
     if {f: getattr(cohort, f) for f in _SCHEDULE_FIELDS} != schedule_before:
-        # Past lessons stay; the ones still ahead are rebuilt from the new schedule.
+        # Past lessons stay, and so does any lesson with marks; the rest ahead is rebuilt.
         now = _now()
         removed = (
             await db.execute(
@@ -454,6 +454,7 @@ async def update_cohort(
                     Lesson.cohort_id == cohort.id,
                     Lesson.starts_at > now,
                     Lesson.source == "generated",
+                    ~has_marks(),
                 )
             )
         ).rowcount  # type: ignore[attr-defined]
@@ -505,7 +506,10 @@ async def restore_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
     now = _now()
     await db.execute(
         delete(Lesson).where(
-            Lesson.cohort_id == cohort.id, Lesson.starts_at > now, Lesson.source == "generated"
+            Lesson.cohort_id == cohort.id,
+            Lesson.starts_at > now,
+            Lesson.source == "generated",
+            ~has_marks(),
         )
     )
     await db.flush()

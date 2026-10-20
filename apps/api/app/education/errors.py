@@ -15,6 +15,9 @@ ALREADY_ENROLLED = errors.define("already_enrolled", 409, "Student is already in
 COHORT_FULL = errors.define("cohort_full", 409, "Cohort is full")
 COHORT_CLOSED = errors.define("cohort_closed", 409, "Cohort is finished or cancelled")
 LESSON_CANCELLED = errors.define("lesson_cancelled", 409, "Lesson is cancelled")
+ENROLLED_AFTER_LESSON = errors.define(
+    "enrolled_after_lesson", 422, "The student was enrolled after that lesson"
+)
 COHORT_NOT_CANCELLED = errors.define("cohort_not_cancelled", 409, "Cohort is not cancelled")
 INSTRUCTOR_INVALID = errors.define(
     "instructor_invalid", 422, "Instructor must be an active instructor of the cohort's branch"
@@ -24,6 +27,8 @@ STUDENT_BRANCH_MISMATCH = errors.define(
     "student_branch_mismatch", 422, "Student is in another branch than the cohort"
 )
 
+errors.on_constraint("grade_homework_check", VALIDATION_FAILED)
+errors.on_constraint("grade_final_check", VALIDATION_FAILED)
 errors.on_constraint("room_branch_name_key", ROOM_NAME_TAKEN)
 errors.on_constraint("course_name_key", COURSE_NAME_TAKEN)
 errors.on_constraint("lesson_room_no_overlap", ROOM_BUSY)

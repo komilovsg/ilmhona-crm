@@ -99,3 +99,33 @@ async def education_summary(
         "cohorts": cohorts,
         "students": await student_counts(db, student_where),
     }
+
+
+from app.metrics.attendance import (  # noqa: E402
+    attendance_score,
+    enrollment_attendance,
+    enrollment_results,
+    grade_total,
+    has_marks,
+    passed,
+    today_lessons,
+    unfilled_lessons,
+)
+
+__all__ = [
+    "attendance_score",
+    "cohort_counts",
+    "cohort_enrolled",
+    "cohort_fill",
+    "education_summary",
+    "enrollment_attendance",
+    "enrollment_results",
+    "fill_of",
+    "grade_total",
+    "has_marks",
+    "passed",
+    "student_counts",
+    "student_statuses",
+    "today_lessons",
+    "unfilled_lessons",
+]

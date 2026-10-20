@@ -70,10 +70,16 @@ async def generate_lessons(
 ) -> int:
     """Insert the cohort's lessons (only those starting after `after`, when given). Returns how
     many. Raises room_busy when the room is taken."""
+    # a lesson that survived a rebuild (it has marks) is already there: no second one on its slot
+    kept = set(
+        (await db.execute(select(Lesson.starts_at).where(Lesson.cohort_id == cohort.id)))
+        .scalars()
+        .all()
+    )
     rows = []
     for day in lesson_dates(cohort.start_date, cohort.end_date, cohort.weekdays):
         starts, ends = local_dt(day, cohort.start_time), local_dt(day, cohort.end_time)
-        if after is None or starts > after:
+        if (after is None or starts > after) and starts not in kept:
             rows.append((day, starts, ends))
     await check_room_free(db, cohort.room_id, [(s, e) for _, s, e in rows])
     db.add_all(
