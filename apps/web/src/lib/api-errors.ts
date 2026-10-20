@@ -57,6 +57,16 @@ export const apiErrors: Record<string, string> = {
   cohort_no_instructor: "У потока нет инструктора.",
   payout_period_invalid: "Поток в этом месяце не идёт.",
   payout_exists: "За этот месяц по этому потоку выплата уже отмечена.",
+  lead_converted: "Лид уже записан студентом: его статус не меняется.",
+  lead_use_convert: "Статус «записан» ставится кнопкой «Записать в поток».",
+  campaign_branch_mismatch: "Кампания из другого филиала, чем лид.",
+  campaign_in_use: "У кампании есть лиды. Удалить нельзя.",
+  campaign_dates_invalid: "Дата окончания раньше даты старта.",
+  import_too_large: "Файл слишком большой (больше 2 МБ).",
+  import_too_many_rows: "В файле больше 2000 строк. Разделите его на части.",
+  import_unreadable: "Не удалось прочитать файл. Нужен CSV.",
+  import_no_rows: "В файле нет строк для импорта.",
+  import_mapping_invalid: "Выберите колонку с именем или с телефоном.",
 };
 
 // Raised by the browser side only (no response from the API).

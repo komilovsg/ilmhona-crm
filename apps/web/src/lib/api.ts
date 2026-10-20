@@ -144,3 +144,38 @@ export async function downloadExport(path: string, params: Record<string, string
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 }
+
+/**
+ * POST a CSV file as the raw request body (`text/csv`) with the settings in the query: the lead
+ * import's two steps (`/preview` reads, the other writes). Same refresh-once handling as `api()`.
+ */
+export async function uploadCsv<T>(path: string, file: File, params: Record<string, string | undefined> = {}): Promise<T> {
+  const query = new URLSearchParams(
+    Object.entries(params).filter((e): e is [string, string] => !!e[1]),
+  ).toString();
+  const url = query ? `${path}?${query}` : path;
+  const send = () =>
+    fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "text/csv", "X-Requested-With": "ilm" },
+      body: file,
+      credentials: "same-origin",
+    });
+  const done = trackRequest();
+  let response: Response;
+
+  try {
+    response = await send();
+    if (response.status === 401 && (await refreshSession())) response = await send();
+    done(![502, 503, 504].includes(response.status));
+  } catch {
+    done(false);
+    throw { status: 0, code: "network_error" } satisfies ApiError;
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) throw { status: response.status, code: data?.code ?? "internal_error", params: data?.params } satisfies ApiError;
+
+  return data as T;
+}
