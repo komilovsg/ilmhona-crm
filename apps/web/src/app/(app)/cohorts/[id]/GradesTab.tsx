@@ -6,6 +6,8 @@ import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshAttendance } from "@/hooks/attendance";
 import { api, isApiError } from "@/lib/api";
@@ -232,17 +234,20 @@ export function GradesTab({ cohortId, canMark }: { cohortId: string; canMark: bo
     queryFn: () => api<GradeRow[]>(`/api/v1/cohorts/${cohortId}/grades`),
   });
 
-  if (list.isPending)
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  if (list.isError || !list.data)
-    return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Не удалось загрузить оценки.</p>;
-  if (list.data.length === 0)
-    return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">В потоке пока нет студентов.</p>;
+  return (
+    <QueryState
+      empty={<EmptyState title="В потоке пока нет студентов" />}
+      errorText="Не удалось загрузить оценки"
+      isEmpty={(rows) => rows.length === 0}
+      query={list}
+      skeleton={<ListSkeleton cols={6} rows={6} />}
+    >
+      {(rows) => <GradesList canMark={canMark} cohortId={cohortId} rows={rows} />}
+    </QueryState>
+  );
+}
 
+function GradesList({ cohortId, canMark, rows }: { cohortId: string; canMark: boolean; rows: GradeRow[] }) {
   return (
     <>
       <p className="mb-3 text-xs text-default-500">
@@ -262,14 +267,14 @@ export function GradesTab({ cohortId, canMark }: { cohortId: string; canMark: bo
             </tr>
           </thead>
           <tbody>
-            {list.data.map((r) => (
+            {rows.map((r) => (
               <GradeTableRow key={r.enrollment_id} canMark={canMark} cohortId={cohortId} row={r} />
             ))}
           </tbody>
         </table>
       </div>
       <ul className="space-y-3 md:hidden">
-        {list.data.map((r) => (
+        {rows.map((r) => (
           <li key={r.enrollment_id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-center justify-between gap-2">
               <span className="truncate font-medium">{r.student_name}</span>

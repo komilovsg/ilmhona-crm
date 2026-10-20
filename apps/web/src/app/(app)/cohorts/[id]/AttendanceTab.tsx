@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { api } from "@/lib/api";
 import { lessonProgress, markedLabel, markState, percentLabel } from "@/lib/attendance";
@@ -59,23 +61,32 @@ export function AttendanceTab({ cohortId, canMark }: { cohortId: string; canMark
   });
   const today = todayIso();
 
-  if (grid.isPending)
-    return (
-      <div className="flex justify-center py-12">
-        <Spinner />
-      </div>
-    );
-  if (grid.isError || !grid.data)
-    return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Не удалось загрузить посещаемость.</p>;
+  return (
+    <QueryState
+      empty={<EmptyState title="Нечего отмечать" hint="В потоке нет студентов или уроков." />}
+      errorText="Не удалось загрузить посещаемость"
+      isEmpty={(g) => g.students.length === 0 || g.lessons.length === 0}
+      query={grid}
+      skeleton={<ListSkeleton cols={8} rows={6} />}
+    >
+      {(data) => <Grid canMark={canMark} cohortId={cohortId} grid={data} today={today} />}
+    </QueryState>
+  );
+}
 
-  const { lessons, students } = grid.data;
-
-  if (students.length === 0)
-    return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">В потоке пока нет студентов.</p>;
-  if (lessons.length === 0)
-    return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">В потоке пока нет уроков.</p>;
-
-  const progress = lessonProgress(grid.data, (iso) => todayIso(new Date(iso)));
+function Grid({
+  grid,
+  cohortId,
+  canMark,
+  today,
+}: {
+  grid: AttendanceGrid;
+  cohortId: string;
+  canMark: boolean;
+  today: string;
+}) {
+  const { lessons, students } = grid;
+  const progress = lessonProgress(grid, (iso) => todayIso(new Date(iso)));
   const header = (l: AttendanceGrid["lessons"][number]) => (
     <>
       <span className="block font-medium">{dayMonth(l.date)}</span>
@@ -85,10 +96,13 @@ export function AttendanceTab({ cohortId, canMark }: { cohortId: string; canMark
 
   return (
     <>
-      <p className="mb-3 text-xs text-default-500">
-        <b className="text-default-700">%</b> считается от проведённых уроков, пока студент в потоке; неотмеченные уроки
-        показаны отдельно.
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-default-500">
+          <b className="text-default-700">%</b> считается от проведённых уроков, пока студент в потоке; неотмеченные
+          уроки показаны отдельно.
+        </p>
+        <ExportButton label="Табель" path={`/api/v1/cohorts/${cohortId}/attendance/export`} />
+      </div>
 
       <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
