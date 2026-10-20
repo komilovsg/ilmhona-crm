@@ -130,6 +130,8 @@ FIELDS: dict[str, str] = {
     "cancelled": "отменён",
     "expires_at": "временный пароль до",
     "lessons": "уроки",
+    "homework": "Д/З",
+    "final": "финал",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -142,6 +144,7 @@ VALUES = {
     "change": "изменение",
 }
 NONE = "—"
+_PRESENCE: dict[Any, str] = {None: "не отмечено", True: "присутствует", False: "отсутствует"}
 
 
 @dataclass
@@ -310,7 +313,27 @@ def sentence(
         )
     if a == "cohort.close_enrollments":
         _, n = _pair(e.diff.get("enrollments_completed"))
-        return f"{who}: поток {lab} закончился, зачислений завершено: {n}"
+        _, grads = _pair(e.diff.get("graduates"))
+        tail = f", из них выпускников: {grads}" if grads else ""
+        return f"{who}: поток {lab} закончился, зачислений завершено: {n}{tail}"
+    if a == "grade.update":
+        student, cohort = _pieces(lab)
+        return _with_changes(
+            f"{who}: оценки студента {student} в потоке {cohort}", e.diff, names, sections
+        )
+    if a == "attendance.mark":
+        code, _, day = (lab or "").partition(", ")
+        student = _pair(e.diff.get("student"))[1]
+        old, new = _pair(e.diff.get("present"))
+        _, reason = _pair(e.diff.get("reason"))
+        head = (
+            f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
+        )
+        return head + (f", причина: {reason}" if reason else "")
+    if a == "attendance.mark_all":
+        code, _, day = (lab or "").partition(", ")
+        _, n = _pair(e.diff.get("marked"))
+        return f"{who}: урок {code} за {day} — все присутствуют, отмечено: {n}"
 
     if a.startswith("lesson.") and a in ACTIONS:
         verb, what = ACTIONS[a]

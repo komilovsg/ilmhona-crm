@@ -33,7 +33,7 @@ test("change includes view, view does not include change", () => {
 test("nav shows only sections with at least view", () => {
   assert.deepEqual(
     visibleNav(instructor).map((i) => i.section),
-    ["cohorts", "attendance", "instructors"],
+    ["attendance", "cohorts", "instructors"],
   );
   assert.deepEqual(visibleNav(undefined), []);
   assert.equal(visibleNav(manager).some((i) => i.section === "users"), false);
@@ -60,13 +60,14 @@ test("phone: four main items, the rest goes to «Ещё»", () => {
 
 test("home is the first visible section, the profile when there is none", () => {
   assert.equal(homePath(manager), "/dashboard");
-  assert.equal(homePath(instructor), "/cohorts");
+  assert.equal(homePath(instructor), "/today"); // the instructor lands on «Сегодня»
   assert.equal(homePath({}), "/profile");
 });
 
 test("canOpen guards sections, not the profile", () => {
   assert.equal(canOpen(instructor, "/users"), false);
-  assert.equal(canOpen(instructor, "/attendance"), true);
+  assert.equal(canOpen(instructor, "/today"), true);
+  assert.equal(canOpen(manager, "/today"), false); // no attendance right
   assert.equal(canOpen(instructor, "/profile"), true);
   assert.equal(canOpen({}, "/roles"), false);
 });

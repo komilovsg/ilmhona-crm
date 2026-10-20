@@ -7,6 +7,8 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { CohortFormModal } from "../CohortFormModal";
 
+import { AttendanceTab } from "./AttendanceTab";
+import { GradesTab } from "./GradesTab";
 import { LessonsTab } from "./LessonsTab";
 import { StudentsTab } from "./StudentsTab";
 
@@ -18,6 +20,7 @@ import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
+import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { daysLabel, formatPrice, fullDate } from "@/lib/education";
@@ -25,7 +28,7 @@ import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
 
-type Tab = "students" | "lessons";
+type Tab = "students" | "lessons" | "attendance" | "grades";
 type Action = "cancel" | "restore" | "delete";
 
 const CONFIRM: Record<Action, { title: string; label: string; text: string; danger: boolean }> = {
@@ -68,6 +71,8 @@ export default function CohortPage() {
   const router = useRouter();
   const refresh = useRefreshEducation();
   const canChange = useCanChange("cohorts");
+  const canMark = useCanMark();
+  const seesAttendance = useCanSeeAttendance();
   const [tab, setTab] = useState<Tab>("students");
   const [editing, setEditing] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
@@ -179,15 +184,20 @@ export default function CohortPage() {
         options={[
           { key: "students", label: "Студенты" },
           { key: "lessons", label: "Расписание" },
+          ...(seesAttendance
+            ? [
+                { key: "attendance" as const, label: "Посещаемость" },
+                { key: "grades" as const, label: "Оценки" },
+              ]
+            : []),
         ]}
         value={tab}
         onChange={setTab}
       />
-      {tab === "students" ? (
-        <StudentsTab canChange={canChange} cohort={c} />
-      ) : (
-        <LessonsTab canChange={canChange} cohort={c} />
-      )}
+      {tab === "students" && <StudentsTab canChange={canChange} cohort={c} />}
+      {tab === "lessons" && <LessonsTab canChange={canChange} cohort={c} />}
+      {tab === "attendance" && <AttendanceTab canMark={canMark} cohortId={c.id} />}
+      {tab === "grades" && <GradesTab canMark={canMark} cohortId={c.id} />}
 
       {editing && <CohortFormModal cohort={c} onClose={() => setEditing(false)} />}
       {action && (

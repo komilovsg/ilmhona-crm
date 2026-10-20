@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.attendance.api import router as attendance_router
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
 from app.branches.api import router as branches_router
@@ -41,6 +42,7 @@ for router in (
     branches_router,
     rooms_router,
     cohorts_router,
+    attendance_router,
     students_router,
     metrics_router,
 ):
