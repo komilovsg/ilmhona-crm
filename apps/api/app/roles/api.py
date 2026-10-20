@@ -6,9 +6,10 @@ grants rights they do not hold themselves.
 """
 
 import uuid
+from functools import partial
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, permissions_of, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import CONCURRENT_CHANGE, FORBIDDEN, NOT_FOUND, DomainError, errors
+from app.export import Col, xlsx_response
 from app.models import AppUser, Role, RolePermission
 from app.permissions import LEVELS, SECTIONS, SUPERADMIN_CODE
 from app.users.errors import BRANCH_FORBIDDEN, ROLE_NOT_ASSIGNABLE
@@ -95,11 +97,45 @@ async def sections(_: View) -> list[dict[str, str]]:
 
 @router.get("")
 async def list_roles(p: View, db: DB) -> list[dict[str, Any]]:
-    roles = (await db.execute(select(Role).order_by(Role.created_at, Role.name))).scalars().all()
-    out = [await _out(db, r) for r in roles]
+    out = await _all_roles(db)
     for row in out:
         row["assignable"] = p.can_assign(row["code"], row["permissions"])
     return out
+
+
+async def _all_roles(db: AsyncSession) -> list[dict[str, Any]]:
+    roles = (await db.execute(select(Role).order_by(Role.created_at, Role.name))).scalars().all()
+    return [await _out(db, r) for r in roles]
+
+
+LEVEL_LABELS = {"view": "Просмотр", "change": "Изменение"}
+
+
+def _level_of(section: str, role: dict[str, Any]) -> str:
+    return LEVEL_LABELS.get(role["permissions"].get(section, ""), "Нет")
+
+
+ROLE_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Роль", lambda r: r["name"]),
+    Col("Системная", lambda r: r["is_system"], "bool"),
+    Col("Пользователей", lambda r: r["users_count"], "int"),
+    *[Col(label, partial(_level_of, key)) for key, label in SECTIONS.items()],
+]
+
+
+@router.get("/export")
+async def export_roles(p: View, db: DB) -> Response:
+    """The roles table with the rights matrix: one column per section."""
+    return await xlsx_response(
+        db,
+        p,
+        entity="role",
+        slug="roli",
+        title="Роли",
+        columns=ROLE_COLUMNS,
+        rows=await _all_roles(db),
+        filters={},
+    )
 
 
 @router.get("/{role_id}")

@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.security import hash_password, temp_password
+from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import AppUser, Branch, Role
 from app.permissions import SUPERADMIN_CODE
 from app.users.errors import (
@@ -160,18 +161,14 @@ async def _ensure_not_last_superadmin(db: AsyncSession, u: AppUser) -> None:
         raise DomainError(LAST_SUPERADMIN)
 
 
-@router.get("")
-async def list_users(
-    p: View,
-    db: DB,
-    q: str | None = None,
-    branch_id: uuid.UUID | None = None,
-    role_id: uuid.UUID | None = None,
-    is_active: bool | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
-) -> dict[str, Any]:
-    where = []
+def _user_where(
+    p: Principal,
+    q: str | None,
+    branch_id: uuid.UUID | None,
+    role_id: uuid.UUID | None,
+    is_active: bool | None,
+) -> list[Any]:
+    where: list[Any] = []
     if p.branch_id is not None:
         where.append(AppUser.branch_id == p.branch_id)
     if branch_id:
@@ -189,17 +186,34 @@ async def list_users(
                 AppUser.phone.ilike(like),
             )
         )
+    return where
+
+
+def _user_select(where: list[Any]) -> Any:
+    return (
+        select(AppUser, Role, Branch.name)
+        .join(Role, Role.id == AppUser.role_id)
+        .outerjoin(Branch, Branch.id == AppUser.branch_id)
+        .where(*where)
+        .order_by(AppUser.full_name, AppUser.id)
+    )
+
+
+@router.get("")
+async def list_users(
+    p: View,
+    db: DB,
+    q: str | None = None,
+    branch_id: uuid.UUID | None = None,
+    role_id: uuid.UUID | None = None,
+    is_active: bool | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> dict[str, Any]:
+    where = _user_where(p, q, branch_id, role_id, is_active)
     total = (await db.execute(select(func.count()).select_from(AppUser).where(*where))).scalar_one()
     rows = (
-        await db.execute(
-            select(AppUser, Role, Branch.name)
-            .join(Role, Role.id == AppUser.role_id)
-            .outerjoin(Branch, Branch.id == AppUser.branch_id)
-            .where(*where)
-            .order_by(AppUser.full_name, AppUser.id)
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
+        await db.execute(_user_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     return {
         "items": [user_out(u, r, b) for u, r, b in rows],
@@ -207,6 +221,41 @@ async def list_users(
         "page": page,
         "page_size": page_size,
     }
+
+
+USER_COLUMNS: list[Col[Any]] = [
+    Col("ФИО", lambda r: r[0].full_name),
+    Col("Логин", lambda r: r[0].login),
+    Col("Телефон", lambda r: r[0].phone),
+    Col("Email", lambda r: r[0].email),
+    Col("Роль", lambda r: r[1].name),
+    Col("Филиал", lambda r: r[2] or "Все филиалы"),
+    Col("Активен", lambda r: r[0].is_active, "bool"),
+    Col("Создан", lambda r: r[0].created_at, "datetime"),
+]
+
+
+@router.get("/export")
+async def export_users(
+    p: View,
+    db: DB,
+    q: str | None = None,
+    branch_id: uuid.UUID | None = None,
+    role_id: uuid.UUID | None = None,
+    is_active: bool | None = None,
+) -> Response:
+    where = _user_where(p, q, branch_id, role_id, is_active)
+    rows = (await db.execute(_user_select(where).limit(MAX_ROWS + 1))).all()
+    return await xlsx_response(
+        db,
+        p,
+        entity="app_user",
+        slug="polzovateli",
+        title="Пользователи",
+        columns=USER_COLUMNS,
+        rows=rows,
+        filters={"q": q, "branch_id": branch_id, "role_id": role_id, "is_active": is_active},
+    )
 
 
 @router.post("", status_code=201)

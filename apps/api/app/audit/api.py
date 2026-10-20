@@ -1,14 +1,16 @@
 """The audit log, newest first. A branch-bound user sees their branch's entries only."""
 
+import json
 import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
 
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
+from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import AppUser, AuditLog, Branch, Role
 from app.permissions import SECTIONS
 
@@ -47,20 +49,16 @@ router = APIRouter(
 )
 
 
-@router.get("")
-async def list_audit(
-    p: Annotated[Principal, require("audit", "view")],
-    db: DB,
-    user_id: uuid.UUID | None = None,
-    entity: str | None = None,
-    entity_id: str | None = None,
-    action: str | None = None,
-    since: datetime | None = None,
-    until: datetime | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
-) -> dict[str, Any]:
-    where = []
+def _audit_where(
+    p: Principal,
+    user_id: uuid.UUID | None,
+    entity: str | None,
+    entity_id: str | None,
+    action: str | None,
+    since: datetime | None,
+    until: datetime | None,
+) -> list[Any]:
+    where: list[Any] = []
     if p.branch_id is not None:
         where.append(AuditLog.branch_id == p.branch_id)
     if user_id:
@@ -75,18 +73,80 @@ async def list_audit(
         where.append(AuditLog.at >= since)
     if until:
         where.append(AuditLog.at < until)
+    return where
+
+
+def _audit_select(where: list[Any]) -> Any:
+    return (
+        select(AuditLog, AppUser.full_name, AppUser.login)
+        .outerjoin(AppUser, AppUser.id == AuditLog.user_id)
+        .where(*where)
+        .order_by(AuditLog.at.desc(), AuditLog.id.desc())
+    )
+
+
+AUDIT_COLUMNS: list[Col[Any]] = [
+    Col("Время", lambda r: r[0].at, "datetime"),
+    Col("Кто", lambda r: r[1] or "Система"),
+    Col("Логин", lambda r: r[2]),
+    Col("Действие", lambda r: r[0].action),
+    Col("Объект", lambda r: r[0].entity),
+    Col("ID объекта", lambda r: r[0].entity_id),
+    Col("Данные", lambda r: json.dumps(r[0].diff, ensure_ascii=False) if r[0].diff else None),
+]
+
+
+@router.get("/export")
+async def export_audit(
+    p: Annotated[Principal, require("audit", "view")],
+    db: DB,
+    user_id: uuid.UUID | None = None,
+    entity: str | None = None,
+    entity_id: str | None = None,
+    action: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> Response:
+    where = _audit_where(p, user_id, entity, entity_id, action, since, until)
+    rows = (await db.execute(_audit_select(where).limit(MAX_ROWS + 1))).all()
+    return await xlsx_response(
+        db,
+        p,
+        entity="audit_log",
+        slug="zhurnal",
+        title="Журнал",
+        columns=AUDIT_COLUMNS,
+        rows=rows,
+        filters={
+            "user_id": user_id,
+            "entity": entity,
+            "entity_id": entity_id,
+            "action": action,
+            "since": since,
+            "until": until,
+        },
+    )
+
+
+@router.get("")
+async def list_audit(
+    p: Annotated[Principal, require("audit", "view")],
+    db: DB,
+    user_id: uuid.UUID | None = None,
+    entity: str | None = None,
+    entity_id: str | None = None,
+    action: str | None = None,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> dict[str, Any]:
+    where = _audit_where(p, user_id, entity, entity_id, action, since, until)
     total = (
         await db.execute(select(func.count()).select_from(AuditLog).where(*where))
     ).scalar_one()
     rows = (
-        await db.execute(
-            select(AuditLog, AppUser.full_name, AppUser.login)
-            .outerjoin(AppUser, AppUser.id == AuditLog.user_id)
-            .where(*where)
-            .order_by(AuditLog.at.desc(), AuditLog.id.desc())
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
+        await db.execute(_audit_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     refs: set[uuid.UUID] = set()
     for a, _, _ in rows:

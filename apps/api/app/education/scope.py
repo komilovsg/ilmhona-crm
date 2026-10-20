@@ -46,7 +46,17 @@ def writer(section: str) -> object:
     return Depends(dependency)
 
 
-AnyReader = Annotated[Principal, require_any("rooms", "cohorts", "students")]
+async def _room_reader(p: CurrentUser) -> Principal:
+    """Rooms and courses: `rooms` view, or a non-instructor who edits cohorts (the cohort form
+    needs both lists). An instructor without `rooms` view gets 403, matching the UI."""
+    if allows(p.level("rooms"), "view") or (
+        allows(p.level("cohorts"), "change") and not is_instructor(p)
+    ):
+        return p
+    raise DomainError(FORBIDDEN, section="rooms", level="view")
+
+
+RoomReader = Annotated[Principal, Depends(_room_reader)]
 
 
 def cohort_filters(p: Principal) -> list[ColumnElement[bool]]:

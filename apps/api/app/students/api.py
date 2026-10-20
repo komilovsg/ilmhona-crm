@@ -8,7 +8,7 @@ and the counts come from `app.metrics`.
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +20,7 @@ from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.education.errors import STUDENT_IN_USE
 from app.education.scope import branch_for_write, cohort_filters, student_filters, writer
+from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import student_status_expr, student_statuses
 from app.models import Branch, Cohort, Course, Enrollment, Student
 
@@ -126,6 +127,29 @@ async def _detail(db: AsyncSession, p: Principal, student: Student, branch: str)
     return {**_out(student, branch, status, len(history)), "enrollments": history}
 
 
+def _student_where(
+    p: Principal, q: str | None, status: str | None, branch_id: uuid.UUID | None
+) -> list[Any]:
+    where: list[Any] = list(student_filters(p))
+    if branch_id:
+        where.append(Student.branch_id == branch_id)
+    if status:
+        where.append(student_status_expr() == status)
+    if q and q.strip():
+        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
+        where.append(or_(Student.full_name.ilike(like), Student.phone.ilike(like)))
+    return where
+
+
+def _student_select(where: list[Any]) -> Any:
+    return (
+        select(Student, Branch.name, student_status_expr())
+        .join(Branch, Branch.id == Student.branch_id)
+        .where(*where)
+        .order_by(Student.full_name, Student.id)
+    )
+
+
 @router.get("")
 async def list_students(
     p: View,
@@ -136,25 +160,10 @@ async def list_students(
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
-    where = student_filters(p)
-    status_expr = student_status_expr()
-    if branch_id:
-        where.append(Student.branch_id == branch_id)
-    if status:
-        where.append(status_expr == status)
-    if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(or_(Student.full_name.ilike(like), Student.phone.ilike(like)))
+    where = _student_where(p, q, status, branch_id)
     total = (await db.execute(select(func.count()).select_from(Student).where(*where))).scalar_one()
     rows = (
-        await db.execute(
-            select(Student, Branch.name, status_expr)
-            .join(Branch, Branch.id == Student.branch_id)
-            .where(*where)
-            .order_by(Student.full_name, Student.id)
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
+        await db.execute(_student_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     counts = await _counts(db, p, [s.id for s, _, _ in rows])
     return {
@@ -163,6 +172,41 @@ async def list_students(
         "page": page,
         "page_size": page_size,
     }
+
+
+STUDENT_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("ФИО", lambda s: s["full_name"]),
+    Col("Пол", lambda s: {"male": "М", "female": "Ж"}.get(s["gender"] or "")),
+    Col("Телефон", lambda s: s["phone"]),
+    Col("Филиал", lambda s: s["branch_name"]),
+    Col("Статус", lambda s: s["status"]),
+    Col("Потоков", lambda s: s["enrollments_count"], "int"),
+    Col("Добавлен", lambda s: s["created_at"], "date"),
+]
+
+
+@router.get("/export")
+async def export_students(
+    p: View,
+    db: DB,
+    q: str | None = None,
+    status: str | None = None,
+    branch_id: uuid.UUID | None = None,
+) -> Response:
+    where = _student_where(p, q, status, branch_id)
+    rows = (await db.execute(_student_select(where).limit(MAX_ROWS + 1))).all()
+    check_cap(rows)
+    counts = await _counts(db, p, [s.id for s, _, _ in rows])
+    return await xlsx_response(
+        db,
+        p,
+        entity="student",
+        slug="studenty",
+        title="Студенты",
+        columns=STUDENT_COLUMNS,
+        rows=[_out(s, b, st, counts.get(s.id, 0)) for s, b, st in rows],
+        filters={"q": q, "status": status, "branch_id": branch_id},
+    )
 
 
 @router.post("", status_code=201)
