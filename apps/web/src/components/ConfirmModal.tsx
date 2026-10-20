@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Button } from "@heroui/button";
 
 import { AppModal } from "./AppModal";
+import { LoadingButton } from "./LoadingButton";
 
 export function ConfirmModal({
   isOpen,
@@ -31,9 +32,9 @@ export function ConfirmModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color={danger ? "danger" : "primary"} isLoading={isLoading} onPress={onConfirm}>
+          <LoadingButton color={danger ? "danger" : "primary"} isLoading={isLoading} onPress={onConfirm}>
             {confirmLabel}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen={isOpen}

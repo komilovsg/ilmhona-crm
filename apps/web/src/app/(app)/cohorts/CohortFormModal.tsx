@@ -17,6 +17,7 @@ import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null; onClose: () => void }) {
   const refresh = useRefreshEducation();
@@ -34,7 +35,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
   const [endTime, setEndTime] = useState(cohort?.end_time ?? "11:30");
   const [capacity, setCapacity] = useState(String(cohort?.capacity ?? 15));
   const [price, setPrice] = useState(cohort ? String(Number(cohort.price_month)) : "");
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<{ message: string; sig: string } | null>(null);
   const { data: rooms = [] } = useRooms(branchId);
   const { data: instructors = [] } = useInstructors(branchId);
 
@@ -54,6 +55,9 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     capacity: cap,
     price_month: price === "" ? "" : String(Number(price)),
   };
+  // A server error belongs to the values that were sent: any edit hides it, and so does a client hint.
+  const sig = JSON.stringify([courseId, branchId, values]);
+  const error = failed?.sig === sig ? failed.message : null;
   const body = (v: Partial<typeof values>) => ({ ...v, price_month: v.price_month === "" ? undefined : v.price_month });
   const done = () => {
     void refresh();
@@ -64,7 +68,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     mutationFn: () =>
       api("/api/v1/cohorts", { method: "POST", body: { ...body(values), course_id: courseId, branch_id: branchId } }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
+    onError: (e) => setFailed({ message: messageOf(e), sig }),
   });
   const edit = useVersionedSave({
     record: cohort,
@@ -123,9 +127,9 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {cohort ? "Сохранить" : "Создать"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
@@ -211,7 +215,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
           />
           <Input
             description={cohort ? undefined : "Пусто: цена курса"}
-            endContent={<span className="text-xs text-default-500">TJS</span>}
+            endContent={<span className="text-xs text-default-600">TJS</span>}
             label="Цена в месяц"
             min={0}
             type="number"
@@ -250,7 +254,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             Если изменить даты, дни, время или аудиторию, будущие уроки пересоздаются. Прошедшие остаются как были.
           </p>
         )}
-        {(error ?? edit.error) && (
+        {!problem && (error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
             {error ?? edit.error}
           </p>

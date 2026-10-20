@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
-import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { Bone } from "@/components/Skeletons";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
@@ -139,6 +141,7 @@ export function ScheduleTab() {
         <Button variant="flat" onPress={() => setDay(today)}>
           Сегодня
         </Button>
+        <ExportButton params={{ date_from: monday, branch_id: branch }} path="/api/v1/rooms/schedule/export" />
         {!me?.branch && (
           <SelectField
             allLabel="Все филиалы"
@@ -150,17 +153,14 @@ export function ScheduleTab() {
           />
         )}
       </div>
-      {grid.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : !grid.data || grid.data.rooms.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Аудиторий пока нет.</p>
-      ) : phone ? (
-        <PhoneDay day={day} grid={grid.data} />
-      ) : (
-        <DesktopGrid days={days} grid={grid.data} today={today} />
-      )}
+      <QueryState
+        empty={<EmptyState title="Нет аудиторий" />}
+        isEmpty={(d) => d.rooms.length === 0}
+        query={grid}
+        skeleton={<Bone className="h-96 w-full rounded-2xl" />}
+      >
+        {(data) => (phone ? <PhoneDay day={day} grid={data} /> : <DesktopGrid days={days} grid={data} today={today} />)}
+      </QueryState>
     </>
   );
 }

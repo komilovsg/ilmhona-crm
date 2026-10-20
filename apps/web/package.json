@@ -8,7 +8,8 @@
     "start": "next start -p 3200",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "cls": "node scripts/cls.mjs"
   },
   "dependencies": {
     "@heroui/avatar": "^2.2.26",
@@ -45,6 +46,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
+    "playwright-core": "1.62.1",
     "postcss": "^8",
     "tailwindcss": "^4",
     "typescript": "^5"

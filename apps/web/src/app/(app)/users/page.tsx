@@ -7,19 +7,21 @@ import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { Input } from "@heroui/input";
-import { Spinner } from "@heroui/spinner";
 
 import { UserFormModal } from "./UserFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
+import { ListSkeleton } from "@/components/Skeletons";
 import { TempPasswordModal } from "@/components/TempPasswordModal";
 import { useBranches, useMe, useRoles } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { formatDateTime } from "@/lib/format";
+import { formatDateTime, telHref } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged, TempPassword, UserRow } from "@/lib/types";
@@ -176,11 +178,22 @@ export default function UsersPage() {
     <>
       <PageHeader
         actions={
-          canChange && (
-            <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setEditing("new")}>
-              Пользователь
-            </Button>
-          )
+          <>
+            <ExportButton
+              params={{
+                q: filters.q.trim(),
+                branch_id: filters.branch,
+                role_id: filters.role,
+                is_active: filters.status,
+              }}
+              path="/api/v1/users/export"
+            />
+            {canChange && (
+              <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setEditing("new")}>
+                Пользователь
+              </Button>
+            )}
+          </>
         }
         title="Пользователи"
       />
@@ -203,13 +216,24 @@ export default function UsersPage() {
         </Button>
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : users.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Никого не найдено.</p>
-      ) : (
+      <QueryState
+        empty={
+          <EmptyState
+            action={
+              canChange && activeFilters === 0 && !filters.q.trim() ? (
+                <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setEditing("new")}>
+                  Пользователь
+                </Button>
+              ) : undefined
+            }
+            hint={activeFilters || filters.q.trim() ? "Измените поиск или фильтры." : undefined}
+            title="Никого не найдено"
+          />
+        }
+        isEmpty={(d) => d.items.length === 0}
+        query={list}
+        skeleton={<ListSkeleton cols={7} />}
+      >
         <>
           <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
@@ -233,7 +257,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">{u.branch_name ?? "Все"}</td>
                     <td className="px-4 py-3">
                       {u.phone ? (
-                        <a className="text-brand-text" href={`tel:${u.phone}`}>
+                        <a className="text-brand-text" href={telHref(u.phone)}>
                           {u.phone}
                         </a>
                       ) : (
@@ -269,7 +293,7 @@ export default function UsersPage() {
                   <span className="text-default-500">· {u.branch_name ?? "Все филиалы"}</span>
                 </div>
                 {u.phone && (
-                  <a className="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-text" href={`tel:${u.phone}`}>
+                  <a className="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-text" href={telHref(u.phone)}>
                     <Icon name="phone" size={14} />
                     {u.phone}
                   </a>
@@ -279,7 +303,7 @@ export default function UsersPage() {
           </ul>
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
-      )}
+      </QueryState>
 
       <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>

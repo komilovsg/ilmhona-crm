@@ -40,6 +40,9 @@ for (const theme of ["light", "dark"] as const) {
   test(`${theme}: secondary text (default-500, also the dash placeholder) >= 4.5`, () => {
     for (const bg of [c.background, c.content1]) assert.ok(ratio(c.default[500], bg) >= 4.5, bg);
   });
+  test(`${theme}: text inside inputs (the «TJS» suffix, default-600 on default-100) >= 4.5`, () => {
+    assert.ok(ratio(c.default[600], c.default[100]) >= 4.5);
+  });
   test(`${theme}: brand text and selected state on tint >= 4.5`, () => {
     for (const bg of [c.background, c.content1, over(c.primary.DEFAULT, c.content1, 0.1), over(c.primary.DEFAULT, c.background, 0.1)]) {
       assert.ok(ratio(text, bg) >= 4.5, `${text} on ${bg}`);

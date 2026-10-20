@@ -4,6 +4,7 @@ import { Button } from "@heroui/button";
 
 import { AppModal } from "@/components/AppModal";
 import type { VersionedSave } from "@/hooks/useVersionedSave";
+import { LoadingButton } from "./LoadingButton";
 
 /**
  * «Запись изменил {ФИО} в {HH:MM}. Ваши изменения: … Сейчас в базе: …». Shown over the form
@@ -21,9 +22,9 @@ export function ConflictDialog({ save }: { save: Pick<VersionedSave, "conflict" 
           <Button variant="light" onPress={save.cancel}>
             Отменить
           </Button>
-          <Button color="primary" isLoading={save.pending} onPress={() => void save.retry()}>
+          <LoadingButton color="primary" isLoading={save.pending} onPress={() => void save.retry()}>
             Обновить и повторить
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
