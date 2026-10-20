@@ -30,6 +30,21 @@ export const apiErrors: Record<string, string> = {
   role_in_use: "Роль назначена пользователям. Сначала смените им роль.",
   role_locked: "Роль «Суперадмин» нельзя менять или удалять.",
   role_system: "Системную роль нельзя удалить.",
+  room_name_taken: "Аудитория с таким названием уже есть в этом филиале.",
+  course_name_taken: "Курс с таким названием уже есть.",
+  room_in_use: "В аудитории есть потоки или уроки. Удалить нельзя.",
+  course_in_use: "По курсу есть потоки. Удалить нельзя.",
+  cohort_in_use: "В потоке есть студенты. Сначала уберите их или отмените поток.",
+  student_in_use: "Студент зачислен в потоки. Удалить нельзя.",
+  room_busy: "Аудитория занята потоком {cohort}: {date}, {start}–{end}.",
+  already_enrolled: "Студент уже зачислен в этот поток.",
+  cohort_full: "В потоке нет свободных мест.",
+  cohort_closed: "Поток завершён или отменён, изменить его нельзя.",
+  cohort_not_cancelled: "Поток не отменён.",
+  lesson_cancelled: "Урок отменён.",
+  instructor_invalid: "Инструктор должен быть активным сотрудником с ролью «Инструктор» из этого филиала.",
+  room_branch_mismatch: "Аудитория из другого филиала.",
+  student_branch_mismatch: "Студент из другого филиала.",
 };
 
 // Raised by the browser side only (no response from the API).
@@ -37,6 +52,9 @@ const clientErrors: Record<string, string> = {
   network_error: "Нет связи с сервером. Проверьте интернет.",
 };
 
-export function errorText(code: string | undefined): string {
-  return (code && (apiErrors[code] ?? clientErrors[code])) || apiErrors.internal_error;
+/** The text of an error code; `{name}` placeholders are filled from the problem's `params`. */
+export function errorText(code: string | undefined, params?: Record<string, unknown>): string {
+  const text = (code && (apiErrors[code] ?? clientErrors[code])) || apiErrors.internal_error;
+
+  return text.replace(/\{(\w+)\}/g, (_, key: string) => String(params?.[key] ?? ""));
 }
