@@ -138,3 +138,23 @@ async def test_cannot_touch_a_user_above_you(login_as: SignedIn) -> None:
         r = await call
         assert (r.status_code, r.json()["code"]) == (403, "role_not_assignable")
     assert (await sql("SELECT is_active FROM app_user WHERE login = 'boss'"))[0][0] is True
+
+
+async def test_roles_list_marks_which_roles_the_caller_may_assign(
+    login_as: SignedIn, admin: httpx.AsyncClient
+) -> None:
+    helper = await login_as(
+        "helper", await make_role("Помощник", {"users": "change", "leads": "view"})
+    )
+    await make_role("Только лиды", {"leads": "view"})
+
+    async def assignable(c: httpx.AsyncClient) -> dict[str, bool]:
+        return {r["name"]: r["assignable"] for r in (await c.get("/api/v1/roles")).json()}
+
+    got = await assignable(helper)
+    assert got["Только лиды"] is True
+    assert got["Суперадмин"] is False and got["Менеджер"] is False
+    assert all((await assignable(admin)).values())
+    # the flag matches what the create endpoint enforces
+    body = {**await _new_user_body(), "role_id": str(await role_id("manager"))}
+    assert (await helper.post(U, json=body)).json()["code"] == "role_not_assignable"

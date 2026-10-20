@@ -1,4 +1,4 @@
-from app.core.errors import errors
+from app.core.errors import CONCURRENT_CHANGE, errors
 
 LOGIN_TAKEN = errors.define("login_taken", 409, "Login already used")
 PHONE_TAKEN = errors.define("phone_taken", 409, "Phone already used")
@@ -14,3 +14,6 @@ USER_IN_USE = errors.define("user_in_use", 409, "User is referenced; deactivate 
 
 errors.on_constraint("app_user_login_key", LOGIN_TAKEN)
 errors.on_constraint("app_user_phone_key", PHONE_TAKEN)
+# a role or branch deleted while a user is being saved
+errors.on_constraint("app_user_role_id_fkey", CONCURRENT_CHANGE)
+errors.on_constraint("app_user_branch_id_fkey", CONCURRENT_CHANGE)

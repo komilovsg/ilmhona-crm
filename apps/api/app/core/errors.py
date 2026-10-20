@@ -59,6 +59,7 @@ METHOD_NOT_ALLOWED = errors.define("method_not_allowed", 405, "Method not allowe
 NOT_AUTHENTICATED = errors.define("not_authenticated", 401, "No valid session")
 FORBIDDEN = errors.define("forbidden", 403, "Not allowed")
 CSRF_HEADER_MISSING = errors.define("csrf_header_missing", 403, "Missing X-Requested-With header")
+CONCURRENT_CHANGE = errors.define("concurrent_change", 409, "Changed by someone else, retry")
 _BY_STATUS = {e.status: e for e in (BAD_REQUEST, NOT_FOUND, METHOD_NOT_ALLOWED)}
 
 
