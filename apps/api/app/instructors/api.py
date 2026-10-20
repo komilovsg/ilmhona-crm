@@ -173,6 +173,7 @@ async def update_instructor(
     before = {"default_rate": str(u.default_rate)}
     u.default_rate = body.default_rate
     await db.flush()
+    await db.refresh(u)
     await record(
         db,
         p.id,

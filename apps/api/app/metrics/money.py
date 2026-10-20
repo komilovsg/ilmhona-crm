@@ -35,7 +35,13 @@ PENDING = "ожидает"
 EXPELLED = "отчислен"
 CANCELLED = "отменён"
 ZERO = Decimal("0.00")
+CENT = Decimal("0.01")
 ADS_EXPENSE = ZERO  # stage 3 replaces this with the campaigns' budget
+
+
+def money(value: Any) -> Decimal:
+    """A sum from the database as money: two decimals, also for an empty sum (0 -> 0.00)."""
+    return Decimal(value).quantize(CENT)
 
 
 def today() -> date:
@@ -99,7 +105,7 @@ async def payment_totals(db: AsyncSession, where: Sequence[ColumnElement[bool]])
         .where(*where)
         .group_by(Payment.status)
     )
-    by = {s: (n, Decimal(total)) for s, n, total in rows.all()}
+    by = {s: (n, money(total)) for s, n, total in rows.all()}
     confirmed, pending = by.get(CONFIRMED, (0, ZERO)), by.get(PENDING, (0, ZERO))
     return {
         "confirmed": confirmed[1],
@@ -127,7 +133,7 @@ async def enrollment_money(
             .where(Payment.enrollment_id.in_(ids), Payment.status == CONFIRMED)
             .group_by(Payment.enrollment_id)
         )
-        paid = {i: (Decimal(total), sorted(months)) for i, total, months in result.all()}
+        paid = {i: (money(total), sorted(months)) for i, total, months in result.all()}
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for e, cohort in rows:
         total, months = paid.get(e.id, (ZERO, []))
@@ -168,7 +174,7 @@ async def cohort_income(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict[u
         .where(Enrollment.cohort_id.in_(cohort_ids), Payment.status == CONFIRMED)
         .group_by(Enrollment.cohort_id)
     )
-    got = {c: Decimal(t) for c, t in rows.all()}
+    got = {c: money(t) for c, t in rows.all()}
     return {c: got.get(c, ZERO) for c in cohort_ids}
 
 
@@ -184,7 +190,7 @@ async def income_total(db: AsyncSession, cohort_where: Sequence[ColumnElement[bo
             .where(Payment.status == CONFIRMED, *cohort_where)
         )
     ).scalar_one()
-    return Decimal(total)
+    return money(total)
 
 
 async def payroll_total(
@@ -200,7 +206,7 @@ async def payroll_total(
             .where(*cohort_where, *extra)
         )
     ).scalar_one()
-    return Decimal(total)
+    return money(total)
 
 
 async def finance(db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]]) -> dict[str, Any]:
@@ -255,7 +261,7 @@ async def instructor_stats(
         .group_by(Cohort.instructor_id)
     )
     for i, total in r_income.all():
-        stats[i]["income"] = Decimal(total)
+        stats[i]["income"] = money(total)
     r_paid = await db.execute(
         select(InstructorPayout.instructor_id, func.coalesce(func.sum(InstructorPayout.amount), 0))
         .join(Cohort, Cohort.id == InstructorPayout.cohort_id)
@@ -263,7 +269,7 @@ async def instructor_stats(
         .group_by(InstructorPayout.instructor_id)
     )
     for i, total in r_paid.all():
-        stats[i]["paid_out"] = Decimal(total)
+        stats[i]["paid_out"] = money(total)
     return stats
 
 

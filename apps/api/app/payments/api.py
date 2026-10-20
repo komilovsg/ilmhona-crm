@@ -595,6 +595,7 @@ async def update_payment(
     if "note" in sent:
         pay.note = body.note or None
     await db.flush()
+    await db.refresh(pay)  # amounts as the database stores them (550 -> 550.00)
     await record(
         db,
         p.id,

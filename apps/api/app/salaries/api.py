@@ -29,6 +29,7 @@ from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics.money import (
     cohort_periods,
     first_of_month,
+    money,
     salary_rows,
     salary_summary,
     today,
@@ -205,6 +206,7 @@ async def set_cohort_rate(
     before = str(cohort.instructor_rate)
     cohort.instructor_rate = body.instructor_rate
     await db.flush()
+    await db.refresh(cohort)
     await record(
         db,
         p.id,
@@ -335,7 +337,7 @@ async def list_payouts(
     return {
         "items": [_payout_out(*r) for r in rows],
         "total": total,
-        "sum": Decimal(amount),
+        "sum": money(amount),
         "page": page,
         "page_size": page_size,
     }
@@ -452,6 +454,7 @@ async def update_payout(
     if "note" in sent:
         po.note = body.note or None
     await db.flush()
+    await db.refresh(po)
     await record(
         db,
         p.id,
