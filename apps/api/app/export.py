@@ -67,7 +67,9 @@ def _cell(value: Any, kind: Kind) -> tuple[Any, str | None]:
         local = value.astimezone(TZ).replace(tzinfo=None) if value.tzinfo else value
         return local, "dd.mm.yyyy hh:mm"
     if kind == "date":
-        return (value.date() if isinstance(value, datetime) else value), "dd.mm.yyyy"
+        if isinstance(value, datetime):  # the Dushanbe day, as the UI shows it, not the UTC one
+            value = (value.astimezone(TZ) if value.tzinfo else value).date()
+        return value, "dd.mm.yyyy"
     return neutralise(str(value)), None
 
 

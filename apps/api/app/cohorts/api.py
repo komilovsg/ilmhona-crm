@@ -671,7 +671,7 @@ LESSON_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Конец", lambda r: r["end"]),
     Col("Аудитория", lambda r: r["room_name"]),
     Col("Отменён", lambda r: r["cancelled"], "bool"),
-    Col("Источник", lambda r: r["source"]),
+    Col("Источник", lambda r: "Вручную" if r["source"] == "manual" else "Из расписания"),
 ]
 
 

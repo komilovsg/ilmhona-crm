@@ -15,9 +15,11 @@ from sqlalchemy import ColumnElement, Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.sentences import (
+    ACTIONS,
     AUTH_LABEL,
     REFS,
     SECTION_ENTITIES,
+    TABLES,
     TZ,
     Entry,
     section_of,
@@ -239,9 +241,9 @@ AUDIT_COLUMNS: list[Col[Any]] = [
     Col("Кто", lambda r: r[1] or "Система"),
     Col("Логин", lambda r: r[2]),
     Col("Филиал", lambda r: r[3]),
-    Col("Действие", lambda r: r[0].action),
+    Col("Действие", lambda r: " ".join(ACTIONS.get(r[0].action, (r[0].action,)))),
     Col("Событие", lambda r: r[0].label),
-    Col("Объект", lambda r: r[0].entity),
+    Col("Объект", lambda r: TABLES.get(r[0].entity, r[0].entity)),
     Col("ID объекта", lambda r: r[0].entity_id),
     Col("Данные", lambda r: json.dumps(r[0].diff, ensure_ascii=False) if r[0].diff else None),
 ]
