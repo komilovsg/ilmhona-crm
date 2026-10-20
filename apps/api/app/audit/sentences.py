@@ -31,6 +31,9 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "instructors": ("instructor_payout",),
     "leads": ("lead",),
     "marketing": ("campaign",),
+    "graduates": ("employment", "graduate", "graduate_course"),
+    "master_list": ("master_list",),
+    "dashboard": ("dashboard_month",),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -86,6 +89,9 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "campaign.create": ("создана", "кампания"),
     "campaign.update": ("изменена", "кампания"),
     "campaign.delete": ("удалена", "кампания"),
+    "employment.create": ("добавлено", "трудоустройство"),
+    "employment.update": ("изменено", "трудоустройство"),
+    "employment.delete": ("удалено", "трудоустройство"),
 }
 # creations that also read their values: «создана оплата … — сумма 500 TJS, способ alif»
 WITH_VALUES = {"payment.create", "payout.create"}
@@ -108,6 +114,11 @@ TABLES: dict[str, str] = {
     "instructor": "инструкторы",
     "lead": "лиды",
     "campaign": "кампании",
+    "master_list": "мастер-лист",
+    "graduate": "выпускники",
+    "graduate_course": "выпускники по курсам",
+    "employment": "трудоустройство",
+    "dashboard_month": "дашборд по месяцам",
 }
 FILTERS = {
     "q": "поиск",
@@ -186,6 +197,10 @@ FIELDS: dict[str, str] = {
     "needs_review": "нужна проверка",
     "budget": "бюджет",
     "platform": "платформа",
+    "organization": "организация",
+    "position": "должность",
+    "employed_at": "дата трудоустройства",
+    "reason": "причина",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -355,7 +370,27 @@ def sentence(
         return f"{who}: зачислен студент {student} в поток {cohort}"
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
-        return f"{who}: студент {student} убран из потока {cohort}"
+        lost = []
+        marks = _pair(e.diff.get("lost_marks"))[0]
+        if marks:
+            lost.append(f"отметок посещаемости: {marks}")
+        if _pair(e.diff.get("lost_grade"))[0]:
+            lost.append("оценки")
+        if cert := _pair(e.diff.get("lost_certificate"))[0]:
+            lost.append(f"сертификат {cert}")
+        tail = f"; потеряно: {', '.join(lost)}" if lost else ""
+        return f"{who}: студент {student} убран из потока {cohort}{tail}"
+    if a == "enrollment.certificate":
+        student, cohort = _pieces(lab)
+        _, number = _pair(e.diff.get("certificate_no"))
+        return f"{who}: выдан сертификат {number} студенту {student} (поток {cohort})"
+    if a.startswith("employment."):
+        student = _pair(e.diff.get("student"))[0 if a.endswith("delete") else 1]
+        verb, _ = ACTIONS[a]
+        diff = {k: v for k, v in e.diff.items() if k != "student"}
+        return _with_changes(
+            f"{who}: {verb} трудоустройство студента {student}", diff, names, sections
+        )
     if a == "enrollment.update":
         student, cohort = _pieces(lab)
         diff = {k: v for k, v in e.diff.items() if k != "cohort"}
