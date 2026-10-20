@@ -8,6 +8,8 @@ import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/d
 
 import { EnrollModal } from "./modals";
 
+import { PaymentFormModal } from "../../payments/PaymentFormModal";
+
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -15,9 +17,12 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation } from "@/hooks/education";
+import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
-import { ENROLLMENT_STATUSES } from "@/lib/education";
+import { ENROLLMENT_STATUSES, formatPrice } from "@/lib/education";
+import { paidMonthsLabel } from "@/lib/money";
+import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -47,12 +52,22 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const refresh = useRefreshEducation();
   const [enrolling, setEnrolling] = useState(false);
   const [removing, setRemoving] = useState<EnrollmentRow | null>(null);
+  const [paying, setPaying] = useState<string | null>(null);
+  const seesMoney = useSeesPayments();
+  const canPay = useCanPay();
   const open = cohort.status === "набор" || cohort.status === "активный";
 
   const list = useQuery({
     queryKey: ["enrollments", cohort.id],
     queryFn: () => api<EnrollmentRow[]>(`/api/v1/cohorts/${cohort.id}/enrollments`),
   });
+
+  const money = useQuery({
+    queryKey: ["cohort-payments", cohort.id],
+    queryFn: () => api<CohortPayments>(`/api/v1/payments/by-cohort/${cohort.id}`),
+    enabled: seesMoney,
+  });
+  const moneyOf = new Map(money.data?.items.map((m) => [m.enrollment_id, m]));
 
   const setStatus = useMutation({
     mutationFn: ({ id, status, version }: { id: string; status: string; version: number }) =>
@@ -89,6 +104,38 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     );
   const status = (r: EnrollmentRow) =>
     canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s, version: r.version })} /> : <PersonStatus status={r.status} />;
+  const paid = (r: EnrollmentRow) => {
+    const m = moneyOf.get(r.id);
+
+    return m ? (
+      <>
+        <span className="font-medium">{formatPrice(m.paid)}</span>
+        <span className="block text-xs text-default-500">{paidMonthsLabel(m.paid_months, money.data?.months ?? 0)}</span>
+      </>
+    ) : (
+      "—"
+    );
+  };
+  const debt = (r: EnrollmentRow) => {
+    const m = moneyOf.get(r.id);
+
+    return m && Number(m.debt) > 0 ? <span className="font-semibold text-danger">{formatPrice(m.debt)}</span> : m ? "—" : "";
+  };
+  const payButton = (r: EnrollmentRow) =>
+    canPay &&
+    r.status !== "отчислен" &&
+    cohort.status !== "отменён" && (
+      <Button
+        aria-label={`Оплата: ${r.student_name}`}
+        color="primary"
+        size="sm"
+        startContent={<Icon name="payments" size={16} />}
+        variant="flat"
+        onPress={() => setPaying(r.id)}
+      >
+        Оплата
+      </Button>
+    );
   const trash = (r: EnrollmentRow) =>
     canChange && (
       <Button isIconOnly aria-label={`Убрать: ${r.student_name}`} color="danger" size="sm" variant="light" onPress={() => setRemoving(r)}>
@@ -101,6 +148,12 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-default-600">
           Студентов: <b>{cohort.fill.enrolled}</b> из {cohort.fill.capacity}
+          {money.data && (
+            <>
+              {" "}
+              · оплатили: <b>{money.data.payers}</b> из {money.data.enrolled}
+            </>
+          )}
         </p>
         <div className="flex items-center gap-2">
           <ExportButton path={`/api/v1/cohorts/${cohort.id}/enrollments/export`} />
@@ -137,6 +190,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   <th className="px-4 py-3 font-medium">Студент</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Статус</th>
+                  {seesMoney && (
+                    <>
+                      <th className="px-4 py-3 font-medium">Оплачено</th>
+                      <th className="px-4 py-3 font-medium">Долг</th>
+                      <th className="px-4 py-3 text-right font-medium" />
+                    </>
+                  )}
                   <th className="w-12" />
                 </tr>
               </thead>
@@ -150,6 +210,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                     </td>
                     <td className="px-4 py-3">{phone(r)}</td>
                     <td className="px-4 py-2">{status(r)}</td>
+                    {seesMoney && (
+                      <>
+                        <td className="px-4 py-3">{paid(r)}</td>
+                        <td className="whitespace-nowrap px-4 py-3">{debt(r)}</td>
+                        <td className="px-2 py-2 text-right">{payButton(r)}</td>
+                      </>
+                    )}
                     <td className="px-2">{trash(r)}</td>
                   </tr>
                 ))}
@@ -167,12 +234,22 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                 </div>
                 <div className="mt-1 text-sm">{phone(r)}</div>
                 <div className="mt-2">{status(r)}</div>
+                {seesMoney && (
+                  <div className="mt-3 flex items-end justify-between gap-2 border-t border-divider pt-3 text-sm">
+                    <div>
+                      <div>{paid(r)}</div>
+                      <div>Долг: {debt(r)}</div>
+                    </div>
+                    {payButton(r)}
+                  </div>
+                )}
               </li>
             ))}
           </ul>
         </>
       </QueryState>
 
+      {paying && <PaymentFormModal enrollmentId={paying} payment={null} onClose={() => setPaying(null)} />}
       {enrolling && <EnrollModal cohort={cohort} onClose={() => setEnrolling(false)} />}
       {removing && (
         <ConfirmModal

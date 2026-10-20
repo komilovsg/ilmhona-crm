@@ -32,11 +32,26 @@ test("change includes view, view does not include change", () => {
 
 test("nav shows only sections with at least view", () => {
   assert.deepEqual(
-    visibleNav(instructor).map((i) => i.section),
+    visibleNav(instructor, "instructor").map((i) => i.section),
     ["attendance", "cohorts", "instructors"],
   );
   assert.deepEqual(visibleNav(undefined), []);
   assert.equal(visibleNav(manager).some((i) => i.section === "users"), false);
+});
+
+test("the instructor gets «Мои выплаты» only; staff get «Инструкторы» and «Зарплаты»", () => {
+  assert.deepEqual(
+    visibleNav(instructor, "instructor").map((i) => i.href),
+    ["/today", "/cohorts", "/my-payouts"],
+  );
+  assert.deepEqual(
+    visibleNav({ instructors: "view" }, "manager").map((i) => i.href),
+    ["/instructors", "/salaries"],
+  );
+  assert.equal(canOpen(instructor, "/salaries", "instructor"), false);
+  assert.equal(canOpen(instructor, "/instructors", "instructor"), false);
+  assert.equal(canOpen(instructor, "/my-payouts", "instructor"), true);
+  assert.equal(canOpen({ instructors: "view" }, "/my-payouts", "manager"), false);
 });
 
 test("users section opens both Пользователи and Роли, audit is separate", () => {
@@ -52,15 +67,15 @@ test("every backend section has a nav item", () => {
 
 test("phone: four main items, the rest goes to «Ещё»", () => {
   const all = Object.fromEntries(NAV_ITEMS.map((i) => [i.section, "change"])) as Permissions;
-  const { main, more } = splitNav(visibleNav(all));
+  const { main, more } = splitNav(visibleNav(all, "manager"));
   assert.equal(main.length, 4);
-  assert.equal(more.length, NAV_ITEMS.length - 4);
-  assert.deepEqual(splitNav(visibleNav(instructor)).more, []);
+  assert.equal(more.length, NAV_ITEMS.length - 1 - 4); // minus «Мои выплаты» (instructor only)
+  assert.deepEqual(splitNav(visibleNav(instructor, "instructor")).more, []);
 });
 
 test("home is the first visible section, the profile when there is none", () => {
   assert.equal(homePath(manager), "/dashboard");
-  assert.equal(homePath(instructor), "/today"); // the instructor lands on «Сегодня»
+  assert.equal(homePath(instructor, "instructor"), "/today"); // the instructor lands on «Сегодня»
   assert.equal(homePath({}), "/profile");
 });
 

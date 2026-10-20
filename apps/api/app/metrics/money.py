@@ -332,6 +332,7 @@ async def salary_rows(
                     "instructor_id": c.instructor_id,
                     "instructor_name": instructor,
                     "cohort_id": c.id,
+                    "cohort_version": c.version,
                     "cohort_code": c.code,
                     "course_name": course,
                     "branch_id": c.branch_id,

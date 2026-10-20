@@ -110,6 +110,7 @@ async def _detail(db: AsyncSession, p: Principal, u: AppUser, branch: str | None
         "cohorts_list": [
             {
                 "id": c.id,
+                "version": c.version,
                 "code": c.code,
                 "course_name": course,
                 "status": c.status,
