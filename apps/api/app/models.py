@@ -81,6 +81,8 @@ class AppUser(Versioned, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     password_hash: Mapped[str] = mapped_column(Text)
     must_change_password: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # starting rate per month of an instructor for a cohort (copied into the cohort's own rate)
+    default_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
     temp_password_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
@@ -165,6 +167,8 @@ class Cohort(Versioned, Base):
     capacity: Mapped[int] = mapped_column(Integer)
     price_month: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(Text, server_default=text("'набор'"))
+    # what the instructor earns per month the cohort runs (default: the instructor's default_rate)
+    instructor_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
@@ -233,3 +237,37 @@ class Grade(Versioned, Base):
     homework: Mapped[int | None] = mapped_column(SmallInteger)
     final: Mapped[int | None] = mapped_column(SmallInteger)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Payment(Versioned, Base):
+    __tablename__ = "payment"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    enrollment_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
+    month_no: Mapped[int] = mapped_column(Integer)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    method: Mapped[str] = mapped_column(Text)
+    paid_at: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'ожидает'"))
+    confirmed_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text)
+    idempotency_key: Mapped[UUID] = mapped_column(PG_UUID, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class InstructorPayout(Versioned, Base):
+    """What was actually paid to an instructor for a cohort's month (#9): profit is computed from
+    these rows, never from the schedule."""
+
+    __tablename__ = "instructor_payout"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    instructor_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("app_user.id"))
+    cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
+    period: Mapped[date] = mapped_column(Date)  # first day of the month
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    paid_at: Mapped[date] = mapped_column(Date)
+    method: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

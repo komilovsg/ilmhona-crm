@@ -55,6 +55,8 @@ async def clean(migrated_database: None) -> None:
     """Every test starts with the seeded branches and system roles only."""
     async with sessionmaker() as db:
         for sql in (
+            "DELETE FROM instructor_payout",
+            "DELETE FROM payment",
             "DELETE FROM attendance",
             "DELETE FROM grade",
             "DELETE FROM lesson",
@@ -85,6 +87,9 @@ TABLES = {
     "students": "student",
     "lessons": "lesson",
     "enrollments": "enrollment",
+    "payments": "payment",
+    "payouts": "instructor_payout",
+    "instructors": "app_user",
 }
 
 
@@ -104,12 +109,25 @@ class Browser(httpx.AsyncClient):
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
             return
+        if parts[-1] == "rate":  # /salaries/cohorts/<id>/rate edits the cohort row
+            rows = await sql("SELECT version FROM cohort WHERE id = :i", i=parts[-2])
+            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+            return
         if parts[-1] == "me":
             version = (await self.get(url)).json()["version"]
         else:
             rows = await sql(f"SELECT version FROM {TABLES[parts[-2]]} WHERE id = :i", i=parts[-1])
             version = rows[0][0] if rows else 1
         kw["headers"] = {**headers, "If-Match": str(version)}
+
+    async def post(self, url: Any, **kw: Any) -> httpx.Response:
+        parts = str(url).split("?")[0].rstrip("/").split("/")
+        if parts[-1] in ("confirm", "unconfirm") and parts[-3] == "payments":
+            headers = dict(kw.get("headers") or {})
+            if not kw.pop("no_version", False) and "If-Match" not in headers:
+                rows = await sql("SELECT version FROM payment WHERE id = :i", i=parts[-2])
+                kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+        return await super().post(url, **kw)
 
     async def patch(self, url: Any, **kw: Any) -> httpx.Response:
         await self._with_version(str(url), kw)

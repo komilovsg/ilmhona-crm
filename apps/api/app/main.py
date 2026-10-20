@@ -11,9 +11,12 @@ from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
 from app.core.proxy import ProxySecretRequired
+from app.instructors.api import router as instructors_router
 from app.metrics.api import router as metrics_router
+from app.payments.api import router as payments_router
 from app.roles.api import router as roles_router
 from app.rooms.api import router as rooms_router
+from app.salaries.api import router as salaries_router
 from app.students.api import router as students_router
 from app.users.api import router as users_router
 
@@ -45,6 +48,9 @@ for router in (
     attendance_router,
     students_router,
     metrics_router,
+    payments_router,
+    instructors_router,
+    salaries_router,
 ):
     app.include_router(router)
 

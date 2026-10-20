@@ -51,6 +51,13 @@ export const apiErrors: Record<string, string> = {
   instructor_invalid: "Инструктор должен быть активным сотрудником с ролью «Инструктор» из этого филиала.",
   room_branch_mismatch: "Аудитория из другого филиала.",
   student_branch_mismatch: "Студент из другого филиала.",
+  payment_month_invalid: "В потоке {months} мес.: такого месяца нет.",
+  payment_confirmed: "Подтверждённую оплату нельзя менять или удалять. Сначала снимите подтверждение.",
+  idempotency_key_reused: "Эта оплата уже сохранена с другими данными. Обновите форму и повторите.",
+  enrollment_has_payments: "У зачисления есть оплаты. Убрать студента из потока нельзя.",
+  cohort_no_instructor: "У потока нет инструктора.",
+  payout_period_invalid: "Поток в этом месяце не идёт.",
+  payout_exists: "За этот месяц по этому потоку выплата уже отмечена.",
 };
 
 // Raised by the browser side only (no response from the API).

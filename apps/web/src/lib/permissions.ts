@@ -24,6 +24,8 @@ export type NavItem = {
   href: string;
   label: string;
   icon: string;
+  /** Only for the instructor role (`own`) or only for everybody else (`staff`); default: all. */
+  audience?: "own" | "staff";
 };
 
 // Order = order in the sidebar. `section` keys are the backend's (app/permissions.py).
@@ -39,15 +41,24 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates" },
   { section: "master_list", href: "/master-list", label: "Мастер-лист", icon: "master" },
   { section: "marketing", href: "/marketing", label: "Маркетинг", icon: "marketing" },
-  { section: "instructors", href: "/instructors", label: "Инструкторы и зарплаты", icon: "instructors" },
+  // the instructor sees only their own money: one page instead of the instructors and salaries tables
+  { section: "instructors", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
+  { section: "instructors", href: "/instructors", label: "Инструкторы", icon: "instructors", audience: "staff" },
+  { section: "instructors", href: "/salaries", label: "Зарплаты", icon: "payments", audience: "staff" },
   { section: "users", href: "/users", label: "Пользователи", icon: "users" },
   { section: "users", href: "/roles", label: "Роли и права", icon: "roles" },
   { section: "audit", href: "/audit", label: "Журнал", icon: "audit" },
 ];
 
-/** The sidebar: only sections the user may at least view. */
-export function visibleNav(permissions: Permissions | undefined): NavItem[] {
-  return NAV_ITEMS.filter((item) => can(permissions, item.section, "view"));
+function forRole(item: NavItem, roleCode: string | null | undefined): boolean {
+  if (!item.audience) return true;
+
+  return (item.audience === "own") === (roleCode === "instructor");
+}
+
+/** The sidebar: only sections the user may at least view (and pages meant for their role). */
+export function visibleNav(permissions: Permissions | undefined, roleCode?: string | null): NavItem[] {
+  return NAV_ITEMS.filter((item) => can(permissions, item.section, "view") && forRole(item, roleCode));
 }
 
 export const BOTTOM_NAV_SIZE = 4;
@@ -58,16 +69,16 @@ export function splitNav(items: NavItem[]): { main: NavItem[]; more: NavItem[] }
 }
 
 /** Where to land after sign-in: the dashboard, else the first allowed section, else the profile. */
-export function homePath(permissions: Permissions | undefined): string {
-  return visibleNav(permissions)[0]?.href ?? "/profile";
+export function homePath(permissions: Permissions | undefined, roleCode?: string | null): string {
+  return visibleNav(permissions, roleCode)[0]?.href ?? "/profile";
 }
 
 /** May this user open `pathname`? Profile is always open; unknown paths are left to 404. */
-export function canOpen(permissions: Permissions | undefined, pathname: string): boolean {
+export function canOpen(permissions: Permissions | undefined, pathname: string, roleCode?: string | null): boolean {
   if (pathname === "/profile") return true;
   const item = NAV_ITEMS.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
 
-  return item ? can(permissions, item.section, "view") : true;
+  return item ? can(permissions, item.section, "view") && forRole(item, roleCode) : true;
 }
 
 // Matrix editor: three columns, «change» implies delete (no separate column).

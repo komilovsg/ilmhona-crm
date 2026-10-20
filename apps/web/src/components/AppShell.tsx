@@ -186,7 +186,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const items = visibleNav(me.permissions);
+  const items = visibleNav(me.permissions, me.role.code);
   const { main, more } = splitNav(items);
 
   return (
@@ -208,7 +208,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
-        {canOpen(me.permissions, pathname) ? (
+        {canOpen(me.permissions, pathname, me.role.code) ? (
           children
         ) : (
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
