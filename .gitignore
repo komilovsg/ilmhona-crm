@@ -1,0 +1,23 @@
+.DS_Store
+.env
+.env*
+*.local
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+.playwright-mcp/
+.claude/worktrees/
+.claude/settings.local.json
+.vercel/
+apps/api/var/
+# old-system exports and anything with real people's data
+import-data/
+*.csv
+*.xlsx
+*.dump
