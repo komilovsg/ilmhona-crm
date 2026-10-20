@@ -15,6 +15,7 @@ import { CohortStatus, PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { api, isApiError } from "@/lib/api";
 import { fullDate } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { StudentDetail } from "@/lib/types";
 
@@ -40,6 +41,7 @@ export default function StudentPage() {
       notifyError(e);
     },
   });
+  const confirm = useSubmit(() => remove.mutateAsync());
 
   if (student.isPending)
     return (
@@ -165,7 +167,7 @@ export default function StudentPage() {
           isOpen
           title="Удалить студента"
           onClose={() => setDeleting(false)}
-          onConfirm={() => remove.mutate()}
+          onConfirm={() => confirm()}
         >
           {s.full_name} будет удалён. Если он зачислен в потоки, система не даст это сделать.
         </ConfirmModal>

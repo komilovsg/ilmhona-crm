@@ -9,6 +9,7 @@ import { AppModal } from "@/components/AppModal";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe, useRoles } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
 
@@ -61,6 +62,7 @@ export function UserFormModal({
   });
 
   const valid = fullName.trim() && roleId && (user || login.trim().length >= 3);
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -69,7 +71,7 @@ export function UserFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {user ? "Сохранить" : "Создать"}
           </Button>
         </>
@@ -81,10 +83,7 @@ export function UserFormModal({
       <form
         className="space-y-4"
         id="user-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <Input
           autoComplete="off"
@@ -109,7 +108,9 @@ export function UserFormModal({
         <SelectField
           isRequired
           label="Роль"
-          options={roles.map((r) => ({ key: r.id, label: r.name }))}
+          options={roles
+            .filter((r) => r.assignable || r.id === user?.role_id)
+            .map((r) => ({ key: r.id, label: r.name }))}
           value={roleId}
           onChange={setRoleId}
         />

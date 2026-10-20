@@ -15,6 +15,7 @@ import { useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
 import { can } from "@/lib/permissions";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, LessonRow, Paged, StudentRow } from "@/lib/types";
 
@@ -53,6 +54,7 @@ export function LessonFormModal({
     },
     onError: (e) => setError(messageOf(e)),
   });
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -61,7 +63,7 @@ export function LessonFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {lesson ? "Перенести" : "Добавить"}
           </Button>
         </>
@@ -73,10 +75,7 @@ export function LessonFormModal({
     >
       <form
         className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <Input isRequired label="Дата" max={MAX_DATE} min={MIN_DATE} placeholder=" " type="date" value={date} onValueChange={setDate} />
         <div className="grid grid-cols-2 gap-3">
@@ -138,6 +137,9 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
     onError: (e) => setError(messageOf(e)),
   });
 
+  const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
+  const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
+
   const modes = [
     ...(canSearch ? [{ key: "existing" as const, label: "Найти студента" }] : []),
     ...(canCreate ? [{ key: "new" as const, label: "Новый студент" }] : []),
@@ -155,7 +157,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
               color="primary"
               isDisabled={!name.trim()}
               isLoading={enroll.isPending}
-              onPress={() => enroll.mutate({ new_student: { full_name: name, phone: phone.trim() || null, gender } })}
+              onPress={() => submitNew()}
             >
               Создать и зачислить
             </Button>
@@ -199,7 +201,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
                     </div>
                     <div className="flex items-center gap-2">
                       <PersonStatus status={s.status} />
-                      <Button color="primary" isLoading={enroll.isPending} size="sm" onPress={() => enroll.mutate({ student_id: s.id })}>
+                      <Button color="primary" isDisabled={enroll.isPending} isLoading={enroll.isPending} size="sm" onPress={() => enroll.mutate({ student_id: s.id })}>
                         Зачислить
                       </Button>
                     </div>
@@ -211,10 +213,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
         ) : (
           <form
             className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (name.trim()) enroll.mutate({ new_student: { full_name: name, phone: phone.trim() || null, gender } });
-            }}
+            onSubmit={submitNew}
           >
             <Input isRequired label="ФИО" value={name} onValueChange={setName} />
             <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />

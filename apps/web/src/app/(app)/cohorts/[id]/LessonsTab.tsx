@@ -15,6 +15,7 @@ import { RowMenu } from "@/components/RowMenu";
 import { useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { dayTitle, fullDate, todayIso } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, LessonRow } from "@/lib/types";
 
@@ -42,6 +43,7 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
       notifyError(e);
     },
   });
+  const confirm = useSubmit(() => cancelling ? cancel.mutateAsync(cancelling.id) : Promise.resolve());
 
   const lessons = list.data ?? [];
   const live = lessons.filter((l) => !l.cancelled).length;
@@ -162,7 +164,7 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
           isOpen
           title="Отменить урок"
           onClose={() => setCancelling(null)}
-          onConfirm={() => cancel.mutate(cancelling.id)}
+          onConfirm={() => confirm()}
         >
           Урок {fullDate(cancelling.date)}, {cancelling.start}–{cancelling.end} будет отменён, аудитория освободится.
         </ConfirmModal>

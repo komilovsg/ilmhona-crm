@@ -40,6 +40,8 @@ export type RoleRow = {
   locked: boolean;
   permissions: Record<string, Level>;
   users_count: number;
+  /** The current user may give this role to someone (list endpoint only). */
+  assignable?: boolean;
 };
 
 export type SectionInfo = { key: string; label: string };
@@ -160,4 +162,11 @@ export type EducationSummary = {
   active_cohorts: number;
   cohorts: Record<string, number>;
   students: Record<string, number>;
+};
+
+export type AuditPage = Paged<AuditRow> & {
+  /** id -> display name of the users, roles and branches the page mentions. */
+  names: Record<string, string>;
+  /** section key -> Russian label */
+  sections: Record<string, string>;
 };

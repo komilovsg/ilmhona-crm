@@ -4,6 +4,13 @@ import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { NAV_ITEMS } from "@/lib/permissions";
 
+// Unknown sections must answer 404 at routing time: notFound() inside a streamed page is a 200.
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return NAV_ITEMS.map((i) => ({ section: i.href.slice(1) }));
+}
+
 /** Sections of later stages: the nav works, the page says it is coming. */
 export default async function SectionPage({ params }: PageProps<"/[section]">) {
   const { section } = await params;

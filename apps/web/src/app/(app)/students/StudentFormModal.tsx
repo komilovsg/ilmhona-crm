@@ -10,6 +10,7 @@ import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { StudentRow } from "@/lib/types";
 
@@ -39,6 +40,7 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
     },
     onError: (e) => setError(messageOf(e)),
   });
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -47,7 +49,7 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {student ? "Сохранить" : "Добавить"}
           </Button>
         </>
@@ -59,10 +61,7 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
     >
       <form
         className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <Input isRequired label="ФИО" value={name} onValueChange={setName} />
         <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />

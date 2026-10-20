@@ -15,6 +15,7 @@ import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { ENROLLMENT_STATUSES } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
 
@@ -69,6 +70,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       notifyError(e);
     },
   });
+  const confirm = useSubmit(() => removing ? remove.mutateAsync(removing.id) : Promise.resolve());
 
   const rows = list.data ?? [];
   const phone = (r: EnrollmentRow) =>
@@ -161,7 +163,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
           isOpen
           title="Убрать студента из потока"
           onClose={() => setRemoving(null)}
-          onConfirm={() => remove.mutate(removing.id)}
+          onConfirm={() => confirm()}
         >
           {removing.student_name} будет убран из потока {cohort.code}. Сам студент останется в списке студентов.
         </ConfirmModal>

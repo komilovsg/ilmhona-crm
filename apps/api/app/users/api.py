@@ -118,9 +118,7 @@ async def _assignable_role(db: AsyncSession, p: Principal, role_id: uuid.UUID) -
     role = (await db.execute(select(Role).where(Role.id == role_id))).scalar_one_or_none()
     if role is None:
         raise DomainError(NOT_FOUND)
-    if not p.is_superadmin and (
-        role.code == SUPERADMIN_CODE or not p.covers(await _role_perms(db, role))
-    ):
+    if not p.can_assign(role.code, await _role_perms(db, role)):
         raise DomainError(ROLE_NOT_ASSIGNABLE)
     return role
 

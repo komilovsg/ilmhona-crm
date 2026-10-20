@@ -164,6 +164,8 @@ class Lesson(Base):
     starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     cancelled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # 'generated' from the cohort schedule (rebuilt on change); 'manual' added or moved by hand
+    source: Mapped[str] = mapped_column(Text, server_default=text("'generated'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 

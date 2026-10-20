@@ -106,3 +106,16 @@ async def test_filters_and_paging(admin: httpx.AsyncClient) -> None:
     nobody = await make_user("quiet", "manager")
     assert await _audit(admin, user_id=str(nobody)) == []
     assert await _audit(admin, entity="role") == []
+
+
+async def test_audit_list_resolves_names_of_users_roles_and_branches(
+    admin: httpx.AsyncClient,
+) -> None:
+    ins = str(await role_id("instructor"))
+    branch_id, branch_name = (await sql("SELECT id, name FROM branch LIMIT 1"))[0]
+    body = {"login": "kamol", "full_name": "Камол", "role_id": ins, "branch_id": str(branch_id)}
+    uid = (await admin.post(U, json=body)).json()["user"]["id"]
+    r = (await admin.get("/api/v1/audit", params={"entity": "app_user", "entity_id": uid})).json()
+    assert r["names"] == {uid: "Камол", ins: "Инструктор", str(branch_id): branch_name}
+    assert r["sections"]["leads"] == "Лиды"
+    assert r["items"][0]["user_name"]

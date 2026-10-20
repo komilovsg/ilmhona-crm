@@ -10,6 +10,7 @@ __pycache__/
 node_modules/
 .next/
 next-env.d.ts
+apps/web/AGENTS.md
 *.tsbuildinfo
 .playwright-mcp/
 .claude/worktrees/

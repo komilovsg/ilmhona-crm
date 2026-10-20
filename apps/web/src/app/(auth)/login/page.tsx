@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -20,9 +20,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const loginRef = useRef<HTMLInputElement>(null);
+
+  // Focus after hydration instead of the autoFocus prop: HeroUI renders a different caret-color
+  // on the server and the client for an autoFocus input, which logs a hydration mismatch.
+  useEffect(() => loginRef.current?.focus(), []);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -45,7 +51,7 @@ export default function LoginPage() {
       <p className="mb-5 text-sm text-default-500">Логин и пароль выдаёт администратор.</p>
       <form className="space-y-4" onSubmit={submit}>
         <Input
-          autoFocus
+          ref={loginRef}
           autoComplete="username"
           label="Логин"
           value={login}

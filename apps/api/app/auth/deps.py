@@ -103,6 +103,10 @@ class Principal:
             allows(self.level(s), level) for s, level in permissions.items()
         )
 
+    def can_assign(self, role_code: str | None, permissions: dict[str, str]) -> bool:
+        """May this user put someone into a role? Superadmin role only for a superadmin."""
+        return self.is_superadmin or (role_code != SUPERADMIN_CODE and self.covers(permissions))
+
 
 async def permissions_of(db: DB, role: Role) -> dict[str, str]:
     if role.code == SUPERADMIN_CODE:

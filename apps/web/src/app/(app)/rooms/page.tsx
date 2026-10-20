@@ -16,6 +16,7 @@ import { Segmented } from "@/components/Segmented";
 import { useCanChange, useCourses, useRefreshEducation, useRooms } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
 
@@ -169,6 +170,7 @@ export default function RoomsPage() {
       notifyError(e);
     },
   });
+  const confirm = useSubmit(() => removal ? remove.mutateAsync(removal) : Promise.resolve());
 
   return (
     <>
@@ -218,7 +220,7 @@ export default function RoomsPage() {
           isOpen
           title={removal.kind === "room" ? "Удалить аудиторию" : "Удалить курс"}
           onClose={() => setRemoval(null)}
-          onConfirm={() => remove.mutate(removal)}
+          onConfirm={() => confirm()}
         >
           Будет удалено: «{removal.item.name}». Если с этим связаны потоки, система не даст это сделать.
         </ConfirmModal>

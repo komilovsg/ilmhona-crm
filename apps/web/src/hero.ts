@@ -3,8 +3,10 @@ import type { HeroUIPluginConfig } from "@heroui/theme";
 
 // Brand tokens from docs/SPEC.md «Дизайн». Light: primary #00A0DC, accent #D65A2F, text #151A1E.
 // Dark (own): background #0F151B, cards #161E26, borders #26313C, text #E6EDF3, secondary text
-// #8B98A5, primary fill #00A0DC (text on dark #38BDF0, see --brand-text), accent #E26A3D.
-const config: HeroUIPluginConfig = {
+// #8B98A5, accent #E26A3D. Primary #00A0DC stays for logo, accents and focus rings; filled
+// buttons use #007EAE (white text >= 4.5:1, both themes); brand text: see --brand-text.
+// contrast.test.ts guards every ratio.
+export const config: HeroUIPluginConfig = {
   themes: {
     light: {
       colors: {
@@ -28,7 +30,7 @@ const config: HeroUIPluginConfig = {
           800: "#004058",
           900: "#00202c",
           foreground: "#ffffff",
-          DEFAULT: "#00a0dc",
+          DEFAULT: "#007eae",
         },
         secondary: {
           50: "#fcefe9",
@@ -50,7 +52,7 @@ const config: HeroUIPluginConfig = {
           200: "#e1e6ea",
           300: "#cdd4da",
           400: "#a3adb6",
-          500: "#6f7b86",
+          500: "#66727d",
           600: "#55616c",
           700: "#3d4851",
           800: "#262f36",
@@ -81,7 +83,7 @@ const config: HeroUIPluginConfig = {
           800: "#9bdcf4",
           900: "#cdeefa",
           foreground: "#ffffff",
-          DEFAULT: "#00a0dc",
+          DEFAULT: "#007eae",
         },
         secondary: {
           50: "#2b1209",

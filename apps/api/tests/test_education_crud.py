@@ -150,6 +150,45 @@ async def test_update_regenerates_only_future_lessons(admin: httpx.AsyncClient) 
     assert log["diff"]["future_lessons"][0] >= len(future)  # + a lesson later today
 
 
+async def test_schedule_edit_keeps_manual_future_lessons(admin: httpx.AsyncClient) -> None:
+    course, room = await make_course(), await make_room()
+    monday = next_monday()
+    cohort = await make_cohort(admin, course, room, start=monday, weeks=4, weekdays=[1])
+    cid = cohort["id"]
+    added = (
+        await admin.post(
+            f"{C}/{cid}/lessons",
+            json={
+                "date": (monday + timedelta(days=8)).isoformat(),
+                "start_time": "15:00",
+                "end_time": "16:00",
+            },
+        )
+    ).json()
+    generated = (await admin.get(f"{C}/{cid}/lessons")).json()
+    third_monday = next(
+        le for le in generated if le["date"] == (monday + timedelta(days=14)).isoformat()
+    )
+    moved = await admin.patch(
+        f"/api/v1/lessons/{third_monday['id']}",
+        json={
+            "date": (monday + timedelta(days=17)).isoformat(),
+            "start_time": "12:00",
+            "end_time": "13:00",
+        },
+    )
+    assert moved.status_code == 200 and moved.json()["source"] == "manual"
+    r = await admin.patch(f"{C}/{cid}", json={"start_time": "16:00", "end_time": "17:00"})
+    assert r.status_code == 200, r.text
+    after = (await admin.get(f"{C}/{cid}/lessons")).json()
+    by_id = {le["id"]: le for le in after}
+    assert by_id[added["id"]]["start"] == "15:00" and by_id[added["id"]]["source"] == "manual"
+    assert by_id[third_monday["id"]]["start"] == "12:00"
+    sources = [le["source"] for le in after]
+    assert sources.count("manual") == 2 and sources.count("generated") == 5
+    assert {le["start"] for le in after if le["source"] == "generated"} == {"16:00"}
+
+
 async def test_cohort_list_filters_and_search(admin: httpx.AsyncClient) -> None:
     course, other_course = await make_course("Python"), await make_course("Дизайн")
     instructor = await __import__("tests.conftest", fromlist=["make_user"]).make_user(

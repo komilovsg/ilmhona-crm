@@ -442,7 +442,11 @@ async def update_cohort(
         now = _now()
         removed = (
             await db.execute(
-                delete(Lesson).where(Lesson.cohort_id == cohort.id, Lesson.starts_at > now)
+                delete(Lesson).where(
+                    Lesson.cohort_id == cohort.id,
+                    Lesson.starts_at > now,
+                    Lesson.source == "generated",
+                )
             )
         ).rowcount  # type: ignore[attr-defined]
         await db.flush()
@@ -491,7 +495,11 @@ async def restore_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
     if cohort.status != st.CANCELLED:
         raise DomainError(COHORT_NOT_CANCELLED)
     now = _now()
-    await db.execute(delete(Lesson).where(Lesson.cohort_id == cohort.id, Lesson.starts_at > now))
+    await db.execute(
+        delete(Lesson).where(
+            Lesson.cohort_id == cohort.id, Lesson.starts_at > now, Lesson.source == "generated"
+        )
+    )
     await db.flush()
     cohort.status = st.status_for(cohort.start_date, cohort.end_date, st.today())
     await generate_lessons(db, cohort, after=now)
@@ -537,6 +545,7 @@ def _lesson_out(le: Lesson, room: str) -> dict[str, Any]:
         "start": le.starts_at.astimezone(st.TZ).strftime("%H:%M"),
         "end": le.ends_at.astimezone(st.TZ).strftime("%H:%M"),
         "cancelled": le.cancelled,
+        "source": le.source,
     }
 
 
@@ -583,7 +592,12 @@ async def add_lesson(cohort_id: uuid.UUID, body: LessonIn, p: Change, db: DB) ->
     starts, ends = local_dt(body.date, body.start_time), local_dt(body.date, body.end_time)
     await check_room_free(db, room_id, [(starts, ends)])
     lesson = Lesson(
-        cohort_id=cohort.id, room_id=room_id, lesson_date=body.date, starts_at=starts, ends_at=ends
+        cohort_id=cohort.id,
+        room_id=room_id,
+        lesson_date=body.date,
+        starts_at=starts,
+        ends_at=ends,
+        source="manual",
     )
     db.add(lesson)
     await db.flush()
@@ -631,6 +645,7 @@ async def move_lesson(lesson_id: uuid.UUID, body: LessonMove, p: Change, db: DB)
     await _room_in_branch(db, room_id, cohort.branch_id)
     starts, ends = local_dt(day, start), local_dt(day, end)
     await check_room_free(db, room_id, [(starts, ends)], ignore_lesson=lesson.id)
+    lesson.source = "manual"  # a moved lesson is no longer the schedule's to rebuild
     lesson.room_id, lesson.lesson_date, lesson.starts_at, lesson.ends_at = (
         room_id,
         day,

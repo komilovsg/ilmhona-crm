@@ -10,6 +10,7 @@ import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
 
@@ -36,6 +37,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
     },
     onError: (e) => setError(messageOf(e)),
   });
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -44,7 +46,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {room ? "Сохранить" : "Добавить"}
           </Button>
         </>
@@ -56,10 +58,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
     >
       <form
         className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <SelectField
           isDisabled={!!room || !!me?.branch}
@@ -123,6 +122,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
     },
     onError: (e) => setError(messageOf(e)),
   });
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   return (
     <AppModal
@@ -131,7 +131,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {course ? "Сохранить" : "Добавить"}
           </Button>
         </>
@@ -143,10 +143,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
     >
       <form
         className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <Input isRequired label="Название" value={name} onValueChange={setName} />
         <Input label="Направление" value={direction} onValueChange={setDirection} />

@@ -20,6 +20,7 @@ import { CohortStatus } from "@/components/StatusChip";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { api, isApiError } from "@/lib/api";
 import { daysLabel, formatPrice, fullDate } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
 
@@ -90,6 +91,7 @@ export default function CohortPage() {
       notifyError(e);
     },
   });
+  const confirm = useSubmit(() => action ? run.mutateAsync(action) : Promise.resolve());
 
   if (cohort.isPending)
     return (
@@ -191,7 +193,7 @@ export default function CohortPage() {
           isOpen
           title={CONFIRM[action].title}
           onClose={() => setAction(null)}
-          onConfirm={() => run.mutate(action)}
+          onConfirm={() => confirm()}
         >
           {CONFIRM[action].text}
         </ConfirmModal>

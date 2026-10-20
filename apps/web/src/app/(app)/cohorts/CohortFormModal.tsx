@@ -12,6 +12,7 @@ import { useCourses, useInstructors, useRefreshEducation, useRooms } from "@/hoo
 import { useBranches, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS } from "@/lib/education";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
 
@@ -65,6 +66,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     },
     onError: (e) => setError(messageOf(e)),
   });
+  const submit = useSubmit(() => save.mutateAsync(), !valid);
 
   const toggleDay = (day: number) =>
     setWeekdays((cur) => (cur.includes(day) ? cur.filter((d) => d !== day) : [...cur, day].sort()));
@@ -76,7 +78,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => save.mutate()}>
+          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {cohort ? "Сохранить" : "Создать"}
           </Button>
         </>
@@ -88,10 +90,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     >
       <form
         className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) save.mutate();
-        }}
+        onSubmit={submit}
       >
         <div className="grid gap-4 md:grid-cols-2">
           <SelectField
