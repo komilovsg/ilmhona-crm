@@ -6,10 +6,14 @@ from fastapi import FastAPI
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
 from app.branches.api import router as branches_router
+from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
 from app.core.proxy import ProxySecretRequired
+from app.metrics.api import router as metrics_router
 from app.roles.api import router as roles_router
+from app.rooms.api import router as rooms_router
+from app.students.api import router as students_router
 from app.users.api import router as users_router
 
 
@@ -29,7 +33,17 @@ app = FastAPI(
 install_error_handlers(app)
 if settings.proxy_secrets:
     app.add_middleware(ProxySecretRequired, secrets=settings.proxy_secrets)
-for router in (auth_router, users_router, roles_router, audit_router, branches_router):
+for router in (
+    auth_router,
+    users_router,
+    roles_router,
+    audit_router,
+    branches_router,
+    rooms_router,
+    cohorts_router,
+    students_router,
+    metrics_router,
+):
     app.include_router(router)
 
 

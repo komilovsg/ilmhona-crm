@@ -14,7 +14,7 @@ export function isApiError(error: unknown): error is ApiError {
 }
 
 export function messageOf(error: unknown): string {
-  return errorText(isApiError(error) ? error.code : undefined);
+  return isApiError(error) ? errorText(error.code, error.params) : errorText(undefined);
 }
 
 type Options = { method?: string; body?: unknown; params?: Record<string, string | undefined> };
