@@ -184,3 +184,104 @@ export type AuditPage = Paged<AuditRow> & {
   /** section key -> Russian label */
   sections: Record<string, string>;
 };
+
+// ---- attendance and grades (stage 1b) ----
+
+/** A lesson with how many of its students are marked (`marked` / `total`). */
+export type LessonItem = {
+  lesson_id: string;
+  cohort_id: string;
+  cohort_code: string;
+  course_name: string;
+  room_name: string;
+  date: string;
+  start: string;
+  end: string;
+  marked: number;
+  total: number;
+  instructor_id: string | null;
+  instructor_name: string | null;
+};
+
+export type TodayData = {
+  date: string;
+  today: LessonItem[];
+  /** Held lessons of the last 30 days with somebody still unmarked (#21). */
+  unfilled: LessonItem[];
+  unfilled_by_instructor: { instructor_id: string | null; instructor_name: string | null; lessons: LessonItem[] }[];
+};
+
+export type MarkRow = {
+  enrollment_id: string;
+  student_id: string;
+  student_name: string;
+  status: string;
+  /** null = not marked yet */
+  present: boolean | null;
+  reason: string | null;
+  marked_at: string | null;
+  marked_by: string | null;
+};
+
+export type LessonAttendance = {
+  lesson: {
+    id: string;
+    cohort_id: string;
+    cohort_code: string;
+    course_name: string;
+    room_name: string;
+    date: string;
+    start: string;
+    end: string;
+    cancelled: boolean;
+    held: boolean;
+    number: number | null;
+    of: number;
+  };
+  prev_id: string | null;
+  next_id: string | null;
+  students: MarkRow[];
+  marked: number;
+  total: number;
+};
+
+export type AttendanceStats = {
+  held: number;
+  present: number;
+  absent: number;
+  unmarked: number;
+  /** present / held, null while nothing is held yet */
+  percent: number | null;
+  /** 0..20 */
+  score: number;
+};
+
+export type GridLessonCol = { id: string; date: string; start: string; end: string; cancelled: boolean; held: boolean };
+
+export type GridStudent = AttendanceStats & {
+  enrollment_id: string;
+  student_id: string;
+  student_name: string;
+  status: string;
+  enrolled_at: string;
+  marks: Record<string, { present: boolean; reason: string | null }>;
+};
+
+export type AttendanceGrid = { cohort_id: string; cohort_code: string; lessons: GridLessonCol[]; students: GridStudent[] };
+
+export type GradeRow = {
+  enrollment_id: string;
+  version: number;
+  student_id: string;
+  student_name: string;
+  status: string;
+  homework: number | null;
+  final: number | null;
+  attendance_score: number;
+  total: number;
+  passed: boolean;
+  held: number;
+  present: number;
+  unmarked: number;
+  percent: number | null;
+};

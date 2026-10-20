@@ -29,10 +29,11 @@ export type NavItem = {
 // Order = order in the sidebar. `section` keys are the backend's (app/permissions.py).
 export const NAV_ITEMS: NavItem[] = [
   { section: "dashboard", href: "/dashboard", label: "Дашборд", icon: "dashboard" },
+  // the instructor's home (a manager with the attendance right sees it too): today's lessons, «не заполнено»
+  { section: "attendance", href: "/today", label: "Сегодня", icon: "attendance" },
   { section: "leads", href: "/leads", label: "Лиды", icon: "leads" },
   { section: "students", href: "/students", label: "Студенты", icon: "students" },
   { section: "cohorts", href: "/cohorts", label: "Потоки", icon: "cohorts" },
-  { section: "attendance", href: "/attendance", label: "Посещаемость и оценки", icon: "attendance" },
   { section: "payments", href: "/payments", label: "Оплаты", icon: "payments" },
   { section: "rooms", href: "/rooms", label: "Аудитории", icon: "rooms" },
   { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates" },
