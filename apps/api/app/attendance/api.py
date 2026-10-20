@@ -11,10 +11,11 @@ the previous value. «Все присутствуют» fills only the cells nob
 
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -28,6 +29,7 @@ from app.core.errors import NOT_FOUND, DomainError
 from app.core.versioning import Version, check_version
 from app.education.errors import COHORT_CLOSED, ENROLLED_AFTER_LESSON, LESSON_CANCELLED
 from app.education.scope import check_cohort_visible, cohort_filters
+from app.export import Col, check_cap, xlsx_response
 from app.metrics import (
     enrollment_attendance,
     enrollment_results,
@@ -372,6 +374,52 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
             for e, s in rows
         ],
     }
+
+
+@router.get("/cohorts/{cohort_id}/attendance/export")
+async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
+    """The табель: one row per student, one column per lesson («П» present, «Н» absent with the
+    reason, empty = not marked), then the same held / present / unmarked / percent as the screen."""
+    cohort = await _cohort(db, p, cohort_id)
+    grid = await grid_of(db, cohort)
+    check_cap(grid["students"])
+
+    def cell(lesson_id: uuid.UUID) -> Callable[[dict[str, Any]], str]:
+        def value(s: dict[str, Any]) -> str:
+            mark = s["marks"].get(str(lesson_id))
+            if mark is None:
+                return ""
+            if mark["present"]:
+                return "П"
+            return f"Н ({mark['reason']})" if mark["reason"] else "Н"
+
+        return value
+
+    columns: list[Col[dict[str, Any]]] = [
+        Col("Студент", lambda s: s["student_name"]),
+        Col("Статус", lambda s: s["status"]),
+        Col("Проведено уроков", lambda s: s["held"], "int"),
+        Col("Присутствовал", lambda s: s["present"], "int"),
+        Col("Не отмечено", lambda s: s["unmarked"], "int"),
+        Col("Посещаемость, %", lambda s: s["percent"] if s["percent"] is not None else "", "text"),
+    ]
+    columns += [
+        Col(
+            f"{le['date']:%d.%m}{' (отм.)' if le['cancelled'] else ''}",
+            cell(le["id"]),
+        )
+        for le in grid["lessons"]
+    ]
+    return await xlsx_response(
+        db,
+        p,
+        entity="lesson",
+        slug=f"tabel_{cohort.code}",
+        title="Табель",
+        columns=columns,
+        rows=grid["students"],
+        filters={"cohort": cohort.code},
+    )
 
 
 def _grade_out(enrollment_id: uuid.UUID, result: dict[str, Any]) -> dict[str, Any]:

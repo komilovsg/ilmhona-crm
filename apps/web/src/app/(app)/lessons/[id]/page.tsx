@@ -10,6 +10,9 @@ import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
 import { Icon } from "@/components/Icon";
+import { LoadingButton } from "@/components/LoadingButton";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { Bone } from "@/components/Skeletons";
 import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
@@ -300,9 +303,14 @@ function LessonMark({ data }: { data: LessonAttendance }) {
           {markedLabel(marked, total)}
         </span>
         {canMark && !disabled && total > 0 && (
-          <Button color="primary" isLoading={bulk} startContent={bulk ? null : <Icon name="check" size={18} />} onPress={() => void allPresent()}>
+          <LoadingButton
+            color="primary"
+            isLoading={bulk}
+            startContent={<Icon name="check" size={18} />}
+            onPress={() => void allPresent()}
+          >
             Все присутствуют
-          </Button>
+          </LoadingButton>
         )}
       </div>
 
@@ -349,22 +357,33 @@ export default function LessonPage() {
     queryFn: () => api<LessonAttendance>(`/api/v1/lessons/${id}/attendance`),
   });
 
-  if (query.isPending)
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-  if (query.isError || !query.data)
-    return (
-      <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">
-        {isApiError(query.error) && query.error.status === 404 ? "Урок не найден." : "Не удалось загрузить урок."}{" "}
-        <Link className="text-brand-text" href="/today">
-          Сегодня
-        </Link>
-      </p>
-    );
-
-  // keyed: moving to the previous / next lesson starts with a clean set of in-flight marks
-  return <LessonMark key={id} data={query.data} />;
+  return (
+    <QueryState
+      errorText="Не удалось загрузить урок"
+      notFound={
+        <EmptyState
+          action={
+            <Link className="text-brand-text" href="/today">
+              Сегодня
+            </Link>
+          }
+          title="Урок не найден"
+        />
+      }
+      query={query}
+      skeleton={
+        <>
+          <Bone className="mb-4 h-5 w-24" />
+          <Bone className="mb-2 h-7 w-2/3" />
+          <Bone className="mb-5 h-5 w-1/2" />
+          {[0, 1, 2, 3, 4].map((i) => (
+            <Bone key={i} className="mb-2 h-[88px] w-full rounded-2xl" />
+          ))}
+        </>
+      }
+    >
+      {/* keyed: moving to the previous / next lesson starts with a clean set of in-flight marks */}
+      {(data) => <LessonMark key={id} data={data} />}
+    </QueryState>
+  );
 }

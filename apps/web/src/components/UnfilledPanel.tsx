@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { Spinner } from "@heroui/spinner";
 
 import { Icon } from "./Icon";
+import { QueryState } from "./QueryState";
+import { Bone } from "./Skeletons";
 
 import { useToday } from "@/hooks/attendance";
 import { lessonsWord, markedLabel } from "@/lib/attendance";
 import { dayTitle } from "@/lib/education";
-import type { LessonItem } from "@/lib/types";
+import type { LessonItem, TodayData } from "@/lib/types";
 
 function Row({ item }: { item: LessonItem }) {
   return (
@@ -38,17 +39,27 @@ function Row({ item }: { item: LessonItem }) {
 export function UnfilledPanel({ title = "Не заполнено" }: { title?: string }) {
   const today = useToday();
 
-  if (today.isPending)
-    return (
-      <div className="flex justify-center py-8">
-        <Spinner />
-      </div>
-    );
-  if (today.isError || !today.data)
-    return <p className="rounded-2xl bg-content1 p-6 text-center text-default-500">Не удалось загрузить список.</p>;
+  return (
+    <QueryState
+      errorText="Не удалось загрузить список"
+      query={today}
+      skeleton={
+        <div className="rounded-2xl bg-content1 p-4">
+          <Bone className="mb-3 h-7 w-40" />
+          {[0, 1, 2].map((i) => (
+            <Bone key={i} className="mb-2 h-14 w-full rounded-xl" />
+          ))}
+        </div>
+      }
+    >
+      {(data) => <Panel data={data} title={title} />}
+    </QueryState>
+  );
+}
 
-  const groups = today.data.unfilled_by_instructor;
-  const count = today.data.unfilled.length;
+function Panel({ data, title }: { data: TodayData; title: string }) {
+  const groups = data.unfilled_by_instructor;
+  const count = data.unfilled.length;
 
   return (
     <section aria-labelledby="unfilled-title" className="rounded-2xl bg-content1 p-4">
