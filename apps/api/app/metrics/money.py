@@ -11,7 +11,8 @@
 - «Оплатили» (#5) = enrollments with ≥ 1 confirmed payment among the enrolled (not expelled), so
   it can never exceed «записались».
 - Income = confirmed payments; payroll (расходы ЗП, #9) = the sum of instructor payouts, never the
-  schedule; ads = 0 until campaigns exist (stage 3); profit = income − ads − payroll.
+  schedule; ads = budgets of the campaigns that started in the period (stage 3); profit = income −
+  ads − payroll. With a period: income by payment date, payroll by payout date, ads by start date.
 - Salary schedule: every month a cohort (not cancelled, with an instructor) runs × the cohort's
   rate. Paid = payouts actually made; due = max(rate − paid, 0).
 - Instructor card (#17): cohorts, students, income from own cohorts, payouts. No «efficiency %».
@@ -27,7 +28,16 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AppUser, Cohort, Course, Enrollment, InstructorPayout, Payment, Student
+from app.models import (
+    AppUser,
+    Campaign,
+    Cohort,
+    Course,
+    Enrollment,
+    InstructorPayout,
+    Payment,
+    Student,
+)
 
 TZ = ZoneInfo("Asia/Dushanbe")
 CONFIRMED = "подтверждено"
@@ -36,7 +46,6 @@ EXPELLED = "отчислен"
 CANCELLED = "отменён"
 ZERO = Decimal("0.00")
 CENT = Decimal("0.01")
-ADS_EXPENSE = ZERO  # stage 3 replaces this with the campaigns' budget
 
 
 def money(value: Any) -> Decimal:
@@ -181,13 +190,17 @@ async def cohort_income(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict[u
 # ---- profit ------------------------------------------------------------------------------
 
 
-async def income_total(db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]]) -> Decimal:
+async def income_total(
+    db: AsyncSession,
+    cohort_where: Sequence[ColumnElement[bool]],
+    *extra: ColumnElement[bool],
+) -> Decimal:
     total = (
         await db.execute(
             select(func.coalesce(func.sum(Payment.amount), 0))
             .join(Enrollment, Enrollment.id == Payment.enrollment_id)
             .join(Cohort, Cohort.id == Enrollment.cohort_id)
-            .where(Payment.status == CONFIRMED, *cohort_where)
+            .where(Payment.status == CONFIRMED, *cohort_where, *extra)
         )
     ).scalar_one()
     return money(total)
@@ -209,15 +222,43 @@ async def payroll_total(
     return money(total)
 
 
-async def finance(db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]]) -> dict[str, Any]:
-    income = await income_total(db, cohort_where)
-    payroll = await payroll_total(db, cohort_where)
-    return {
-        "income": income,
-        "payroll": payroll,
-        "ads": ADS_EXPENSE,
-        "profit": income - ADS_EXPENSE - payroll,
-    }
+async def ads_total(
+    db: AsyncSession,
+    campaign_where: Sequence[ColumnElement[bool]],
+    since: date | None = None,
+    until: date | None = None,
+) -> Decimal:
+    """Реклама: the budgets of the campaigns that started in the period (all, with no period)."""
+    where = list(campaign_where)
+    if since:
+        where.append(Campaign.start_date >= since)
+    if until:
+        where.append(Campaign.start_date <= until)
+    total = (
+        await db.execute(select(func.coalesce(func.sum(Campaign.budget), 0)).where(*where))
+    ).scalar_one()
+    return money(total)
+
+
+async def finance(
+    db: AsyncSession,
+    cohort_where: Sequence[ColumnElement[bool]],
+    campaign_where: Sequence[ColumnElement[bool]] = (),
+    since: date | None = None,
+    until: date | None = None,
+) -> dict[str, Any]:
+    paid: list[ColumnElement[bool]] = []
+    payouts: list[ColumnElement[bool]] = []
+    if since:
+        paid.append(Payment.paid_at >= since)
+        payouts.append(InstructorPayout.paid_at >= since)
+    if until:
+        paid.append(Payment.paid_at <= until)
+        payouts.append(InstructorPayout.paid_at <= until)
+    income = await income_total(db, cohort_where, *paid)
+    payroll = await payroll_total(db, cohort_where, *payouts)
+    ads = await ads_total(db, campaign_where, since, until)
+    return {"income": income, "payroll": payroll, "ads": ads, "profit": income - ads - payroll}
 
 
 # ---- instructors and salaries -----------------------------------------------------------

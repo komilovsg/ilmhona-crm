@@ -7,11 +7,13 @@ from app.attendance.api import router as attendance_router
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
 from app.branches.api import router as branches_router
+from app.campaigns.api import router as campaigns_router
 from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
 from app.core.proxy import ProxySecretRequired
 from app.instructors.api import router as instructors_router
+from app.leads.api import router as leads_router
 from app.metrics.api import router as metrics_router
 from app.payments.api import router as payments_router
 from app.roles.api import router as roles_router
@@ -51,6 +53,8 @@ for router in (
     payments_router,
     instructors_router,
     salaries_router,
+    leads_router,
+    campaigns_router,
 ):
     app.include_router(router)
 

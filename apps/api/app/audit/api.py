@@ -33,6 +33,7 @@ from app.models import (
     AppUser,
     AuditLog,
     Branch,
+    Campaign,
     Cohort,
     Course,
     Enrollment,
@@ -91,6 +92,7 @@ async def _names(db: AsyncSession, ids: set[uuid.UUID]) -> dict[str, str]:
         (Branch, Branch.name),
         (Room, Room.name),
         (Course, Course.name),
+        (Campaign, Campaign.name),
     ):
         result = await db.execute(select(model.id, column).where(model.id.in_(ids)))
         names.update({str(i): n for i, n in result.all()})
