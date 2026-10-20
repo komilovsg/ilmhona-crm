@@ -182,7 +182,7 @@ async def test_concurrent_marks_of_different_cells_both_survive(
 
 async def test_all_present_fills_only_unmarked_cells(admin: httpx.AsyncClient) -> None:
     cohort, lessons = await past_cohort(admin)
-    absent, other = (
+    absent, _other = (
         await enroll(admin, cohort, "Отсутствует"),
         await enroll(admin, cohort, "Другой"),
     )
