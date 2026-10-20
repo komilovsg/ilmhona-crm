@@ -4,13 +4,15 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
-import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
 import { LessonFormModal } from "./modals";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { ListSkeleton } from "@/components/Skeletons";
 import { RowMenu } from "@/components/RowMenu";
 import { useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
@@ -80,20 +82,33 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
           Уроков: <b>{live}</b>
           {live !== lessons.length && <span className="text-default-500"> (отменённых {lessons.length - live})</span>}
         </p>
-        {canChange && open && (
-          <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setForm("new")}>
-            Добавить урок
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <ExportButton path={`/api/v1/cohorts/${cohort.id}/lessons/export`} />
+          {canChange && open && (
+            <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setForm("new")}>
+              Добавить урок
+            </Button>
+          )}
+        </div>
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-12">
-          <Spinner />
-        </div>
-      ) : lessons.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Уроков пока нет.</p>
-      ) : (
+      <QueryState
+        empty={
+          <EmptyState
+            action={
+              canChange && open ? (
+                <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setForm("new")}>
+                  Добавить урок
+                </Button>
+              ) : undefined
+            }
+            title="Уроков пока нет"
+          />
+        }
+        isEmpty={(d) => d.length === 0}
+        query={list}
+        skeleton={<ListSkeleton cols={5} rows={5} />}
+      >
         <>
           <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
@@ -153,7 +168,7 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
             ))}
           </ul>
         </>
-      )}
+      </QueryState>
 
       {form && <LessonFormModal cohort={cohort} lesson={form === "new" ? null : form} onClose={() => setForm(null)} />}
       {cancelling && (

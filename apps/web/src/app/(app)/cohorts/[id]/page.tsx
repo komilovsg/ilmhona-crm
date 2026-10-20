@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Spinner } from "@heroui/spinner";
 
 import { CohortFormModal } from "../CohortFormModal";
 
@@ -16,12 +15,14 @@ import { StudentsTab } from "./StudentsTab";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { FillBar } from "@/components/FillBar";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
+import { DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
-import { api, isApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import { daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -98,21 +99,25 @@ export default function CohortPage() {
   });
   const confirm = useSubmit(() => action ? run.mutateAsync(action) : Promise.resolve());
 
-  if (cohort.isPending)
+  if (cohort.data === undefined)
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-
-  if (cohort.isError || !cohort.data)
-    return (
-      <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">
-        {isApiError(cohort.error) && cohort.error.status === 404 ? "Поток не найден." : "Не удалось загрузить поток."}{" "}
-        <Link className="text-brand-text" href="/cohorts">
-          К списку потоков
-        </Link>
-      </p>
+      <QueryState
+        errorText="Не удалось загрузить поток"
+        notFound={
+          <EmptyState
+            action={
+              <Link className="text-brand-text" href="/cohorts">
+                К списку потоков
+              </Link>
+            }
+            title="Поток не найден"
+          />
+        }
+        query={cohort}
+        skeleton={<DetailSkeleton />}
+      >
+        {null}
+      </QueryState>
     );
 
   const c = cohort.data;

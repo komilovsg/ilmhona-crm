@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { ConflictDialog } from "@/components/ConflictDialog";
@@ -14,6 +13,7 @@ import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { Me } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 function ProfileForm({ me }: { me: Me }) {
   const queryClient = useQueryClient();
@@ -58,9 +58,9 @@ function ProfileForm({ me }: { me: Me }) {
           {save.error}
         </p>
       )}
-      <Button color="primary" isDisabled={!fullName.trim()} isLoading={save.pending} type="submit">
+      <LoadingButton color="primary" isDisabled={!fullName.trim()} isLoading={save.pending} type="submit">
         Сохранить
-      </Button>
+      </LoadingButton>
       <ConflictDialog save={save} />
     </form>
   );
@@ -121,14 +121,14 @@ function PasswordForm() {
           {error}
         </p>
       )}
-      <Button
+      <LoadingButton
         color="primary"
         isDisabled={!current || !next || next !== repeat}
         isLoading={change.isPending}
         type="submit"
       >
         Сменить пароль
-      </Button>
+      </LoadingButton>
     </form>
   );
 }

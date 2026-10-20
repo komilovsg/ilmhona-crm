@@ -1,7 +1,10 @@
 """The audit log in Russian: every entry becomes one readable sentence, here and only here.
 
-    «Курбон изменил студента Алиев Алишер: телефон +992900000001 → +992930000002»
-    «Курбон создал поток G-012» · «Курбон вошёл в систему»
+    «Каримов Курбон: изменён студент Алиев Алишер — телефон +992900000001 → +992930000002»
+    «Каримов Курбон: создан поток G-012» · «Каримов Курбон — вход в систему»
+
+The wording is gender-neutral: the actor is never the subject of a verb («вошёл», «изменила»),
+the verb is a passive participle that agrees with the object («создан поток», «создана роль»).
     «Неудачная попытка входа для логина ali» · «Логин ali заблокирован на 15 минут»
 
 `sentence()` is pure: ids in the diff are turned into names through the `names` map the caller
@@ -11,6 +14,7 @@ reads as «Курбон: <action>»), a new field a row in `FIELDS`.
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -36,35 +40,63 @@ def section_of(entity: str, action: str) -> str | None:
     return None
 
 
-# action -> (verb, what), «Курбон <verb> <what> <label>»
+# action -> (passive verb agreeing with the object, object): «Курбон: <verb> <object> <label>»
 ACTIONS: dict[str, tuple[str, str]] = {
-    "student.create": ("создал", "студента"),
-    "student.update": ("изменил", "студента"),
-    "student.delete": ("удалил", "студента"),
-    "cohort.create": ("создал", "поток"),
-    "cohort.update": ("изменил", "поток"),
-    "cohort.delete": ("удалил", "поток"),
-    "cohort.cancel": ("отменил", "поток"),
-    "cohort.restore": ("восстановил", "поток"),
-    "room.create": ("создал", "аудиторию"),
-    "room.update": ("изменил", "аудиторию"),
-    "room.delete": ("удалил", "аудиторию"),
-    "course.create": ("создал", "курс"),
-    "course.update": ("изменил", "курс"),
-    "course.delete": ("удалил", "курс"),
-    "user.create": ("создал", "пользователя"),
-    "user.update": ("изменил", "пользователя"),
-    "user.delete": ("удалил", "пользователя"),
-    "user.activate": ("активировал", "пользователя"),
-    "user.reset_password": ("сбросил пароль", "пользователю"),
-    "user.deactivate": ("заблокировал", "пользователя"),
-    "role.create": ("создал", "роль"),
-    "role.update": ("изменил", "роль"),
-    "role.delete": ("удалил", "роль"),
-    "lesson.create": ("добавил", "урок потока"),
-    "lesson.move": ("перенёс", "урок потока"),
-    "lesson.cancel": ("отменил", "урок потока"),
+    "student.create": ("создан", "студент"),
+    "student.update": ("изменён", "студент"),
+    "student.delete": ("удалён", "студент"),
+    "cohort.create": ("создан", "поток"),
+    "cohort.update": ("изменён", "поток"),
+    "cohort.delete": ("удалён", "поток"),
+    "cohort.cancel": ("отменён", "поток"),
+    "cohort.restore": ("восстановлен", "поток"),
+    "room.create": ("создана", "аудитория"),
+    "room.update": ("изменена", "аудитория"),
+    "room.delete": ("удалена", "аудитория"),
+    "course.create": ("создан", "курс"),
+    "course.update": ("изменён", "курс"),
+    "course.delete": ("удалён", "курс"),
+    "user.create": ("создан", "пользователь"),
+    "user.update": ("изменён", "пользователь"),
+    "user.delete": ("удалён", "пользователь"),
+    "user.activate": ("активирован", "пользователь"),
+    "user.reset_password": ("сброшен", "пароль пользователя"),
+    "user.deactivate": ("заблокирован", "пользователь"),
+    "role.create": ("создана", "роль"),
+    "role.update": ("изменена", "роль"),
+    "role.delete": ("удалена", "роль"),
+    "lesson.create": ("добавлен", "урок потока"),
+    "lesson.move": ("перенесён", "урок потока"),
+    "lesson.cancel": ("отменён", "урок потока"),
 }
+
+# table (the `entity` of an `export` entry) -> Russian name
+TABLES: dict[str, str] = {
+    "app_user": "пользователи",
+    "role": "роли и права",
+    "audit_log": "журнал",
+    "room": "аудитории",
+    "course": "курсы",
+    "lesson": "расписание",
+    "cohort": "потоки",
+    "enrollment": "студенты потока",
+    "student": "студенты",
+}
+FILTERS = {
+    "q": "поиск",
+    "section": "раздел",
+    "date_from": "с",
+    "date_to": "по",
+    "since": "с",
+    "until": "по",
+    "user_id": "пользователь",
+    "is_active": "активен",
+    "cohort": "поток",
+    "entity": "объект",
+    "entity_id": "ID объекта",
+    "action": "действие",
+}
+MONEY = {"default_price_month", "price_month"}
 
 FIELDS: dict[str, str] = {
     "login": "логин",
@@ -151,6 +183,17 @@ def value_text(field: str, value: Any, names: dict[str, str]) -> str:
     return str(value)
 
 
+def _money(value: Any) -> str:
+    """`500.00` -> `500`, `650.5` -> `650.50`: money reads the same in every diff."""
+    if value is None or value == "":
+        return NONE
+    try:
+        d = Decimal(str(value))
+    except InvalidOperation:
+        return str(value)
+    return f"{d:.0f}" if d == d.to_integral() else f"{d:.2f}"
+
+
 def _pair(change: Any) -> tuple[Any, Any]:
     if isinstance(change, list) and len(change) == 2:
         return change[0], change[1]
@@ -173,6 +216,9 @@ def changes(diff: dict[str, Any], names: dict[str, str], sections: dict[str, str
         old, new = _pair(change)
         if field == "future_lessons":
             out.append(f"будущие уроки: удалено {old}, создано {new}")
+            continue
+        if field in MONEY:
+            out.append(f"{FIELDS[field]} {_money(old)} → {_money(new)} TJS")
             continue
         out.append(
             f"{FIELDS.get(field, field)} {value_text(field, old, names)} → "
@@ -209,7 +255,7 @@ def _with_changes(
         return head
     shown = "; ".join(parts[:MAX_FIELDS])
     more = len(parts) - MAX_FIELDS
-    return f"{head}: {shown}" + (f" и ещё {more}" if more > 0 else "")
+    return f"{head} — {shown}" + (f" и ещё {more}" if more > 0 else "")
 
 
 def sentence(
@@ -226,23 +272,41 @@ def sentence(
         n = int(minutes or 15)
         return f"Логин {lab} заблокирован на {n} {_plural(n, 'минуту', 'минуты', 'минут')}"
     if a == "auth.login":
-        return f"{who} вошёл в систему"
+        return f"{who} — вход в систему"
     if a == "auth.change_password":
-        return f"{who} сменил пароль"
+        return f"{who} — смена пароля"
     if a == "profile.update":
-        return _with_changes(f"{who} изменил свой профиль", e.diff, names, sections)
+        return _with_changes(f"{who}: изменены данные своего профиля", e.diff, names, sections)
+    if a == "export":
+        table = TABLES.get(e.entity, e.entity)
+        _, rows = _pair(e.diff.get("rows"))
+        n = int(rows or 0)
+        _, filters = _pair(e.diff.get("filters"))
+        head = f"{who} — выгрузка в Excel: {table}, {n} {_plural(n, 'строка', 'строки', 'строк')}"
+        shown = (
+            ", ".join(
+                f"{FILTERS.get(k, FIELDS.get(k, k))} {value_text(k, v, names)}"
+                for k, v in filters.items()
+            )
+            if isinstance(filters, dict)
+            else ""
+        )
+        return f"{head} (фильтры: {shown})" if shown else head
 
     if a == "enrollment.create":
         student, cohort = _pair(e.diff.get("student"))[1], _pair(e.diff.get("cohort"))[1]
-        return f"{who} зачислил студента {student} в поток {cohort}"
+        return f"{who}: зачислен студент {student} в поток {cohort}"
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
-        return f"{who} убрал студента {student} из потока {cohort}"
+        return f"{who}: студент {student} убран из потока {cohort}"
     if a == "enrollment.update":
         student, cohort = _pieces(lab)
         diff = {k: v for k, v in e.diff.items() if k != "cohort"}
         return _with_changes(
-            f"{who} изменил зачисление студента {student} в потоке {cohort}", diff, names, sections
+            f"{who}: изменено зачисление студента {student} в потоке {cohort}",
+            diff,
+            names,
+            sections,
         )
     if a == "cohort.close_enrollments":
         _, n = _pair(e.diff.get("enrollments_completed"))
@@ -271,7 +335,7 @@ def sentence(
     if a.startswith("lesson.") and a in ACTIONS:
         verb, what = ACTIONS[a]
         code, _, day = (lab or "").partition(", ")
-        head = f"{who} {verb} {what} {code}" + (f" за {day}" if day else "")
+        head = f"{who}: {verb} {what} {code}" + (f" за {day}" if day else "")
         if a != "lesson.move":
             return head
         return _with_changes(
@@ -280,6 +344,6 @@ def sentence(
 
     if a in ACTIONS:
         verb, what = ACTIONS[a]
-        head = f"{who} {verb} {what}{_tail(lab)}"
+        head = f"{who}: {verb} {what}{_tail(lab)}"
         return _with_changes(head, e.diff, names, sections) if a.endswith(".update") else head
     return f"{who}: {a}{_tail(lab)}"

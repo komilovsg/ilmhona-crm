@@ -20,6 +20,7 @@ import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, LessonRow, Paged, StudentRow } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 /** Add a lesson by hand (no `lesson`) or move one (with `lesson`). A busy room answers 409 with the other cohort's name. */
 export function LessonFormModal({
@@ -76,9 +77,9 @@ export function LessonFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {lesson ? "Перенести" : "Добавить"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen
@@ -167,14 +168,14 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
             <Button variant="light" onPress={onClose}>
               Отмена
             </Button>
-            <Button
+            <LoadingButton
               color="primary"
               isDisabled={!name.trim()}
               isLoading={enroll.isPending}
               onPress={() => submitNew()}
             >
               Создать и зачислить
-            </Button>
+            </LoadingButton>
           </>
         ) : (
           <Button variant="light" onPress={onClose}>
@@ -215,9 +216,9 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
                     </div>
                     <div className="flex items-center gap-2">
                       <PersonStatus status={s.status} />
-                      <Button color="primary" isDisabled={enroll.isPending} isLoading={enroll.isPending} size="sm" onPress={() => enroll.mutate({ student_id: s.id })}>
+                      <LoadingButton color="primary" isDisabled={enroll.isPending} isLoading={enroll.isPending} size="sm" onPress={() => enroll.mutate({ student_id: s.id })}>
                         Зачислить
-                      </Button>
+                      </LoadingButton>
                     </div>
                   </li>
                 ))}

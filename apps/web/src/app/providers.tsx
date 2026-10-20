@@ -6,6 +6,7 @@ import { HeroUIProvider } from "@heroui/system";
 import { ToastProvider } from "@heroui/toast";
 import { useRouter } from "next/navigation";
 
+import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
 
@@ -42,6 +43,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <HeroUI>
         <ThemeProvider>
           <ToastProvider placement="top-center" toastOffset={12} />
+          <ServerWakeup />
           {children}
         </ThemeProvider>
       </HeroUI>

@@ -5,11 +5,12 @@ action, text. Each entry carries a `link` (entity type + id) when the entity sti
 the reader may open it.
 """
 
+import json
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import ColumnElement, Text, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.audit.sentences import (
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.education.scope import cohort_filters, student_filters
+from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import (
     AppUser,
     AuditLog,
@@ -69,6 +71,9 @@ def _refs(entity: str, entity_id: str | None, diff: dict[str, Any]) -> set[uuid.
     for field in REFS & diff.keys():
         change = diff[field]
         found.update(change if isinstance(change, list) else [change])
+    filters = diff.get("filters")  # an Excel export: the ids its filters name
+    if isinstance(filters, dict):
+        found.update(v for k, v in filters.items() if k in REFS)
     return {u for u in map(_uuid, found) if u is not None}
 
 
@@ -174,22 +179,18 @@ router = APIRouter(
 )
 
 
-@router.get("")
-async def list_audit(
-    p: Annotated[Principal, require("audit", "view")],
-    db: DB,
-    user_id: uuid.UUID | None = None,
-    section: str | None = None,
-    branch_id: uuid.UUID | None = None,
-    entity: str | None = None,
-    entity_id: str | None = None,
-    action: str | None = None,
-    q: Annotated[str | None, Query(max_length=100)] = None,
-    date_from: date | None = None,
-    date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
-) -> dict[str, Any]:
+def _audit_where(
+    p: Principal,
+    user_id: uuid.UUID | None,
+    section: str | None,
+    branch_id: uuid.UUID | None,
+    entity: str | None,
+    entity_id: str | None,
+    action: str | None,
+    q: str | None,
+    date_from: date | None,
+    date_to: date | None,
+) -> list[ColumnElement[bool]]:
     where: list[ColumnElement[bool]] = []
     if p.branch_id is not None:
         where.append(AuditLog.branch_id == p.branch_id)
@@ -220,18 +221,95 @@ async def list_audit(
                 cast(AuditLog.diff, Text).ilike(like),
             )
         )
+    return where
+
+
+def _audit_select(where: list[ColumnElement[bool]]) -> Any:
+    return (
+        select(AuditLog, AppUser.full_name, AppUser.login, Branch.name)
+        .outerjoin(AppUser, AppUser.id == AuditLog.user_id)
+        .outerjoin(Branch, Branch.id == AuditLog.branch_id)
+        .where(*where)
+        .order_by(AuditLog.at.desc(), AuditLog.id.desc())
+    )
+
+
+AUDIT_COLUMNS: list[Col[Any]] = [
+    Col("Время", lambda r: r[0].at, "datetime"),
+    Col("Кто", lambda r: r[1] or "Система"),
+    Col("Логин", lambda r: r[2]),
+    Col("Филиал", lambda r: r[3]),
+    Col("Действие", lambda r: r[0].action),
+    Col("Событие", lambda r: r[0].label),
+    Col("Объект", lambda r: r[0].entity),
+    Col("ID объекта", lambda r: r[0].entity_id),
+    Col("Данные", lambda r: json.dumps(r[0].diff, ensure_ascii=False) if r[0].diff else None),
+]
+
+
+@router.get("/export")
+async def export_audit(
+    p: Annotated[Principal, require("audit", "view")],
+    db: DB,
+    user_id: uuid.UUID | None = None,
+    section: str | None = None,
+    branch_id: uuid.UUID | None = None,
+    entity: str | None = None,
+    entity_id: str | None = None,
+    action: str | None = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> Response:
+    where = _audit_where(
+        p, user_id, section, branch_id, entity, entity_id, action, q, date_from, date_to
+    )
+    rows = (await db.execute(_audit_select(where).limit(MAX_ROWS + 1))).all()
+    return await xlsx_response(
+        db,
+        p,
+        entity="audit_log",
+        slug="zhurnal",
+        title="Журнал",
+        columns=AUDIT_COLUMNS,
+        rows=rows,
+        filters={
+            "user_id": user_id,
+            "section": section,
+            "branch_id": branch_id,
+            "entity": entity,
+            "entity_id": entity_id,
+            "action": action,
+            "q": q,
+            "date_from": date_from,
+            "date_to": date_to,
+        },
+    )
+
+
+@router.get("")
+async def list_audit(
+    p: Annotated[Principal, require("audit", "view")],
+    db: DB,
+    user_id: uuid.UUID | None = None,
+    section: str | None = None,
+    branch_id: uuid.UUID | None = None,
+    entity: str | None = None,
+    entity_id: str | None = None,
+    action: str | None = None,
+    q: Annotated[str | None, Query(max_length=100)] = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> dict[str, Any]:
+    where = _audit_where(
+        p, user_id, section, branch_id, entity, entity_id, action, q, date_from, date_to
+    )
     base = select(AuditLog).outerjoin(AppUser, AppUser.id == AuditLog.user_id).where(*where)
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar_one()
     rows = (
-        await db.execute(
-            select(AuditLog, AppUser.full_name, AppUser.login, Branch.name)
-            .outerjoin(AppUser, AppUser.id == AuditLog.user_id)
-            .outerjoin(Branch, Branch.id == AuditLog.branch_id)
-            .where(*where)
-            .order_by(AuditLog.at.desc(), AuditLog.id.desc())
-            .limit(page_size)
-            .offset((page - 1) * page_size)
-        )
+        await db.execute(_audit_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     refs: set[uuid.UUID] = set()
     for a, *_ in rows:

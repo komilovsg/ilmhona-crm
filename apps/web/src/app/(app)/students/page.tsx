@@ -5,19 +5,22 @@ import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
-import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
 
 import { StudentFormModal } from "./StudentFormModal";
 
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
+import { ListSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
+import { dushanbeDay, telHref } from "@/lib/format";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
 
@@ -25,7 +28,7 @@ const PAGE_SIZE = 25;
 
 function Phone({ value }: { value: string | null }) {
   return value ? (
-    <a className="inline-flex items-center gap-1.5 text-brand-text" href={`tel:${value}`}>
+    <a className="inline-flex items-center gap-1.5 text-brand-text" href={telHref(value)}>
       <Icon name="phone" size={14} />
       {value}
     </a>
@@ -71,15 +74,19 @@ export default function StudentsPage() {
     <>
       <PageHeader
         actions={
-          canChange && (
-            <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
-              Студент
-            </Button>
-          )
+          <>
+            <ExportButton params={{ q: q.trim(), status, branch_id: branch }} path="/api/v1/students/export" />
+            {canChange && (
+              <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
+                Студент
+              </Button>
+            )}
+          </>
         }
         title="Студенты"
       />
 
+      {!counts && <PillsSkeleton count={5} />}
       {counts && (
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1 text-sm" role="group" aria-label="Статус студента">
           {[null, ...STUDENT_STATUSES].map((s) => (
@@ -130,13 +137,24 @@ export default function StudentsPage() {
         )}
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : students.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Студентов не найдено.</p>
-      ) : (
+      <QueryState
+        empty={
+          <EmptyState
+            action={
+              canChange && !q.trim() && !status && !branch ? (
+                <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
+                  Студент
+                </Button>
+              ) : undefined
+            }
+            hint={q.trim() || status || branch ? "Измените поиск или фильтры." : undefined}
+            title={q.trim() || status || branch ? "Студентов не найдено" : "Нет студентов"}
+          />
+        }
+        isEmpty={(d) => d.items.length === 0}
+        query={list}
+        skeleton={<ListSkeleton cols={6} />}
+      >
         <>
           <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
@@ -166,7 +184,7 @@ export default function StudentsPage() {
                       <PersonStatus status={s.status} />
                     </td>
                     <td className="px-4 py-3">{s.enrollments_count}</td>
-                    <td className="px-4 py-3 text-default-600">{fullDate(s.created_at.slice(0, 10))}</td>
+                    <td className="px-4 py-3 text-default-600">{fullDate(dushanbeDay(s.created_at))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -192,7 +210,7 @@ export default function StudentsPage() {
           </ul>
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
-      )}
+      </QueryState>
 
       {creating && <StudentFormModal student={null} onClose={() => setCreating(false)} />}
     </>
