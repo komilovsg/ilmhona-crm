@@ -10,7 +10,6 @@ import { Spinner } from "@heroui/spinner";
 import { EnrollModal } from "./modals";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
-import { FillBar } from "@/components/FillBar";
 import { Icon } from "@/components/Icon";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation } from "@/hooks/education";
@@ -92,9 +91,9 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="w-full max-w-xs">
-          <FillBar fill={cohort.fill} />
-        </div>
+        <p className="text-sm text-default-600">
+          Студентов: <b>{cohort.fill.enrolled}</b> из {cohort.fill.capacity}
+        </p>
         {canChange && open && (
           <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
             Добавить студента

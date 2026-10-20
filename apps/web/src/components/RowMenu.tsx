@@ -21,7 +21,7 @@ export function RowMenu({
     <Dropdown placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={label} size="sm" variant="light">
-          <Icon name="more" size={18} />
+          <Icon name="more" size={20} strokeWidth={3} />
         </Button>
       </DropdownTrigger>
       <DropdownMenu aria-label={label} onAction={(key) => onAction(String(key))}>
