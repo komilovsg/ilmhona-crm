@@ -28,7 +28,16 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AppUser, Campaign, Cohort, Course, Enrollment, InstructorPayout, Payment, Student
+from app.models import (
+    AppUser,
+    Campaign,
+    Cohort,
+    Course,
+    Enrollment,
+    InstructorPayout,
+    Payment,
+    Student,
+)
 
 TZ = ZoneInfo("Asia/Dushanbe")
 CONFIRMED = "подтверждено"
