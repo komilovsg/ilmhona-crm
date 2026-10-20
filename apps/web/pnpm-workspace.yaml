@@ -1,0 +1,9 @@
+ignoredBuiltDependencies:
+  - sharp
+  - unrs-resolver
+# Two FocusScope copies keep separate scope trees and fight over focus (modals and menus loop
+# endlessly); every copy is pointed at the one in `react-aria`. Same for the I18nProvider.
+overrides:
+  '@react-aria/focus': 3.22.1
+  '@react-aria/i18n': 3.13.1
+  '@react-aria/interactions@3.26.0': 3.27.1

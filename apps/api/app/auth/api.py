@@ -130,7 +130,7 @@ async def issue_session(
     )
     await db.flush()
     _set_cookie(
-        response, ACCESS_COOKIE, make_access_token(user_id), settings.access_ttl_minutes * 60, "/"
+        response, ACCESS_COOKIE, make_access_token(user_id), settings.refresh_ttl_days * 86400, "/"
     )
     _set_cookie(response, REFRESH_COOKIE, token, settings.refresh_ttl_days * 86400, "/api/v1/auth")
 
@@ -221,7 +221,6 @@ async def refresh(request: Request, response: Response, db: DB) -> None:
         else None
     )
     if row is None or row.revoked_at is not None or row.expires_at < now:
-        clear_cookies(response)
         raise DomainError(NOT_AUTHENTICATED)
     if row.used_at is not None:
         if now - row.used_at > REUSE_GRACE:  # a used token again later: assume theft

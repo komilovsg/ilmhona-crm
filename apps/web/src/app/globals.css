@@ -1,0 +1,34 @@
+@import "tailwindcss";
+@plugin '../hero.ts';
+@source '../../node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --sidebar: #101820;
+  --brand-text: #00a0dc;
+  color-scheme: light;
+}
+
+.dark {
+  --sidebar: #0a0f14;
+  --brand-text: #38bdf0;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-sidebar: var(--sidebar);
+  --color-brand-text: var(--brand-text);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+}
+
+/* Cross-fade between themes (ThemeProvider uses document.startViewTransition). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+}
