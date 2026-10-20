@@ -9,7 +9,38 @@ from sqlalchemy import func, select
 
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
-from app.models import AppUser, AuditLog
+from app.models import AppUser, AuditLog, Branch, Role
+from app.permissions import SECTIONS
+
+REF_FIELDS = {"role_id", "branch_id", "user_id"}
+
+
+def _uuid(value: Any) -> uuid.UUID | None:
+    try:
+        return uuid.UUID(str(value))
+    except ValueError:
+        return None
+
+
+def _refs(entity: str, entity_id: str | None, diff: dict[str, Any]) -> set[uuid.UUID]:
+    """Ids a row mentions: its own target and the old/new values of reference fields."""
+    found = {entity_id} if entity in ("app_user", "role") else set()
+    for field in REF_FIELDS & diff.keys():
+        change = diff[field]
+        found.update(change if isinstance(change, list) else [change])
+    return {u for u in map(_uuid, found) if u is not None}
+
+
+async def _names(db: DB, ids: set[uuid.UUID]) -> dict[str, str]:
+    """{id: display name} over users, roles and branches: three IN queries per page, no N+1."""
+    if not ids:
+        return {}
+    names: dict[str, str] = {}
+    for model, column in ((AppUser, AppUser.full_name), (Role, Role.name), (Branch, Branch.name)):
+        result = await db.execute(select(model.id, column).where(model.id.in_(ids)))
+        names.update({str(i): n for i, n in result.all()})
+    return names
+
 
 router = APIRouter(
     prefix="/api/v1/audit", tags=["audit"], dependencies=[Depends(require_csrf_header)]
@@ -57,7 +88,12 @@ async def list_audit(
             .offset((page - 1) * page_size)
         )
     ).all()
+    refs: set[uuid.UUID] = set()
+    for a, _, _ in rows:
+        refs |= _refs(a.entity, a.entity_id, a.diff)
     return {
+        "names": await _names(db, refs),
+        "sections": SECTIONS,
         "items": [
             {
                 "id": a.id,

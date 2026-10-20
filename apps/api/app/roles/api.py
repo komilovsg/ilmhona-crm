@@ -91,9 +91,12 @@ async def sections(_: View) -> list[dict[str, str]]:
 
 
 @router.get("")
-async def list_roles(_: View, db: DB) -> list[dict[str, Any]]:
+async def list_roles(p: View, db: DB) -> list[dict[str, Any]]:
     roles = (await db.execute(select(Role).order_by(Role.created_at, Role.name))).scalars().all()
-    return [await _out(db, r) for r in roles]
+    out = [await _out(db, r) for r in roles]
+    for row in out:
+        row["assignable"] = p.can_assign(row["code"], row["permissions"])
+    return out
 
 
 @router.get("/{role_id}")
