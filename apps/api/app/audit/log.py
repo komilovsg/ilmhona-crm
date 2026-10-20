@@ -1,5 +1,5 @@
 """The audit log writer. Every write endpoint calls `record` in the same transaction as the
-change, so a change and its entry commit or fail together. No secrets (hashes, passwords) in a diff."""
+change, so both commit or fail together. No secrets (hashes, passwords) in a diff."""
 
 from datetime import date, datetime
 from typing import Any

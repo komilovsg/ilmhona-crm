@@ -1,0 +1,11 @@
+# Default rules plus known false positives. Add an entry only after checking the match is not a
+# secret, and say why.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "false positives"
+paths = [
+  # Throwaway secret of the test suite (never used outside pytest).
+  '''^apps/api/tests/conftest\.py$''',
+]

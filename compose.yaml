@@ -1,0 +1,21 @@
+# Dev Postgres. Host port 55433 (my-hrm owns 55432). Dev only: passwordless (trust) and bound to
+# localhost, so no credentials live in the repo and nothing is reachable from the network.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ilm
+      POSTGRES_DB: ilmhona
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "127.0.0.1:55433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ilm -d ilmhona"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
