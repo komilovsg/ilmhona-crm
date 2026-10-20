@@ -28,7 +28,7 @@ async def test_a_branch_bound_user_cannot_create_edit_or_delete_courses(
 
 
 async def test_a_user_without_a_branch_manages_courses(login_as: SignedIn) -> None:
-    role = await make_role("Менеджер", {"rooms": "change"})
+    role = await make_role("Менеджер без филиала", {"rooms": "change"})
     mgr = await login_as("anywhere", role)
     created = await mgr.post(C, json=BODY)
     assert created.status_code == 201

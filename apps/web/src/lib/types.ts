@@ -1,6 +1,7 @@
 import type { Level, Permissions } from "./permissions";
 
 export type Me = {
+  version: number;
   id: string;
   login: string;
   full_name: string;
@@ -15,6 +16,7 @@ export type Me = {
 export type Branch = { id: string; name: string };
 
 export type UserRow = {
+  version: number;
   id: string;
   login: string;
   full_name: string;
@@ -33,6 +35,7 @@ export type UserRow = {
 export type Paged<T> = { items: T[]; total: number; page: number; page_size: number };
 
 export type RoleRow = {
+  version: number;
   id: string;
   name: string;
   code: string | null;
@@ -54,17 +57,24 @@ export type AuditRow = {
   user_id: string | null;
   user_name: string | null;
   user_login: string | null;
+  branch_name: string | null;
   action: string;
+  section: string | null;
   entity: string;
   entity_id: string | null;
+  /** The entry as a Russian sentence, written by the API. */
+  text: string;
+  /** The page it leads to; null when the entity is gone or out of reach. */
+  link: { entity: string; id: string } | null;
   diff: Record<string, unknown>;
 };
 
 // ---- education (stage 1a) ----
 
-export type Room = { id: string; branch_id: string; branch_name: string; name: string; capacity: number };
+export type Room = { id: string; version: number; branch_id: string; branch_name: string; name: string; capacity: number };
 
 export type Course = {
+  version: number;
   id: string;
   name: string;
   direction: string | null;
@@ -76,6 +86,7 @@ export type Course = {
 export type Fill = { enrolled: number; capacity: number };
 
 export type CohortRow = {
+  version: number;
   id: string;
   code: string;
   course_id: string;
@@ -98,6 +109,7 @@ export type CohortRow = {
 };
 
 export type LessonRow = {
+  version: number;
   id: string;
   cohort_id: string;
   room_id: string;
@@ -109,6 +121,7 @@ export type LessonRow = {
 };
 
 export type EnrollmentRow = {
+  version: number;
   id: string;
   cohort_id: string;
   student_id: string;
@@ -119,6 +132,7 @@ export type EnrollmentRow = {
 };
 
 export type StudentRow = {
+  version: number;
   id: string;
   full_name: string;
   gender: "male" | "female" | null;

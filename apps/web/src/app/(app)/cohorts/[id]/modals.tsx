@@ -7,11 +7,13 @@ import { Input } from "@heroui/input";
 import { Spinner } from "@heroui/spinner";
 
 import { AppModal } from "@/components/AppModal";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { Segmented } from "@/components/Segmented";
 import { SelectField } from "@/components/SelectField";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation, useRooms } from "@/hooks/education";
 import { useMe } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
 import { can } from "@/lib/permissions";
@@ -39,22 +41,33 @@ export function LessonFormModal({
   const problem = timeProblem(start, end);
   const valid = !!date && !!roomId && !problem && date >= MIN_DATE && date <= MAX_DATE;
 
-  const save = useMutation({
-    mutationFn: () => {
-      const body = { date, start_time: start, end_time: end, room_id: roomId };
-
-      return lesson
-        ? api(`/api/v1/lessons/${lesson.id}`, { method: "PATCH", body })
-        : api(`/api/v1/cohorts/${cohort.id}/lessons`, { method: "POST", body });
-    },
-    onSuccess: () => {
-      void refresh();
-      notify(lesson ? "Урок перенесён" : "Урок добавлен");
-      onClose();
-    },
+  const values = { date, start_time: start, end_time: end, room_id: roomId };
+  const done = () => {
+    void refresh();
+    notify(lesson ? "Урок перенесён" : "Урок добавлен");
+    onClose();
+  };
+  const create = useMutation({
+    mutationFn: () => api(`/api/v1/cohorts/${cohort.id}/lessons`, { method: "POST", body: values }),
+    onSuccess: done,
     onError: (e) => setError(messageOf(e)),
   });
-  const submit = useSubmit(() => save.mutateAsync(), !valid);
+  const edit = useVersionedSave({
+    record: lesson,
+    values,
+    toValues: (l) => ({ date: l.date, start_time: l.start, end_time: l.end, room_id: l.room_id as string | null }),
+    apply: (v) => {
+      setDate(v.date);
+      setStart(v.start_time);
+      setEnd(v.end_time);
+      setRoomId(v.room_id);
+    },
+    request: (changed, version) => api(`/api/v1/lessons/${lesson?.id}`, { method: "PATCH", body: changed, version }),
+    labels: { date: "Дата", start_time: "Начало", end_time: "Конец", room_id: "Аудитория" },
+    show: { room_id: (id: string | null) => rooms.find((r) => r.id === id)?.name ?? "—" },
+    onSaved: done,
+  });
+  const submit = useSubmit(() => (lesson ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
     <AppModal
@@ -63,7 +76,7 @@ export function LessonFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <Button color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {lesson ? "Перенести" : "Добавить"}
           </Button>
         </>
@@ -94,12 +107,13 @@ export function LessonFormModal({
             {problem}
           </p>
         )}
-        {error && (
+        {(error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {error ?? edit.error}
           </p>
         )}
       </form>
+      <ConflictDialog save={edit} />
     </AppModal>
   );
 }

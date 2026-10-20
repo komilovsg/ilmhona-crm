@@ -10,9 +10,11 @@ import { Spinner } from "@heroui/spinner";
 
 import { AppModal } from "@/components/AppModal";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { useMe, useRoles, useSections } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { can, fromMatrix, toMatrix, type MatrixChoice } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
@@ -35,22 +37,42 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
   const keys = sections.map((s) => s.key);
   const [name, setName] = useState(role.name);
   const [matrix, setMatrix] = useState(() => toMatrix(role.permissions, keys));
-  const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const readOnly = role.locked || !canChange;
   const sorted = (p: Record<string, string>) => JSON.stringify(Object.entries(p).sort());
   const dirty = name.trim() !== role.name || sorted(fromMatrix(matrix)) !== sorted(role.permissions);
 
-  const save = useMutation({
-    mutationFn: () =>
-      api<RoleRow>(`/api/v1/roles/${role.id}`, { method: "PUT", body: { name, permissions: fromMatrix(matrix) } }),
-    onSuccess: () => {
+  // One field per section, so two admins changing different sections both survive a conflict.
+  const flat = (n: string, m: Record<string, MatrixChoice>): Record<string, string> => ({
+    name: n,
+    ...Object.fromEntries(keys.map((k) => [`p:${k}`, m[k] ?? "none"])),
+  });
+  const unflat = (v: Record<string, string>) =>
+    Object.fromEntries(keys.map((k) => [k, (v[`p:${k}`] ?? "none") as MatrixChoice]));
+  const values = flat(name.trim(), matrix);
+  const save = useVersionedSave({
+    record: role,
+    values,
+    toValues: (r) => flat(r.name, toMatrix(r.permissions, keys)),
+    apply: (v) => {
+      setName(v.name);
+      setMatrix(unflat(v));
+    },
+    request: (_changed, version, all) =>
+      api<RoleRow>(`/api/v1/roles/${role.id}`, {
+        method: "PUT",
+        body: { name: all.name, permissions: fromMatrix(unflat(all)) },
+        version,
+      }),
+    labels: { name: "Название", ...Object.fromEntries(sections.map((s) => [`p:${s.key}`, s.label])) },
+    show: Object.fromEntries(
+      keys.map((k) => [`p:${k}`, (v: string) => CHOICES.find((c) => c.value === v)?.label ?? v]),
+    ),
+    onSaved: () => {
       void queryClient.invalidateQueries({ queryKey: ["roles"] });
       void queryClient.invalidateQueries({ queryKey: ["me"] });
-      setError(null);
       notify("Роль сохранена");
     },
-    onError: (e) => setError(messageOf(e)),
   });
   const remove = useMutation({
     mutationFn: () => api(`/api/v1/roles/${role.id}`, { method: "DELETE" }),
@@ -65,7 +87,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
     },
   });
 
-  const submitSave = useSubmit(() => save.mutateAsync());
+  const submitSave = useSubmit(() => save.save(values));
   const submitRemove = useSubmit(() => remove.mutateAsync());
 
   return (
@@ -110,17 +132,18 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
         ))}
       </ul>
 
-      {error && (
+      {save.error && (
         <p className="mt-3 text-sm text-danger" role="alert">
-          {error}
+          {save.error}
         </p>
       )}
+      <ConflictDialog save={save} />
       {!readOnly && (
         <div className="mt-4 flex flex-wrap justify-between gap-2">
           <Button
             color="primary"
             isDisabled={!dirty || !name.trim()}
-            isLoading={save.isPending}
+            isLoading={save.pending}
             onPress={() => submitSave()}
           >
             Сохранить
@@ -247,7 +270,7 @@ export default function RolesPage() {
           </ul>
           {selected && (
             <RoleEditor
-              key={selected.id + JSON.stringify(Object.entries(selected.permissions).sort()) + selected.name}
+              key={selected.id}
               canChange={canChange}
               role={selected}
               sections={sections}

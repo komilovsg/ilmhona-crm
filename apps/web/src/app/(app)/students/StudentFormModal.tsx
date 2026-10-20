@@ -6,9 +6,11 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { AppModal } from "@/components/AppModal";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
@@ -25,22 +27,34 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
   const [error, setError] = useState<string | null>(null);
   const valid = name.trim() && (student || branchId);
 
-  const save = useMutation({
-    mutationFn: () => {
-      const body = { full_name: name, phone: phone.trim() || null, gender };
-
-      return student
-        ? api(`/api/v1/students/${student.id}`, { method: "PATCH", body })
-        : api("/api/v1/students", { method: "POST", body: { ...body, branch_id: branchId } });
-    },
-    onSuccess: () => {
-      void refresh();
-      notify(student ? "Студент сохранён" : "Студент добавлен");
-      onClose();
-    },
+  const values = { full_name: name.trim(), phone: phone.trim() || null, gender };
+  const done = () => {
+    void refresh();
+    notify(student ? "Студент сохранён" : "Студент добавлен");
+    onClose();
+  };
+  const create = useMutation({
+    mutationFn: () => api("/api/v1/students", { method: "POST", body: { ...values, branch_id: branchId } }),
+    onSuccess: done,
     onError: (e) => setError(messageOf(e)),
   });
-  const submit = useSubmit(() => save.mutateAsync(), !valid);
+  const edit = useVersionedSave({
+    record: student,
+    values,
+    toValues: (s) => ({ full_name: s.full_name, phone: s.phone, gender: s.gender }),
+    apply: (v) => {
+      setName(v.full_name);
+      setPhone(v.phone ?? "");
+      setGender(v.gender);
+    },
+    request: (changed, version) =>
+      api(`/api/v1/students/${student?.id}`, { method: "PATCH", body: changed, version }),
+    labels: { full_name: "ФИО", phone: "Телефон", gender: "Пол" },
+    show: { gender: (g: string | null) => (g === "male" ? "Мужской" : g === "female" ? "Женский" : "—") },
+    onSaved: done,
+  });
+  const pending = create.isPending || edit.pending;
+  const submit = useSubmit(() => (student ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
     <AppModal
@@ -49,7 +63,7 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <Button color="primary" isDisabled={!valid} isLoading={pending} onPress={() => submit()}>
             {student ? "Сохранить" : "Добавить"}
           </Button>
         </>
@@ -83,12 +97,13 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
           value={branchId}
           onChange={setBranchId}
         />
-        {error && (
+        {(error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {error ?? edit.error}
           </p>
         )}
       </form>
+      <ConflictDialog save={edit} />
     </AppModal>
   );
 }
