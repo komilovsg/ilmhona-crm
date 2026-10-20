@@ -74,9 +74,47 @@ async def clean(migrated_database: None) -> None:
 Client = httpx.AsyncClient
 
 
+TABLES = {
+    "users": "app_user",
+    "roles": "role",
+    "rooms": "room",
+    "courses": "course",
+    "cohorts": "cohort",
+    "students": "student",
+    "lessons": "lesson",
+    "enrollments": "enrollment",
+}
+
+
+class Browser(httpx.AsyncClient):
+    """A browser. Like the web app, `patch` / `put` send the version of the record as it is now
+    in `If-Match` (#25), unless the test passes its own `headers={"If-Match": ...}` or
+    `no_version=True`: tests of the conflict itself set the header by hand."""
+
+    async def _with_version(self, url: str, kw: dict[str, Any]) -> None:
+        headers = dict(kw.get("headers") or {})
+        if kw.pop("no_version", False) or "If-Match" in headers:
+            return
+        parts = url.split("?")[0].rstrip("/").split("/")
+        if parts[-1] == "me":
+            version = (await self.get(url)).json()["version"]
+        else:
+            rows = await sql(f"SELECT version FROM {TABLES[parts[-2]]} WHERE id = :i", i=parts[-1])
+            version = rows[0][0] if rows else 1
+        kw["headers"] = {**headers, "If-Match": str(version)}
+
+    async def patch(self, url: Any, **kw: Any) -> httpx.Response:
+        await self._with_version(str(url), kw)
+        return await super().patch(url, **kw)
+
+    async def put(self, url: Any, **kw: Any) -> httpx.Response:
+        await self._with_version(str(url), kw)
+        return await super().put(url, **kw)
+
+
 def make_client() -> httpx.AsyncClient:
     """A browser: its own cookie jar; the CSRF header is set like the web app does."""
-    return httpx.AsyncClient(
+    return Browser(
         transport=httpx.ASGITransport(app=app),
         base_url="http://test",
         headers={"X-Requested-With": "ilm"},

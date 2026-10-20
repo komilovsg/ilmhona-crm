@@ -1,55 +1,63 @@
-// Readable audit diffs (no React, no imports: unit-tested with node --test).
+// The audit page helpers (no React, no imports: unit-tested with node --test). The sentences
+// themselves are written by the API (app/audit/sentences.py); the web only groups and links them.
 
-export type Names = Record<string, string>;
-export type DiffLine = { label: string; before: string; after: string };
+export type AuditLink = { entity: string; id: string };
 
-const FIELDS: Record<string, string> = {
-  login: "Логин",
-  full_name: "ФИО",
-  phone: "Телефон",
-  email: "Email",
-  branch_id: "Филиал",
-  role_id: "Роль",
-  is_active: "Активен",
-  name: "Название",
-  expires_at: "Временный пароль до",
-};
+const TZ = "Asia/Dushanbe";
+const dayFormat = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }); // 2026-10-20
+const longDay = new Intl.DateTimeFormat("ru-RU", { timeZone: TZ, day: "numeric", month: "long", year: "numeric" });
+const clock = new Intl.DateTimeFormat("ru-RU", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 
-const LEVELS: Record<string, string> = { view: "Просмотр", change: "Изменение" };
-const REFS = new Set(["branch_id", "role_id"]);
-const NONE = "—";
-
-function pair(change: unknown): [unknown, unknown] {
-  return Array.isArray(change) && change.length === 2 ? [change[0], change[1]] : [undefined, change];
+/** Where a log entry leads: students and cohorts have their own page, the rest a list page. */
+export function linkHref(link: AuditLink | null): string | null {
+  if (!link) return null;
+  switch (link.entity) {
+    case "student":
+      return `/students/${link.id}`;
+    case "cohort":
+      return `/cohorts/${link.id}`;
+    case "app_user":
+      return "/users";
+    case "role":
+      return "/roles";
+    case "room":
+    case "course":
+      return "/rooms";
+    default:
+      return null;
+  }
 }
 
-function plain(value: unknown): string {
-  if (value === null || value === undefined) return NONE;
-  if (typeof value === "boolean") return value ? "Да" : "Нет";
-
-  return typeof value === "object" ? JSON.stringify(value) : String(value);
+/** `2026-10-20` in Dushanbe time. */
+export function dayKey(iso: string): string {
+  return dayFormat.format(new Date(iso));
 }
 
-/** `{field: [before, after]}` -> «Раздел: было → стало» lines, ids replaced by names. */
-export function diffLines(diff: Record<string, unknown>, names: Names, sections: Names): DiffLine[] {
-  const lines: DiffLine[] = [];
+export function timeOf(iso: string): string {
+  return clock.format(new Date(iso));
+}
 
-  for (const [field, change] of Object.entries(diff)) {
-    if (field === "permissions" && change && typeof change === "object") {
-      for (const [section, perm] of Object.entries(change as Record<string, unknown>)) {
-        const [before, after] = pair(perm);
-        const level = (v: unknown) => (typeof v === "string" ? (LEVELS[v] ?? v) : "Нет");
+/** «Сегодня» · «Вчера» · «18 октября 2026». */
+export function dayLabel(day: string, now: Date = new Date()): string {
+  if (day === dayKey(now.toISOString())) return "Сегодня";
+  if (day === dayKey(new Date(now.getTime() - 86_400_000).toISOString())) return "Вчера";
 
-        lines.push({ label: sections[section] ?? section, before: level(before), after: level(after) });
-      }
-      continue;
-    }
+  return longDay.format(new Date(`${day}T12:00:00+05:00`));
+}
 
-    const [before, after] = pair(change);
-    const show = (v: unknown) => (REFS.has(field) && typeof v === "string" ? (names[v] ?? "удалён") : plain(v));
+export type DayGroup<T> = { day: string; label: string; items: T[] };
 
-    lines.push({ label: FIELDS[field] ?? field, before: show(before), after: show(after) });
+/** Entries (newest first) grouped by calendar day, order kept. */
+export function groupByDay<T extends { at: string }>(items: T[], now: Date = new Date()): DayGroup<T>[] {
+  const groups: DayGroup<T>[] = [];
+
+  for (const item of items) {
+    const day = dayKey(item.at);
+    const last = groups.at(-1);
+
+    if (last?.day === day) last.items.push(item);
+    else groups.push({ day, label: dayLabel(day, now), items: [item] });
   }
 
-  return lines;
+  return groups;
 }

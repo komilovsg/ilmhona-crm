@@ -7,9 +7,11 @@ import { Input } from "@heroui/input";
 import clsx from "clsx";
 
 import { AppModal } from "@/components/AppModal";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useCourses, useInstructors, useRefreshEducation, useRooms } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
@@ -37,40 +39,83 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
   const { data: rooms = [] } = useRooms(branchId);
   const { data: instructors = [] } = useInstructors(branchId);
 
-  // A server error belongs to the values that were sent: any edit hides it (no stale error beside a new hint).
-  const sig = JSON.stringify([courseId, branchId, instructorId, roomId, start, end, weekdays, startTime, endTime, capacity, price]);
-  const error = failed?.sig === sig ? failed.message : null;
   const cap = Number(capacity);
   const problem = scheduleProblem({ start, end, startTime, endTime, weekdays });
   const valid =
     !!courseId && !!branchId && !!roomId && !!start && !!end && !problem && Number.isInteger(cap) && cap >= 1 && cap <= 100 && Number(price || 0) >= 0;
 
-  const save = useMutation({
-    mutationFn: () => {
-      const common = {
-        instructor_id: instructorId,
-        room_id: roomId,
-        start_date: start,
-        end_date: end,
-        weekdays,
-        start_time: startTime,
-        end_time: endTime,
-        capacity: cap,
-        price_month: price === "" ? undefined : String(Number(price)),
-      };
-
-      return cohort
-        ? api(`/api/v1/cohorts/${cohort.id}`, { method: "PATCH", body: common })
-        : api("/api/v1/cohorts", { method: "POST", body: { ...common, course_id: courseId, branch_id: branchId } });
-    },
-    onSuccess: () => {
-      void refresh();
-      notify(cohort ? "Поток сохранён" : "Поток создан");
-      onClose();
-    },
+  const values = {
+    instructor_id: instructorId,
+    room_id: roomId,
+    start_date: start,
+    end_date: end,
+    weekdays,
+    start_time: startTime,
+    end_time: endTime,
+    capacity: cap,
+    price_month: price === "" ? "" : String(Number(price)),
+  };
+  // A server error belongs to the values that were sent: any edit hides it, and so does a client hint.
+  const sig = JSON.stringify([courseId, branchId, values]);
+  const error = failed?.sig === sig ? failed.message : null;
+  const body = (v: Partial<typeof values>) => ({ ...v, price_month: v.price_month === "" ? undefined : v.price_month });
+  const done = () => {
+    void refresh();
+    notify(cohort ? "Поток сохранён" : "Поток создан");
+    onClose();
+  };
+  const create = useMutation({
+    mutationFn: () =>
+      api("/api/v1/cohorts", { method: "POST", body: { ...body(values), course_id: courseId, branch_id: branchId } }),
+    onSuccess: done,
     onError: (e) => setFailed({ message: messageOf(e), sig }),
   });
-  const submit = useSubmit(() => save.mutateAsync(), !valid);
+  const edit = useVersionedSave({
+    record: cohort,
+    values,
+    toValues: (c) => ({
+      instructor_id: c.instructor_id,
+      room_id: c.room_id as string | null,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      weekdays: c.weekdays,
+      start_time: c.start_time,
+      end_time: c.end_time,
+      capacity: c.capacity,
+      price_month: String(Number(c.price_month)),
+    }),
+    apply: (v) => {
+      setInstructorId(v.instructor_id);
+      setRoomId(v.room_id);
+      setStart(v.start_date);
+      setEnd(v.end_date);
+      setWeekdays(v.weekdays);
+      setStartTime(v.start_time);
+      setEndTime(v.end_time);
+      setCapacity(String(v.capacity));
+      setPrice(v.price_month);
+    },
+    request: (changed, version) =>
+      api(`/api/v1/cohorts/${cohort?.id}`, { method: "PATCH", body: body(changed), version }),
+    labels: {
+      instructor_id: "Инструктор",
+      room_id: "Аудитория",
+      start_date: "Начало",
+      end_date: "Конец",
+      weekdays: "Дни занятий",
+      start_time: "Время начала",
+      end_time: "Время конца",
+      capacity: "Мест в потоке",
+      price_month: "Цена в месяц",
+    },
+    show: {
+      instructor_id: (id: string | null) => instructors.find((i) => i.id === id)?.full_name ?? "Без инструктора",
+      room_id: (id: string | null) => rooms.find((r) => r.id === id)?.name ?? "—",
+      weekdays: (days: number[]) => days.map((d) => WEEKDAYS[d - 1]).join(", ") || "—",
+    },
+    onSaved: done,
+  });
+  const submit = useSubmit(() => (cohort ? edit.save(values) : create.mutateAsync()), !valid);
 
   const toggleDay = (day: number) =>
     setWeekdays((cur) => (cur.includes(day) ? cur.filter((d) => d !== day) : [...cur, day].sort()));
@@ -82,7 +127,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {cohort ? "Сохранить" : "Создать"}
           </LoadingButton>
         </>
@@ -209,12 +254,13 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             Если изменить даты, дни, время или аудиторию, будущие уроки пересоздаются. Прошедшие остаются как были.
           </p>
         )}
-        {error && (
+        {!problem && (error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {error ?? edit.error}
           </p>
         )}
       </form>
+      <ConflictDialog save={edit} />
     </AppModal>
   );
 }

@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.security import hash_password, temp_password
+from app.core.versioning import Version, check_version
 from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import AppUser, Branch, Role
 from app.permissions import SUPERADMIN_CODE
@@ -74,6 +75,7 @@ class UserUpdate(Strict):
 def user_out(u: AppUser, role: Role, branch_name: str | None) -> dict[str, Any]:
     return {
         "id": u.id,
+        "version": u.version,
         "login": u.login,
         "full_name": u.full_name,
         "phone": u.phone,
@@ -288,8 +290,11 @@ async def get_user(user_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
 
 
 @router.patch("/{user_id}")
-async def update_user(user_id: uuid.UUID, body: UserUpdate, p: Change, db: DB) -> dict[str, Any]:
+async def update_user(
+    user_id: uuid.UUID, body: UserUpdate, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
     u = await _load(db, p, user_id, touch=True)
+    await check_version(db, u, version, "app_user", lambda: _out(db, u))
     before = _snapshot(u)
     sent = body.model_fields_set
     if "full_name" in sent and body.full_name:

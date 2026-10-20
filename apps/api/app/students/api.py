@@ -18,6 +18,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.versioning import Version, check_version
 from app.education.errors import STUDENT_IN_USE
 from app.education.scope import branch_for_write, cohort_filters, student_filters, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -63,6 +64,7 @@ def _out(s: Student, branch: str, status: str, enrollments: int) -> dict[str, An
         "phone": s.phone,
         "branch_id": s.branch_id,
         "branch_name": branch,
+        "version": s.version,
         "status": status,
         "enrollments_count": enrollments,
         "created_at": s.created_at,
@@ -239,9 +241,14 @@ async def get_student(student_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
 
 @router.patch("/{student_id}")
 async def update_student(
-    student_id: uuid.UUID, body: StudentUpdate, p: Change, db: DB
+    student_id: uuid.UUID, body: StudentUpdate, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     student, branch = await _load(db, p, student_id)
+
+    async def current() -> dict[str, Any]:
+        return await _detail(db, p, student, branch)
+
+    await check_version(db, student, version, "student", current)
     before = _snapshot(student)
     sent = body.model_fields_set
     if "full_name" in sent and body.full_name:

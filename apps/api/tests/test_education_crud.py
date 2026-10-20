@@ -54,11 +54,12 @@ async def test_rooms_and_courses_crud(admin: httpx.AsyncClient) -> None:
         json={"name": "Bad", "default_price_month": "-1", "duration_months": 1, "format": "online"},
     )
     assert bad.status_code == 422
-    r = await admin.put(
+    r = await admin.patch(
         f"/api/v1/courses/{course['id']}",
         json={"name": "Python 2", "duration_months": 4, "format": "online"},
     )
     assert r.json()["name"] == "Python 2" and r.json()["format"] == "online"
+    assert (r.json()["direction"], r.json()["default_price_month"]) == ("IT", "450.50")  # PATCH
 
     # in use: cannot delete
     await make_cohort(admin, uuid_of(course), uuid_of(room))

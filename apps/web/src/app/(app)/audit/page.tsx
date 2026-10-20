@@ -1,63 +1,86 @@
 "use client";
 
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { Input } from "@heroui/input";
+import Link from "next/link";
 
-import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
-import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
+import { Bone } from "@/components/Skeletons";
+import { Pager } from "@/components/Pager";
 import { SelectField } from "@/components/SelectField";
-import { ListSkeleton } from "@/components/Skeletons";
+import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { diffLines, type Names } from "@/lib/audit";
-import { formatDateTime } from "@/lib/format";
+import { groupByDay, linkHref, timeOf } from "@/lib/audit";
 import type { AuditPage, AuditRow, Paged, UserRow } from "@/lib/types";
 
 const PAGE_SIZE = 25;
 
-const ENTITIES = [
-  { key: "app_user", label: "Пользователи" },
-  { key: "role", label: "Роли" },
-];
-
 const ACTIONS: Record<string, string> = {
   "auth.login": "Вход",
+  "auth.login_failed": "Неудачный вход",
+  "auth.locked": "Блокировка логина",
   "auth.change_password": "Смена пароля",
   "profile.update": "Правка профиля",
-  "user.create": "Создан пользователь",
-  "user.update": "Изменён пользователь",
-  "user.activate": "Активирован",
+  "student.create": "Студент создан",
+  "student.update": "Студент изменён",
+  "student.delete": "Студент удалён",
+  "enrollment.create": "Зачисление",
+  "enrollment.update": "Статус зачисления",
+  "enrollment.delete": "Студент убран из потока",
+  "cohort.create": "Поток создан",
+  "cohort.update": "Поток изменён",
+  "cohort.cancel": "Поток отменён",
+  "cohort.restore": "Поток восстановлен",
+  "cohort.delete": "Поток удалён",
+  "lesson.create": "Урок добавлен",
+  "lesson.move": "Урок перенесён",
+  "lesson.cancel": "Урок отменён",
+  "room.create": "Аудитория создана",
+  "room.update": "Аудитория изменена",
+  "room.delete": "Аудитория удалена",
+  "course.create": "Курс создан",
+  "course.update": "Курс изменён",
+  "course.delete": "Курс удалён",
+  "user.create": "Пользователь создан",
+  "user.update": "Пользователь изменён",
+  "user.activate": "Пользователь активирован",
   "user.reset_password": "Сброшен пароль",
-  "user.deactivate": "Заблокирован",
-  "user.delete": "Удалён пользователь",
-  "role.create": "Создана роль",
-  "role.update": "Изменена роль",
-  "role.delete": "Удалена роль",
+  "user.deactivate": "Пользователь заблокирован",
+  "user.delete": "Пользователь удалён",
+  "role.create": "Роль создана",
+  "role.update": "Роль изменена",
+  "role.delete": "Роль удалена",
 };
 
-type Filters = { user: string | null; entity: string | null; action: string | null };
+type Filters = {
+  from: string;
+  to: string;
+  section: string | null;
+  branch: string | null;
+  user: string | null;
+  action: string | null;
+  q: string;
+};
 
-function Diff({ diff, names, sections }: { diff: Record<string, unknown>; names: Names; sections: Names }) {
-  const lines = diffLines(diff, names, sections);
+const NO_FILTERS: Filters = { from: "", to: "", section: null, branch: null, user: null, action: null, q: "" };
 
-  if (!lines.length) return <span className="text-default-500">—</span>;
-
-  return (
-    <ul className="space-y-0.5 text-xs">
-      {lines.map((l, i) => (
-        <li key={i} className="break-words">
-          <span className="text-default-500">{l.label}:</span> {l.before} → {l.after}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) => void }) {
+function FilterFields({
+  filters,
+  set,
+  sections,
+}: {
+  filters: Filters;
+  set: (f: Filters) => void;
+  sections: Record<string, string>;
+}) {
+  const { data: me } = useMe();
+  const { data: branches = [] } = useBranches();
   const picker = useQuery({
     queryKey: ["users", "picker"],
     queryFn: () => api<Paged<UserRow>>("/api/v1/users", { params: { page_size: "100" } }),
@@ -65,9 +88,46 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
     // the audit page may be open to someone without the users section: the picker just stays empty
     retry: false,
   });
+  const sectionOptions = Object.entries(sections)
+    .filter(([key]) => ["auth", "students", "cohorts", "rooms", "users"].includes(key))
+    .map(([key, label]) => ({ key, label }));
 
   return (
     <>
+      <Input
+        className="md:w-44"
+        label="С даты"
+        placeholder=" "
+        type="date"
+        value={filters.from}
+        onValueChange={(from) => set({ ...filters, from })}
+      />
+      <Input
+        className="md:w-44"
+        label="По дату"
+        placeholder=" "
+        type="date"
+        value={filters.to}
+        onValueChange={(to) => set({ ...filters, to })}
+      />
+      <SelectField
+        allLabel="Все разделы"
+        className="md:w-48"
+        label="Раздел"
+        options={sectionOptions}
+        value={filters.section}
+        onChange={(section) => set({ ...filters, section })}
+      />
+      {!me?.branch && (
+        <SelectField
+          allLabel="Все филиалы"
+          className="md:w-48"
+          label="Филиал"
+          options={branches.map((b) => ({ key: b.id, label: b.name }))}
+          value={filters.branch}
+          onChange={(branch) => set({ ...filters, branch })}
+        />
+      )}
       <SelectField
         allLabel="Все пользователи"
         className="md:w-56"
@@ -75,14 +135,6 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         options={(picker.data?.items ?? []).map((u) => ({ key: u.id, label: u.full_name }))}
         value={filters.user}
         onChange={(user) => set({ ...filters, user })}
-      />
-      <SelectField
-        allLabel="Всё"
-        className="md:w-48"
-        label="Объект"
-        options={ENTITIES}
-        value={filters.entity}
-        onChange={(entity) => set({ ...filters, entity })}
       />
       <SelectField
         allLabel="Любое действие"
@@ -96,18 +148,46 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
   );
 }
 
+function Entry({ row }: { row: AuditRow }) {
+  const href = linkHref(row.link);
+  const body = (
+    <>
+      <span className="w-12 shrink-0 text-xs tabular-nums text-default-500 md:pt-0.5">{timeOf(row.at)}</span>
+      <span className="min-w-0 flex-1 break-words text-sm">{row.text}</span>
+    </>
+  );
+  const layout = "flex gap-3 max-md:flex-col max-md:gap-1";
+
+  return (
+    <li className="rounded-2xl bg-content1 md:rounded-none">
+      {href ? (
+        <Link className={`${layout} p-4 transition-colors hover:bg-default-100 md:py-3`} href={href}>
+          {body}
+        </Link>
+      ) : (
+        <div className={`${layout} p-4 md:py-3`}>{body}</div>
+      )}
+    </li>
+  );
+}
+
 export default function AuditPage() {
-  const [filters, setFilters] = useState<Filters>({ user: null, entity: null, action: null });
+  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const q = useDeferredValue(filters.q.trim());
   const list = useQuery({
-    queryKey: ["audit", filters, page],
+    queryKey: ["audit", { ...filters, q }, page],
     queryFn: () =>
       api<AuditPage>("/api/v1/audit", {
         params: {
+          date_from: filters.from || undefined,
+          date_to: filters.to || undefined,
+          section: filters.section ?? undefined,
+          branch_id: filters.branch ?? undefined,
           user_id: filters.user ?? undefined,
-          entity: filters.entity ?? undefined,
           action: filters.action ?? undefined,
+          q: q || undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
         },
@@ -119,83 +199,80 @@ export default function AuditPage() {
     setPage(1);
   };
   const rows = list.data?.items ?? [];
-  const activeFilters = Object.values(filters).filter(Boolean).length;
-  const names = list.data?.names ?? {};
   const sections = list.data?.sections ?? {};
-  const who = (r: AuditRow) => r.user_name ?? "Система";
-  // «Изменён пользователь · Камол»: the action plus the entity it touched
-  const what = (r: AuditRow) => {
-    const target = r.entity_id ? names[r.entity_id] : undefined;
-    const action = ACTIONS[r.action] ?? r.action;
-
-    return target ? `${action} · ${target}` : action;
-  };
+  const activeFilters = Object.entries(filters).filter(([k, v]) => k !== "q" && v).length;
+  const groups = groupByDay(rows);
 
   return (
     <>
       <PageHeader
         actions={
           <ExportButton
-            params={{ user_id: filters.user, entity: filters.entity, action: filters.action }}
+            params={{
+              date_from: filters.from,
+              date_to: filters.to,
+              section: filters.section,
+              branch_id: filters.branch,
+              user_id: filters.user,
+              action: filters.action,
+              q,
+            }}
             path="/api/v1/audit/export"
           />
         }
         title="Журнал"
       />
       <div className="mb-4 flex items-center gap-3">
-        <div className="hidden gap-3 md:flex">
-          <FilterFields filters={filters} set={set} />
-        </div>
+        <Input
+          isClearable
+          className="min-w-0 flex-1 md:max-w-sm"
+          label="Поиск"
+          startContent={<Icon name="search" size={18} />}
+          value={filters.q}
+          onClear={() => set({ ...filters, q: "" })}
+          onValueChange={(v) => set({ ...filters, q: v })}
+        />
         <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
+      </div>
+      <div className="mb-4 hidden flex-wrap gap-3 md:flex">
+        <FilterFields filters={filters} set={set} sections={sections} />
+        {activeFilters > 0 && (
+          <Button variant="light" onPress={() => set({ ...NO_FILTERS, q: filters.q })}>
+            Сбросить
+          </Button>
+        )}
       </div>
 
       <QueryState
         empty={<EmptyState title="Записей нет" />}
         isEmpty={(d) => d.items.length === 0}
         query={list}
-        skeleton={<ListSkeleton cols={4} />}
+        skeleton={
+          <div>
+            <Bone className="mb-2 h-5 w-24" />
+            <ul className="divide-y divide-divider overflow-hidden rounded-2xl bg-content1">
+              {Array.from({ length: 8 }, (_, i) => (
+                <li key={i} className="px-4 py-3">
+                  <Bone className="h-5 w-2/3" />
+                </li>
+              ))}
+            </ul>
+          </div>
+        }
       >
         <>
-          <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-divider text-xs text-default-500">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Время</th>
-                  <th className="px-4 py-3 font-medium">Кто</th>
-                  <th className="px-4 py-3 font-medium">Действие</th>
-                  <th className="px-4 py-3 font-medium">Что изменилось</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-divider align-top last:border-0">
-                    <td className="whitespace-nowrap px-4 py-3 text-default-600">{formatDateTime(r.at)}</td>
-                    <td className="px-4 py-3">{who(r)}</td>
-                    <td className="px-4 py-3">{what(r)}</td>
-                    <td className="px-4 py-3">
-                      <Diff diff={r.diff} names={names} sections={sections} />
-                    </td>
-                  </tr>
+          {groups.map((g) => (
+            <section key={g.day} className="mb-5">
+              <h2 className="mb-2 text-sm font-medium text-default-600">{g.label}</h2>
+              <ul className="space-y-2 md:divide-y md:divide-divider md:space-y-0 md:overflow-hidden md:rounded-2xl md:bg-content1">
+                {g.items.map((r) => (
+                  <Entry key={r.id} row={r} />
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <ul className="space-y-3 md:hidden">
-            {rows.map((r) => (
-              <li key={r.id} className="rounded-2xl bg-content1 p-4">
-                <div className="flex justify-between gap-2 text-xs text-default-500">
-                  <span>{formatDateTime(r.at)}</span>
-                  <span>{who(r)}</span>
-                </div>
-                <div className="mt-1 font-medium">{what(r)}</div>
-                <div className="mt-2">
-                  <Diff diff={r.diff} names={names} sections={sections} />
-                </div>
-              </li>
-            ))}
-          </ul>
+              </ul>
+            </section>
+          ))}
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
       </QueryState>
@@ -206,10 +283,10 @@ export default function AuditPage() {
             <>
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
-                <FilterFields filters={filters} set={set} />
+                <FilterFields filters={filters} set={set} sections={sections} />
               </DrawerBody>
               <DrawerFooter>
-                <Button variant="light" onPress={() => set({ user: null, entity: null, action: null })}>
+                <Button variant="light" onPress={() => set({ ...NO_FILTERS, q: filters.q })}>
                   Сбросить
                 </Button>
                 <Button color="primary" onPress={close}>

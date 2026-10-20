@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@heroui/input";
 
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { PasswordField } from "@/components/PasswordField";
 import { ME_KEY, useMe } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
-import { notify, notifyError } from "@/lib/toast";
+import { notify } from "@/lib/toast";
 import type { Me } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
 
@@ -18,20 +20,25 @@ function ProfileForm({ me }: { me: Me }) {
   const [fullName, setFullName] = useState(me.full_name);
   const [phone, setPhone] = useState(me.phone ?? "");
   const [email, setEmail] = useState(me.email ?? "");
-  const save = useMutation({
-    mutationFn: () =>
-      api<Me>("/api/v1/auth/me", {
-        method: "PATCH",
-        body: { full_name: fullName, phone: phone || null, email: email || null },
-      }),
-    onSuccess: (updated) => {
-      queryClient.setQueryData(ME_KEY, updated);
+  const values = { full_name: fullName.trim(), phone: phone.trim() || null, email: email.trim() || null };
+  const save = useVersionedSave({
+    record: me,
+    values,
+    toValues: (m) => ({ full_name: m.full_name, phone: m.phone, email: m.email }),
+    apply: (v) => {
+      setFullName(v.full_name);
+      setPhone(v.phone ?? "");
+      setEmail(v.email ?? "");
+    },
+    request: (changed, version) => api<Me>("/api/v1/auth/me", { method: "PATCH", body: changed, version }),
+    labels: { full_name: "ФИО", phone: "Телефон", email: "Email" },
+    onSaved: (updated) => {
+      if (updated) queryClient.setQueryData(ME_KEY, updated);
       notify("Профиль сохранён");
     },
-    onError: notifyError,
   });
 
-  const submit = useSubmit(() => save.mutateAsync());
+  const submit = useSubmit(() => save.save(values));
 
   return (
     <form
@@ -46,9 +53,15 @@ function ProfileForm({ me }: { me: Me }) {
       <p className="text-xs text-default-500">
         Роль: {me.role.name} · {me.branch ? me.branch.name : "все филиалы"}
       </p>
-      <LoadingButton color="primary" isDisabled={!fullName.trim()} isLoading={save.isPending} type="submit">
+      {save.error && (
+        <p className="text-sm text-danger" role="alert">
+          {save.error}
+        </p>
+      )}
+      <LoadingButton color="primary" isDisabled={!fullName.trim()} isLoading={save.pending} type="submit">
         Сохранить
       </LoadingButton>
+      <ConflictDialog save={save} />
     </form>
   );
 }
@@ -128,7 +141,7 @@ export default function ProfilePage() {
       <PageHeader title="Профиль" />
       {me && (
         <div className="grid gap-5 md:grid-cols-2">
-          <ProfileForm key={me.id + me.full_name} me={me} />
+          <ProfileForm key={me.id} me={me} />
           <PasswordForm />
         </div>
       )}

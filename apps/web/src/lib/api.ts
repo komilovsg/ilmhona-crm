@@ -18,7 +18,13 @@ export function messageOf(error: unknown): string {
   return isApiError(error) ? errorText(error.code, error.params) : errorText(undefined);
 }
 
-type Options = { method?: string; body?: unknown; params?: Record<string, string | undefined> };
+type Options = {
+  method?: string;
+  body?: unknown;
+  params?: Record<string, string | undefined>;
+  /** The version of the record being edited (#25): sent as `If-Match`; an older one is a 409. */
+  version?: number;
+};
 
 let refreshing: Promise<boolean> | null = null;
 
@@ -52,7 +58,7 @@ const AUTH_PATHS = ["/api/v1/auth/login", "/api/v1/auth/refresh", "/api/v1/auth/
  * pending temporary password to /change-password.
  */
 export async function api<T = void>(path: string, options: Options = {}, retried = false): Promise<T> {
-  const { method = "GET", body, params } = options;
+  const { method = "GET", body, params, version } = options;
   const query = new URLSearchParams(
     Object.entries(params ?? {}).filter((e): e is [string, string] => !!e[1]),
   ).toString();
@@ -60,6 +66,7 @@ export async function api<T = void>(path: string, options: Options = {}, retried
 
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET") headers["X-Requested-With"] = "ilm";
+  if (version !== undefined) headers["If-Match"] = String(version);
 
   let response: Response;
   const done = trackRequest();

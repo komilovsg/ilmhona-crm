@@ -6,9 +6,11 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { AppModal } from "@/components/AppModal";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
@@ -26,19 +28,30 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
   const size = Number(capacity);
   const valid = name.trim() && Number.isInteger(size) && size >= 1 && size <= 100 && (room || branchId);
 
-  const save = useMutation({
-    mutationFn: () =>
-      room
-        ? api(`/api/v1/rooms/${room.id}`, { method: "PATCH", body: { name, capacity: size } })
-        : api("/api/v1/rooms", { method: "POST", body: { name, capacity: size, branch_id: branchId } }),
-    onSuccess: () => {
-      void refresh();
-      notify(room ? "Аудитория сохранена" : "Аудитория добавлена");
-      onClose();
-    },
+  const values = { name: name.trim(), capacity: size };
+  const done = () => {
+    void refresh();
+    notify(room ? "Аудитория сохранена" : "Аудитория добавлена");
+    onClose();
+  };
+  const create = useMutation({
+    mutationFn: () => api("/api/v1/rooms", { method: "POST", body: { ...values, branch_id: branchId } }),
+    onSuccess: done,
     onError: (e) => setError(messageOf(e)),
   });
-  const submit = useSubmit(() => save.mutateAsync(), !valid);
+  const edit = useVersionedSave({
+    record: room,
+    values,
+    toValues: (r) => ({ name: r.name, capacity: r.capacity }),
+    apply: (v) => {
+      setName(v.name);
+      setCapacity(String(v.capacity));
+    },
+    request: (changed, version) => api(`/api/v1/rooms/${room?.id}`, { method: "PATCH", body: changed, version }),
+    labels: { name: "Название", capacity: "Вместимость" },
+    onSaved: done,
+  });
+  const submit = useSubmit(() => (room ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
     <AppModal
@@ -47,7 +60,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {room ? "Сохранить" : "Добавить"}
           </LoadingButton>
         </>
@@ -80,12 +93,13 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           value={capacity}
           onValueChange={setCapacity}
         />
-        {error && (
+        {(error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {error ?? edit.error}
           </p>
         )}
       </form>
+      <ConflictDialog save={edit} />
     </AppModal>
   );
 }
@@ -102,28 +116,53 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
   const p = Number(price);
   const valid = name.trim() && format && Number.isInteger(m) && m >= 1 && m <= 36 && p >= 0;
 
-  const save = useMutation({
-    mutationFn: () => {
-      const body = {
-        name,
-        direction: direction.trim() || null,
-        default_price_month: String(p),
-        duration_months: m,
-        format,
-      };
-
-      return course
-        ? api(`/api/v1/courses/${course.id}`, { method: "PUT", body })
-        : api("/api/v1/courses", { method: "POST", body });
-    },
-    onSuccess: () => {
-      void refresh();
-      notify(course ? "Курс сохранён" : "Курс добавлен");
-      onClose();
-    },
+  const values = {
+    name: name.trim(),
+    direction: direction.trim() || null,
+    default_price_month: String(p),
+    duration_months: m,
+    format,
+  };
+  const done = () => {
+    void refresh();
+    notify(course ? "Курс сохранён" : "Курс добавлен");
+    onClose();
+  };
+  const create = useMutation({
+    mutationFn: () => api("/api/v1/courses", { method: "POST", body: values }),
+    onSuccess: done,
     onError: (e) => setError(messageOf(e)),
   });
-  const submit = useSubmit(() => save.mutateAsync(), !valid);
+  const edit = useVersionedSave({
+    record: course,
+    values,
+    toValues: (c) => ({
+      name: c.name,
+      direction: c.direction,
+      default_price_month: String(Number(c.default_price_month)),
+      duration_months: c.duration_months,
+      format: c.format as string | null,
+    }),
+    apply: (v) => {
+      setName(v.name);
+      setDirection(v.direction ?? "");
+      setPrice(v.default_price_month);
+      setMonths(String(v.duration_months));
+      setFormat(v.format);
+    },
+    request: (changed, version) =>
+      api(`/api/v1/courses/${course?.id}`, { method: "PATCH", body: changed, version }),
+    labels: {
+      name: "Название",
+      direction: "Направление",
+      default_price_month: "Цена в месяц",
+      duration_months: "Месяцев",
+      format: "Формат",
+    },
+    show: { format: (f: string | null) => (f === "online" ? "Онлайн" : "Офлайн") },
+    onSaved: done,
+  });
+  const submit = useSubmit(() => (course ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
     <AppModal
@@ -132,7 +171,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
             {course ? "Сохранить" : "Добавить"}
           </LoadingButton>
         </>
@@ -168,12 +207,13 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
           />
           <Input label="Месяцев" max={36} min={1} type="number" value={months} onValueChange={setMonths} />
         </div>
-        {error && (
+        {(error ?? edit.error) && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {error ?? edit.error}
           </p>
         )}
       </form>
+      <ConflictDialog save={edit} />
     </AppModal>
   );
 }

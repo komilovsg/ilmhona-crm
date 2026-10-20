@@ -215,3 +215,12 @@ async def test_rooms_list_agrees_with_ui_for_instructor(
     assert (await admin.get("/api/v1/rooms")).status_code == 200
     mgr = await login_as("mgr", "manager", branch="Душанбе")
     assert (await mgr.get("/api/v1/rooms")).status_code == 200
+
+
+async def test_export_reads_as_a_sentence_in_the_audit(admin: httpx.AsyncClient) -> None:
+    await make_student("Ali")
+    await admin.get(f"{STUDENTS}/export", params={"q": "ali"})
+    items = (await admin.get("/api/v1/audit", params={"action": "export"})).json()["items"]
+    assert [i["text"] for i in items] == [
+        "User root — выгрузка в Excel: студенты, 1 строка (фильтры: поиск ali)"
+    ]

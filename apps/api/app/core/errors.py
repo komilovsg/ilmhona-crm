@@ -60,6 +60,9 @@ NOT_AUTHENTICATED = errors.define("not_authenticated", 401, "No valid session")
 FORBIDDEN = errors.define("forbidden", 403, "Not allowed")
 CSRF_HEADER_MISSING = errors.define("csrf_header_missing", 403, "Missing X-Requested-With header")
 CONCURRENT_CHANGE = errors.define("concurrent_change", 409, "Changed by someone else, retry")
+# params: version (current), changed_by, changed_at (last audit entry of the row), current (record)
+STALE_VERSION = errors.define("stale_version", 409, "Changed by someone else since it was loaded")
+VERSION_REQUIRED = errors.define("version_required", 428, "If-Match header with the version")
 _BY_STATUS = {e.status: e for e in (BAD_REQUEST, NOT_FOUND, METHOD_NOT_ALLOWED)}
 
 

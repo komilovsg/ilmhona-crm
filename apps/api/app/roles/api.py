@@ -18,6 +18,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, permissions_of, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import CONCURRENT_CHANGE, FORBIDDEN, NOT_FOUND, DomainError, errors
+from app.core.versioning import Version, check_version, touch
 from app.export import Col, xlsx_response
 from app.models import AppUser, Role, RolePermission
 from app.permissions import LEVELS, SECTIONS, SUPERADMIN_CODE
@@ -67,6 +68,7 @@ async def _out(db: AsyncSession, role: Role) -> dict[str, Any]:
     ).scalar_one()
     return {
         "id": role.id,
+        "version": role.version,
         "name": role.name,
         "code": role.code,
         "is_system": role.is_system,
@@ -165,8 +167,11 @@ async def create_role(body: RoleIn, p: Change, db: DB) -> dict[str, Any]:
 
 
 @router.put("/{role_id}")
-async def update_role(role_id: uuid.UUID, body: RoleIn, p: Change, db: DB) -> dict[str, Any]:
+async def update_role(
+    role_id: uuid.UUID, body: RoleIn, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
     role = await _get(db, role_id)
+    await check_version(db, role, version, "role", lambda: _out(db, role))
     if role.code == SUPERADMIN_CODE:
         raise DomainError(ROLE_LOCKED)
     # Rights the role already has must be covered too, or a user could strip a role above them.
@@ -190,13 +195,14 @@ async def update_role(role_id: uuid.UUID, body: RoleIn, p: Change, db: DB) -> di
         for s, lvl in body.permissions.items()
         if s not in have
     )
-    await db.flush()
     diff: dict[str, Any] = {}
     if old_name != role.name:
         diff["name"] = [old_name, role.name]
     perm_diff = diff_of(before, body.permissions)
     if perm_diff:
         diff["permissions"] = perm_diff
+        touch(role)  # the matrix lives in role_permission: the role row moves on explicitly
+    await db.flush()
     await record(db, p.id, "role.update", "role", role.id, diff)
     return await _out(db, role)
 

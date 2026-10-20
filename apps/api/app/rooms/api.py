@@ -20,7 +20,8 @@ from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts.status import TZ
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, VALIDATION_FAILED, DomainError
-from app.education.errors import COURSE_IN_USE, ROOM_IN_USE
+from app.core.versioning import Version, check_version
+from app.education.errors import COURSE_GLOBAL_ONLY, COURSE_IN_USE, ROOM_IN_USE
 from app.education.scope import RoomReader, branch_for_write, cohort_filters, writer
 from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import AppUser, Branch, Cohort, Course, Lesson, Room
@@ -28,6 +29,16 @@ from app.models import AppUser, Branch, Cohort, Course, Lesson, Room
 router = APIRouter(prefix="/api/v1", tags=["rooms"], dependencies=[Depends(require_csrf_header)])
 
 Change = Annotated[Principal, writer("rooms")]
+
+
+async def _course_writer(p: Change) -> Principal:
+    """Courses are shared by both branches: only users without a branch write them."""
+    if p.branch_id is not None:
+        raise DomainError(COURSE_GLOBAL_ONLY)
+    return p
+
+
+CourseChange = Annotated[Principal, Depends(_course_writer)]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Direction = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
@@ -57,9 +68,22 @@ class CourseIn(Strict):
     format: Literal["offline", "online"]
 
 
+class CourseUpdate(Strict):
+    """Only the fields present change (`direction: null` clears it)."""
+
+    name: Name | None = None
+    direction: Direction | None = None
+    default_price_month: Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)] | None = (
+        None
+    )
+    duration_months: Annotated[int, Field(ge=1, le=36)] | None = None
+    format: Literal["offline", "online"] | None = None
+
+
 def room_out(r: Room, branch_name: str) -> dict[str, Any]:
     return {
         "id": r.id,
+        "version": r.version,
         "branch_id": r.branch_id,
         "branch_name": branch_name,
         "name": r.name,
@@ -70,6 +94,7 @@ def room_out(r: Room, branch_name: str) -> dict[str, Any]:
 def course_out(c: Course) -> dict[str, Any]:
     return {
         "id": c.id,
+        "version": c.version,
         "name": c.name,
         "direction": c.direction,
         "default_price_month": c.default_price_month,
@@ -263,8 +288,15 @@ async def create_room(body: RoomCreate, p: Change, db: DB) -> dict[str, Any]:
 
 
 @router.patch("/rooms/{room_id}")
-async def update_room(room_id: uuid.UUID, body: RoomUpdate, p: Change, db: DB) -> dict[str, Any]:
+async def update_room(
+    room_id: uuid.UUID, body: RoomUpdate, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
     room, branch_name = await _room(db, p, room_id)
+
+    async def current() -> dict[str, Any]:
+        return room_out(room, branch_name)
+
+    await check_version(db, room, version, "room", current)
     before = {"name": room.name, "capacity": room.capacity}
     if body.name is not None:
         room.name = body.name
@@ -331,6 +363,10 @@ async def export_courses(p: Annotated[Principal, require("rooms", "view")], db: 
     )
 
 
+async def _async(value: dict[str, Any]) -> dict[str, Any]:
+    return value
+
+
 def _course_snapshot(c: Course) -> dict[str, Any]:
     return {
         "name": c.name,
@@ -342,7 +378,7 @@ def _course_snapshot(c: Course) -> dict[str, Any]:
 
 
 @router.post("/courses", status_code=201)
-async def create_course(body: CourseIn, p: Change, db: DB) -> dict[str, Any]:
+async def create_course(body: CourseIn, p: CourseChange, db: DB) -> dict[str, Any]:
     course = Course(**body.model_dump())
     db.add(course)
     await db.flush()
@@ -352,14 +388,19 @@ async def create_course(body: CourseIn, p: Change, db: DB) -> dict[str, Any]:
     return course_out(course)
 
 
-@router.put("/courses/{course_id}")
-async def update_course(course_id: uuid.UUID, body: CourseIn, p: Change, db: DB) -> dict[str, Any]:
+@router.patch("/courses/{course_id}")
+async def update_course(
+    course_id: uuid.UUID, body: CourseUpdate, version: Version, p: CourseChange, db: DB
+) -> dict[str, Any]:
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)
+    await check_version(db, course, version, "course", lambda: _async(course_out(course)))
     before = _course_snapshot(course)
-    for field, value in body.model_dump().items():
-        setattr(course, field, value)
+    for field in body.model_fields_set:
+        value = getattr(body, field)
+        if value is not None or field == "direction":  # NOT NULL columns ignore an explicit null
+            setattr(course, field, value)
     await db.flush()
     await record(
         db, p.id, "course.update", "course", course.id, diff_of(before, _course_snapshot(course))
@@ -368,7 +409,7 @@ async def update_course(course_id: uuid.UUID, body: CourseIn, p: Change, db: DB)
 
 
 @router.delete("/courses/{course_id}", status_code=204)
-async def delete_course(course_id: uuid.UUID, p: Change, db: DB) -> None:
+async def delete_course(course_id: uuid.UUID, p: CourseChange, db: DB) -> None:
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)

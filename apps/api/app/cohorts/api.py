@@ -23,6 +23,7 @@ from app.cohorts import status as st
 from app.cohorts.schedule import check_room_free, generate_lessons, local_dt
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
+from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
     COHORT_FULL,
@@ -204,6 +205,7 @@ def _out(
 ) -> dict[str, Any]:
     return {
         "id": c.id,
+        "version": c.version,
         "code": c.code,
         "course_id": c.course_id,
         "course_name": course,
@@ -461,9 +463,10 @@ _SCHEDULE_FIELDS = ("start_date", "end_date", "weekdays", "start_time", "end_tim
 
 @router.patch("/cohorts/{cohort_id}")
 async def update_cohort(
-    cohort_id: uuid.UUID, body: CohortUpdate, p: Change, db: DB
+    cohort_id: uuid.UUID, body: CohortUpdate, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     cohort = await _load(db, p, cohort_id)
+    await check_version(db, cohort, version, "cohort", lambda: _detail(db, cohort.id))
     if cohort.status == st.CANCELLED:
         raise DomainError(COHORT_CLOSED)
     before = _snapshot(cohort)
@@ -594,6 +597,7 @@ async def delete_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> None:
 def _lesson_out(le: Lesson, room: str) -> dict[str, Any]:
     return {
         "id": le.id,
+        "version": le.version,
         "cohort_id": le.cohort_id,
         "room_id": le.room_id,
         "room_name": room,
@@ -715,8 +719,11 @@ async def _lesson(db: AsyncSession, p: Principal, lesson_id: uuid.UUID) -> tuple
 
 
 @router.patch("/lessons/{lesson_id}")
-async def move_lesson(lesson_id: uuid.UUID, body: LessonMove, p: Change, db: DB) -> dict[str, Any]:
+async def move_lesson(
+    lesson_id: uuid.UUID, body: LessonMove, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
     lesson, cohort = await _lesson(db, p, lesson_id)
+    await check_version(db, lesson, version, "lesson", lambda: _lesson_detail(db, lesson.id))
     if lesson.cancelled:
         raise DomainError(LESSON_CANCELLED)
     if cohort.status == st.CANCELLED:
@@ -777,6 +784,7 @@ async def cancel_lesson(lesson_id: uuid.UUID, p: Change, db: DB) -> dict[str, An
 def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
     return {
         "id": e.id,
+        "version": e.version,
         "cohort_id": e.cohort_id,
         "student_id": s.id,
         "student_name": s.full_name,
@@ -902,9 +910,12 @@ async def _enrollment(
 
 @router.patch("/enrollments/{enrollment_id}")
 async def set_enrollment_status(
-    enrollment_id: uuid.UUID, body: EnrollmentStatus, p: Change, db: DB
+    enrollment_id: uuid.UUID, body: EnrollmentStatus, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
+    await check_version(
+        db, enrollment, version, "enrollment", lambda: _enrollment_out(enrollment, student)
+    )
     if body.status == "активный" and cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)  # #11: a finished cohort has no active students
     before = enrollment.status

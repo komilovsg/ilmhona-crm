@@ -15,6 +15,7 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
+import { useMe } from "@/hooks/queries";
 import { useCanChange, useCourses, useRefreshEducation, useRooms } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/education";
@@ -169,6 +170,9 @@ function CoursesList({ canChange, onEdit, onDelete }: { canChange: boolean; onEd
 export default function RoomsPage() {
   const refresh = useRefreshEducation();
   const canChange = useCanChange("rooms");
+  const { data: me } = useMe();
+  // courses are shared by both branches: only users without a branch write them (the API says 403)
+  const canChangeCourses = canChange && !me?.branch;
   const [tab, setTab] = useState<Tab>("schedule");
   const [roomForm, setRoomForm] = useState<Room | "new" | null>(null);
   const [courseForm, setCourseForm] = useState<Course | "new" | null>(null);
@@ -195,7 +199,7 @@ export default function RoomsPage() {
           <>
             {tab === "rooms" && <ExportButton path="/api/v1/rooms/export" />}
             {tab === "courses" && <ExportButton path="/api/v1/courses/export" />}
-            {canChange && tab !== "schedule" && (
+            {(tab === "courses" ? canChangeCourses : canChange) && tab !== "schedule" && (
               <Button
                 color="primary"
                 startContent={<Icon name="plus" size={18} />}
@@ -224,7 +228,7 @@ export default function RoomsPage() {
         <RoomsList canChange={canChange} onDelete={(item) => setRemoval({ kind: "room", item })} onEdit={setRoomForm} />
       )}
       {tab === "courses" && (
-        <CoursesList canChange={canChange} onDelete={(item) => setRemoval({ kind: "course", item })} onEdit={setCourseForm} />
+        <CoursesList canChange={canChangeCourses} onDelete={(item) => setRemoval({ kind: "course", item })} onEdit={setCourseForm} />
       )}
 
       {roomForm && <RoomFormModal room={roomForm === "new" ? null : roomForm} onClose={() => setRoomForm(null)} />}

@@ -20,7 +20,7 @@ import { PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { telHref } from "@/lib/format";
+import { dushanbeDay, telHref } from "@/lib/format";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
 
@@ -184,7 +184,7 @@ export default function StudentsPage() {
                       <PersonStatus status={s.status} />
                     </td>
                     <td className="px-4 py-3">{s.enrollments_count}</td>
-                    <td className="px-4 py-3 text-default-600">{fullDate(s.created_at.slice(0, 10))}</td>
+                    <td className="px-4 py-3 text-default-600">{fullDate(dushanbeDay(s.created_at))}</td>
                   </tr>
                 ))}
               </tbody>

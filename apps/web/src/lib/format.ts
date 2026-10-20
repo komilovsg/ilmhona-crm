@@ -7,6 +7,13 @@ export function formatDateTime(iso: string | null | undefined): string {
   return iso ? dateTime.format(new Date(iso)) : "—";
 }
 
+const day = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+
+/** `YYYY-MM-DD` of a timestamp in Asia/Dushanbe (never `iso.slice(0, 10)`: that is the UTC day). */
+export function dushanbeDay(iso: string): string {
+  return day.format(new Date(iso));
+}
+
 export function formatDate(iso: string | null | undefined): string {
   return iso ? date.format(new Date(iso)) : "—";
 }

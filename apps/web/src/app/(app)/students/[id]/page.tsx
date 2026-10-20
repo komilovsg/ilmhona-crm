@@ -15,7 +15,7 @@ import { DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
-import { telHref } from "@/lib/format";
+import { dushanbeDay, telHref } from "@/lib/format";
 import { fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -81,7 +81,7 @@ export default function StudentPage() {
             <PersonStatus status={s.status} />
           </div>
           <p className="mt-1 text-sm text-default-600">
-            {s.branch_name} · добавлен {fullDate(s.created_at.slice(0, 10))}
+            {s.branch_name} · добавлен {fullDate(dushanbeDay(s.created_at))}
             {s.gender && ` · ${s.gender === "male" ? "мужской" : "женский"}`}
           </p>
           {s.phone && (
