@@ -277,6 +277,16 @@ async def _check_instructor(
         raise DomainError(INSTRUCTOR_INVALID)
 
 
+async def _default_rate(db: AsyncSession, instructor_id: uuid.UUID | None) -> Decimal:
+    """A cohort starts with its instructor's default rate (editable per cohort afterwards)."""
+    if instructor_id is None:
+        return Decimal("0.00")
+    rate = (
+        await db.execute(select(AppUser.default_rate).where(AppUser.id == instructor_id))
+    ).scalar_one()
+    return Decimal(rate)
+
+
 async def _room_in_branch(
     db: AsyncSession, p: Principal, room_id: uuid.UUID, branch_id: uuid.UUID
 ) -> Room:
@@ -434,6 +444,7 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
         end_time=body.end_time,
         capacity=body.capacity,
         price_month=course.default_price_month if body.price_month is None else body.price_month,
+        instructor_rate=await _default_rate(db, body.instructor_id),
         status=st.status_for(body.start_date, body.end_date, st.today()),
     )
     db.add(cohort)
@@ -470,6 +481,7 @@ async def update_cohort(
     if cohort.status == st.CANCELLED:
         raise DomainError(COHORT_CLOSED)
     before = _snapshot(cohort)
+    rate_before = cohort.instructor_rate
     sent = body.model_fields_set
     schedule_before = {f: getattr(cohort, f) for f in _SCHEDULE_FIELDS}
     for field in ("start_date", "end_date", "capacity"):
@@ -495,6 +507,7 @@ async def update_cohort(
     if "instructor_id" in sent and body.instructor_id != cohort.instructor_id:
         await _check_instructor(db, body.instructor_id, cohort.branch_id)
         cohort.instructor_id = body.instructor_id
+        cohort.instructor_rate = await _default_rate(db, body.instructor_id)
     lessons_note: list[int] | None = None
     if {f: getattr(cohort, f) for f in _SCHEDULE_FIELDS} != schedule_before:
         # Past lessons stay, and so does any lesson with marks; the rest ahead is rebuilt.
@@ -515,6 +528,8 @@ async def update_cohort(
     cohort.updated_at = _now()
     await db.flush()
     diff = diff_of(before, _snapshot(cohort))
+    if rate_before != cohort.instructor_rate:
+        diff["instructor_rate"] = [str(rate_before), str(cohort.instructor_rate)]
     if lessons_note:
         diff["future_lessons"] = lessons_note
     await record(db, p.id, "cohort.update", "cohort", cohort.id, diff, branch_id=cohort.branch_id)

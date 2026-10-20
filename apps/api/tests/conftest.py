@@ -55,6 +55,8 @@ async def clean(migrated_database: None) -> None:
     """Every test starts with the seeded branches and system roles only."""
     async with sessionmaker() as db:
         for sql in (
+            "DELETE FROM instructor_payout",
+            "DELETE FROM payment",
             "DELETE FROM attendance",
             "DELETE FROM grade",
             "DELETE FROM lesson",
@@ -85,6 +87,9 @@ TABLES = {
     "students": "student",
     "lessons": "lesson",
     "enrollments": "enrollment",
+    "payments": "payment",
+    "payouts": "instructor_payout",
+    "instructors": "app_user",
 }
 
 
@@ -103,6 +108,10 @@ class Browser(httpx.AsyncClient):
             kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
+            return
+        if parts[-1] == "rate":  # /salaries/cohorts/<id>/rate edits the cohort row
+            rows = await sql("SELECT version FROM cohort WHERE id = :i", i=parts[-2])
+            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
             return
         if parts[-1] == "me":
             version = (await self.get(url)).json()["version"]

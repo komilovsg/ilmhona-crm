@@ -27,6 +27,8 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "cohorts": ("cohort", "lesson", "enrollment"),
     "rooms": ("room", "course"),
     "users": ("app_user", "role"),
+    "payments": ("payment",),
+    "instructors": ("instructor_payout",),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -68,7 +70,17 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "lesson.create": ("добавлен", "урок потока"),
     "lesson.move": ("перенесён", "урок потока"),
     "lesson.cancel": ("отменён", "урок потока"),
+    "payment.create": ("создана", "оплата"),
+    "payment.update": ("изменена", "оплата"),
+    "payment.delete": ("удалена", "оплата"),
+    "payment.confirm": ("подтверждена", "оплата"),
+    "payment.unconfirm": ("снято подтверждение", "оплаты"),
+    "payout.create": ("отмечена", "выплата"),
+    "payout.update": ("изменена", "выплата"),
+    "payout.delete": ("удалена", "выплата"),
 }
+# creations that also read their values: «создана оплата … — сумма 500 TJS, способ alif»
+WITH_VALUES = {"payment.create", "payout.create"}
 
 # table (the `entity` of an `export` entry) -> Russian name
 TABLES: dict[str, str] = {
@@ -81,6 +93,11 @@ TABLES: dict[str, str] = {
     "cohort": "потоки",
     "enrollment": "студенты потока",
     "student": "студенты",
+    "payment": "оплаты",
+    "debtor": "должники",
+    "salary": "график выплат",
+    "instructor_payout": "выплаты",
+    "instructor": "инструкторы",
 }
 FILTERS = {
     "q": "поиск",
@@ -95,8 +112,12 @@ FILTERS = {
     "entity": "объект",
     "entity_id": "ID объекта",
     "action": "действие",
+    "status": "статус",
+    "method": "способ",
+    "month": "месяц",
+    "instructor_id": "инструктор",
 }
-MONEY = {"default_price_month", "price_month"}
+MONEY = {"default_price_month", "price_month", "amount", "default_rate", "instructor_rate"}
 
 FIELDS: dict[str, str] = {
     "login": "логин",
@@ -132,6 +153,13 @@ FIELDS: dict[str, str] = {
     "lessons": "уроки",
     "homework": "Д/З",
     "final": "финал",
+    "month_no": "месяц",
+    "amount": "сумма",
+    "method": "способ",
+    "paid_at": "дата оплаты",
+    "note": "заметка",
+    "default_rate": "ставка по умолчанию",
+    "instructor_rate": "ставка инструктора",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -345,5 +373,6 @@ def sentence(
     if a in ACTIONS:
         verb, what = ACTIONS[a]
         head = f"{who}: {verb} {what}{_tail(lab)}"
-        return _with_changes(head, e.diff, names, sections) if a.endswith(".update") else head
+        with_changes = a.endswith(".update") or a in WITH_VALUES
+        return _with_changes(head, e.diff, names, sections) if with_changes else head
     return f"{who}: {a}{_tail(lab)}"
