@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { Logo } from "@/components/Logo";
@@ -12,6 +11,7 @@ import { ME_KEY } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { homePath } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,9 +68,9 @@ export default function LoginPage() {
             {error}
           </p>
         )}
-        <Button fullWidth color="primary" isDisabled={!login || !password} isLoading={busy} type="submit">
+        <LoadingButton fullWidth color="primary" isDisabled={!login || !password} isLoading={busy} type="submit">
           Войти
-        </Button>
+        </LoadingButton>
       </form>
     </div>
   );

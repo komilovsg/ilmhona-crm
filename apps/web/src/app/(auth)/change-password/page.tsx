@@ -10,6 +10,7 @@ import { ME_KEY } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { homePath } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 /** Forced after the first sign-in with a temporary password: the only page the API allows then. */
 export default function ChangePasswordPage() {
@@ -74,7 +75,7 @@ export default function ChangePasswordPage() {
             {error}
           </p>
         )}
-        <Button
+        <LoadingButton
           fullWidth
           color="primary"
           isDisabled={!current || !next || next !== repeat}
@@ -82,7 +83,7 @@ export default function ChangePasswordPage() {
           type="submit"
         >
           Сохранить пароль
-        </Button>
+        </LoadingButton>
         <Button fullWidth variant="light" onPress={() => void logout()}>
           Выйти
         </Button>

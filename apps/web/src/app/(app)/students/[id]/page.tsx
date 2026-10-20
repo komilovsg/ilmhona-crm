@@ -4,16 +4,18 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Spinner } from "@heroui/spinner";
 
 import { StudentFormModal } from "../StudentFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Icon } from "@/components/Icon";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
+import { DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
-import { api, isApiError } from "@/lib/api";
+import { api } from "@/lib/api";
+import { telHref } from "@/lib/format";
 import { fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -43,21 +45,25 @@ export default function StudentPage() {
   });
   const confirm = useSubmit(() => remove.mutateAsync());
 
-  if (student.isPending)
+  if (student.data === undefined)
     return (
-      <div className="flex justify-center py-16">
-        <Spinner />
-      </div>
-    );
-
-  if (student.isError || !student.data)
-    return (
-      <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">
-        {isApiError(student.error) && student.error.status === 404 ? "Студент не найден." : "Не удалось загрузить студента."}{" "}
-        <Link className="text-brand-text" href="/students">
-          К списку студентов
-        </Link>
-      </p>
+      <QueryState
+        errorText="Не удалось загрузить студента"
+        notFound={
+          <EmptyState
+            action={
+              <Link className="text-brand-text" href="/students">
+                К списку студентов
+              </Link>
+            }
+            title="Студент не найден"
+          />
+        }
+        query={student}
+        skeleton={<DetailSkeleton cells={0} />}
+      >
+        {null}
+      </QueryState>
     );
 
   const s = student.data;
@@ -79,7 +85,7 @@ export default function StudentPage() {
             {s.gender && ` · ${s.gender === "male" ? "мужской" : "женский"}`}
           </p>
           {s.phone && (
-            <a className="mt-2 inline-flex items-center gap-1.5 text-brand-text" href={`tel:${s.phone}`}>
+            <a className="mt-2 inline-flex items-center gap-1.5 text-brand-text" href={telHref(s.phone)}>
               <Icon name="phone" size={16} />
               {s.phone}
             </a>

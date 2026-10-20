@@ -4,12 +4,14 @@ import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
-import { Spinner } from "@heroui/spinner";
 
+import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
+import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
+import { ListSkeleton } from "@/components/Skeletons";
 import { api } from "@/lib/api";
 import { diffLines, type Names } from "@/lib/audit";
 import { formatDateTime } from "@/lib/format";
@@ -131,7 +133,15 @@ export default function AuditPage() {
 
   return (
     <>
-      <PageHeader title="Журнал" />
+      <PageHeader
+        actions={
+          <ExportButton
+            params={{ user_id: filters.user, entity: filters.entity, action: filters.action }}
+            path="/api/v1/audit/export"
+          />
+        }
+        title="Журнал"
+      />
       <div className="mb-4 flex items-center gap-3">
         <div className="hidden gap-3 md:flex">
           <FilterFields filters={filters} set={set} />
@@ -141,13 +151,12 @@ export default function AuditPage() {
         </Button>
       </div>
 
-      {list.isPending ? (
-        <div className="flex justify-center py-16">
-          <Spinner />
-        </div>
-      ) : rows.length === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">Записей нет.</p>
-      ) : (
+      <QueryState
+        empty={<EmptyState title="Записей нет" />}
+        isEmpty={(d) => d.items.length === 0}
+        query={list}
+        skeleton={<ListSkeleton cols={4} />}
+      >
         <>
           <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
@@ -189,7 +198,7 @@ export default function AuditPage() {
           </ul>
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
-      )}
+      </QueryState>
 
       <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>

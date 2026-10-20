@@ -3,14 +3,16 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
-import { Spinner } from "@heroui/spinner";
 
 import { CourseFormModal, RoomFormModal } from "./forms";
 import { ScheduleTab } from "./ScheduleTab";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Icon } from "@/components/Icon";
+import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
+import { EmptyState, QueryState } from "@/components/QueryState";
+import { ListSkeleton } from "@/components/Skeletons";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { useCanChange, useCourses, useRefreshEducation, useRooms } from "@/hooks/education";
@@ -28,15 +30,20 @@ const ACTIONS = [
   { key: "delete", label: "Удалить", icon: "trash", danger: true },
 ];
 
-function Empty({ children }: { children: string }) {
-  return <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">{children}</p>;
-}
-
 function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit: (r: Room) => void; onDelete: (r: Room) => void }) {
   const rooms = useRooms();
 
-  if (rooms.isPending) return <Spinner className="flex justify-center py-16" />;
-  if (!rooms.data?.length) return <Empty>Аудиторий пока нет.</Empty>;
+  if (rooms.data === undefined || rooms.data.length === 0)
+    return (
+      <QueryState
+        empty={<EmptyState hint={canChange ? "Добавьте первую кнопкой «Аудитория» сверху." : undefined} title="Нет аудиторий" />}
+        isEmpty={(d) => d.length === 0}
+        query={rooms}
+        skeleton={<ListSkeleton cols={4} />}
+      >
+        {null}
+      </QueryState>
+    );
 
   const menu = (r: Room) =>
     canChange && (
@@ -91,8 +98,17 @@ function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit
 function CoursesList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit: (c: Course) => void; onDelete: (c: Course) => void }) {
   const courses = useCourses();
 
-  if (courses.isPending) return <Spinner className="flex justify-center py-16" />;
-  if (!courses.data?.length) return <Empty>Курсов пока нет.</Empty>;
+  if (courses.data === undefined || courses.data.length === 0)
+    return (
+      <QueryState
+        empty={<EmptyState hint={canChange ? "Добавьте первый кнопкой «Курс» сверху." : undefined} title="Нет курсов" />}
+        isEmpty={(d) => d.length === 0}
+        query={courses}
+        skeleton={<ListSkeleton cols={6} />}
+      >
+        {null}
+      </QueryState>
+    );
 
   const menu = (c: Course) =>
     canChange && (
@@ -176,16 +192,19 @@ export default function RoomsPage() {
     <>
       <PageHeader
         actions={
-          canChange &&
-          tab !== "schedule" && (
-            <Button
-              color="primary"
-              startContent={<Icon name="plus" size={18} />}
-              onPress={() => (tab === "rooms" ? setRoomForm("new") : setCourseForm("new"))}
-            >
-              {tab === "rooms" ? "Аудитория" : "Курс"}
-            </Button>
-          )
+          <>
+            {tab === "rooms" && <ExportButton path="/api/v1/rooms/export" />}
+            {tab === "courses" && <ExportButton path="/api/v1/courses/export" />}
+            {canChange && tab !== "schedule" && (
+              <Button
+                color="primary"
+                startContent={<Icon name="plus" size={18} />}
+                onPress={() => (tab === "rooms" ? setRoomForm("new") : setCourseForm("new"))}
+              >
+                {tab === "rooms" ? "Аудитория" : "Курс"}
+              </Button>
+            )}
+          </>
         }
         title="Аудитории"
       />

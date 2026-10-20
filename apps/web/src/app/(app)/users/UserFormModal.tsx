@@ -12,6 +12,7 @@ import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 /** Create (no `user`) or edit a user. Creating returns the temporary password through `onCreated`. */
 export function UserFormModal({
@@ -71,9 +72,9 @@ export function UserFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
+          <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => submit()}>
             {user ? "Сохранить" : "Создать"}
-          </Button>
+          </LoadingButton>
         </>
       }
       isOpen

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { PageHeader } from "@/components/PageHeader";
@@ -12,6 +11,7 @@ import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Me } from "@/lib/types";
+import { LoadingButton } from "@/components/LoadingButton";
 
 function ProfileForm({ me }: { me: Me }) {
   const queryClient = useQueryClient();
@@ -46,9 +46,9 @@ function ProfileForm({ me }: { me: Me }) {
       <p className="text-xs text-default-500">
         Роль: {me.role.name} · {me.branch ? me.branch.name : "все филиалы"}
       </p>
-      <Button color="primary" isDisabled={!fullName.trim()} isLoading={save.isPending} type="submit">
+      <LoadingButton color="primary" isDisabled={!fullName.trim()} isLoading={save.isPending} type="submit">
         Сохранить
-      </Button>
+      </LoadingButton>
     </form>
   );
 }
@@ -108,14 +108,14 @@ function PasswordForm() {
           {error}
         </p>
       )}
-      <Button
+      <LoadingButton
         color="primary"
         isDisabled={!current || !next || next !== repeat}
         isLoading={change.isPending}
         type="submit"
       >
         Сменить пароль
-      </Button>
+      </LoadingButton>
     </form>
   );
 }

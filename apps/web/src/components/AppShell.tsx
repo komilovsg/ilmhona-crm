@@ -7,11 +7,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/drawer";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
-import { Spinner } from "@heroui/spinner";
 
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
+import { ErrorState } from "./QueryState";
+import { HeaderSkeleton, Late, ListSkeleton } from "./Skeletons";
 import { ThemeToggle } from "./ThemeToggle";
+import { TopProgress } from "./TopProgress";
 
 import { useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
@@ -159,18 +161,27 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   if (isError && !me) {
     return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 px-4 text-center">
-        <p className="text-default-600">Не удалось загрузить данные. Проверьте связь с сервером.</p>
-        <Button color="primary" onPress={() => void refetch()}>
-          Повторить
-        </Button>
+      <div className="flex min-h-dvh items-center justify-center px-4">
+        <ErrorState onRetry={() => void refetch()} />
       </div>
     );
   }
   if (isPending || !me) {
+    // the frame of the real shell, so the page does not jump when the user arrives
     return (
-      <div className="flex min-h-dvh items-center justify-center">
-        <Spinner />
+      <div aria-busy="true" className="min-h-dvh md:pl-64">
+        <TopProgress />
+        <aside className="fixed inset-y-0 left-0 hidden w-64 bg-sidebar md:block" />
+        <header className="sticky top-0 z-20 h-[57px] border-b border-divider bg-content1" />
+        <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
+          <span className="sr-only" role="status">
+            Загрузка…
+          </span>
+          <Late>
+            <HeaderSkeleton />
+            <ListSkeleton />
+          </Late>
+        </main>
       </div>
     );
   }
@@ -180,6 +191,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-dvh md:pl-64">
+      <TopProgress />
       <Sidebar items={items} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 px-4 py-2 md:px-8">
         <div className="rounded-md bg-sidebar px-3 py-2 md:hidden">
