@@ -1,32 +1,33 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { diffLines } from "./audit.ts";
+import { dayKey, groupByDay, linkHref } from "./audit.ts";
 
-const names = { "r-1": "Менеджер", "b-1": "Душанбе" };
-const sections = { leads: "Лиды", payments: "Оплаты" };
+test("entries are grouped by day in Dushanbe time, newest first, order kept", () => {
+  const now = new Date("2026-10-20T10:00:00Z");
+  const items = [
+    { id: 4, at: "2026-10-20T08:00:00Z" },
+    { id: 3, at: "2026-10-19T20:30:00Z" }, // 01:30 on the 20th in Dushanbe (UTC+5)
+    { id: 2, at: "2026-10-19T10:00:00Z" },
+    { id: 1, at: "2026-10-10T10:00:00Z" },
+  ];
+  const groups = groupByDay(items, now);
 
-test("references show names, not ids; a missing one is «удалён»", () => {
-  const lines = diffLines({ role_id: ["r-1", "r-gone"], branch_id: [null, "b-1"] }, names, sections);
-
-  assert.deepEqual(lines, [
-    { label: "Роль", before: "Менеджер", after: "удалён" },
-    { label: "Филиал", before: "—", after: "Душанбе" },
-  ]);
+  assert.deepEqual(
+    groups.map((g) => [g.day, g.label, g.items.map((i) => i.id)]),
+    [
+      ["2026-10-20", "Сегодня", [4, 3]],
+      ["2026-10-19", "Вчера", [2]],
+      ["2026-10-10", "10 октября 2026 г.", [1]],
+    ],
+  );
+  assert.equal(dayKey("2026-10-19T20:30:00Z"), "2026-10-20");
 });
 
-test("permission diffs read «Раздел: было → стало»", () => {
-  const lines = diffLines({ permissions: { leads: [null, "view"], payments: ["change", null] } }, names, sections);
-
-  assert.deepEqual(lines, [
-    { label: "Лиды", before: "Нет", after: "Просмотр" },
-    { label: "Оплаты", before: "Изменение", after: "Нет" },
-  ]);
-});
-
-test("plain fields: labels, booleans, null", () => {
-  assert.deepEqual(diffLines({ is_active: [true, false], phone: [null, "+992"] }, names, sections), [
-    { label: "Активен", before: "Да", after: "Нет" },
-    { label: "Телефон", before: "—", after: "+992" },
-  ]);
+test("links: students and cohorts open their page, the rest a list, no link stays null", () => {
+  assert.equal(linkHref({ entity: "student", id: "s1" }), "/students/s1");
+  assert.equal(linkHref({ entity: "cohort", id: "c1" }), "/cohorts/c1");
+  assert.equal(linkHref({ entity: "app_user", id: "u1" }), "/users");
+  assert.equal(linkHref({ entity: "course", id: "x" }), "/rooms");
+  assert.equal(linkHref(null), null);
 });

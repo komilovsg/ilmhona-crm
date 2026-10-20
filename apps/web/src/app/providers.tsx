@@ -26,7 +26,10 @@ export function Providers({ children }: { children: ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            refetchOnWindowFocus: true,
+            // Back on the tab: every list and open record is read again (#25). Old data stays on
+            // screen while it loads; a form holding an older version meets the 409 dialog.
+            refetchOnWindowFocus: "always",
+            refetchOnReconnect: "always",
             // A 4xx is not cured by repeating: show the answer at once.
             retry: (count, error) => !(isApiError(error) && error.status < 500 && error.status > 0) && count < 2,
           },

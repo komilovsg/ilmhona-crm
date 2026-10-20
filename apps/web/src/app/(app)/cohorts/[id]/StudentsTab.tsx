@@ -52,10 +52,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   });
 
   const setStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api(`/api/v1/enrollments/${id}`, { method: "PATCH", body: { status } }),
+    mutationFn: ({ id, status, version }: { id: string; status: string; version: number }) =>
+      api(`/api/v1/enrollments/${id}`, { method: "PATCH", body: { status }, version }),
     onSuccess: () => void refresh(),
-    onError: notifyError,
+    onError: (e) => {
+      void refresh(); // a 409 means somebody changed it first: show what is there now
+      notifyError(e);
+    },
   });
 
   const remove = useMutation({
@@ -82,7 +85,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       "—"
     );
   const status = (r: EnrollmentRow) =>
-    canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s })} /> : <PersonStatus status={r.status} />;
+    canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s, version: r.version })} /> : <PersonStatus status={r.status} />;
   const trash = (r: EnrollmentRow) =>
     canChange && (
       <Button isIconOnly aria-label={`Убрать: ${r.student_name}`} color="danger" size="sm" variant="light" onPress={() => setRemoving(r)}>
