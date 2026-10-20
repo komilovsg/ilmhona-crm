@@ -10,6 +10,7 @@ export const apiErrors: Record<string, string> = {
   not_authenticated: "Войдите в систему.",
   forbidden: "Недостаточно прав.",
   csrf_header_missing: "Запрос отклонён. Обновите страницу.",
+  proxy_required: "Запрос отклонён. Обновите страницу.",
   invalid_credentials: "Неверный логин или пароль.",
   too_many_attempts: "Слишком много попыток входа. Подождите 15 минут.",
   temp_password_expired: "Срок временного пароля истёк. Попросите администратора выдать новый.",

@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { apiRequestHeaders } from "./lib/forward";
+
 const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login"]);
 
@@ -8,8 +10,14 @@ const PUBLIC_PAGES = new Set(["/login"]);
  * (a stale cookie gets a 401 there and the client goes to /login).
  */
 export function proxy(request: NextRequest) {
-  const signedIn = request.cookies.has(ACCESS_COOKIE);
   const { pathname } = request.nextUrl;
+
+  // API calls leave through the next.config rewrite: add the proxy secret on the way.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next({ request: { headers: apiRequestHeaders(request.headers) } });
+  }
+
+  const signedIn = request.cookies.has(ACCESS_COOKIE);
 
   if (pathname === "/") {
     return NextResponse.redirect(new URL(signedIn ? "/dashboard" : "/login", request.url));
@@ -22,6 +30,6 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Pages only: /api is rewritten to the API by next.config.ts, assets are public.
-  matcher: ["/((?!api/|_next/|favicon.ico|.*\\..*).*)"],
+  // Pages and /api (rewritten to the API by next.config.ts); assets are public.
+  matcher: ["/((?!_next/|favicon.ico|.*\\..*).*)", "/api/:path*"],
 };

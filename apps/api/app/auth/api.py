@@ -120,18 +120,18 @@ async def issue_session(
     db: AsyncSession, response: Response, user_id: uuid.UUID, family_id: uuid.UUID | None = None
 ) -> None:
     token = new_token()
+    family_id = family_id or uuid.uuid4()
     db.add(
         RefreshToken(
             user_id=user_id,
-            family_id=family_id or uuid.uuid4(),
+            family_id=family_id,
             token_hash=token_hash(token),
             expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_ttl_days),
         )
     )
     await db.flush()
-    _set_cookie(
-        response, ACCESS_COOKIE, make_access_token(user_id), settings.refresh_ttl_days * 86400, "/"
-    )
+    access = make_access_token(user_id, family_id)
+    _set_cookie(response, ACCESS_COOKIE, access, settings.refresh_ttl_days * 86400, "/")
     _set_cookie(response, REFRESH_COOKIE, token, settings.refresh_ttl_days * 86400, "/api/v1/auth")
 
 
@@ -178,11 +178,7 @@ async def login(body: LoginIn, response: Response, db: DB) -> dict[str, Any]:
     if user is None or not password_ok or not user.is_active:
         await _record_failure(db, body.login)
         raise DomainError(INVALID_CREDENTIALS)
-    if (
-        user.must_change_password
-        and user.temp_password_expires_at is not None
-        and user.temp_password_expires_at < datetime.now(UTC)
-    ):
+    if _temp_password_expired(user, datetime.now(UTC)):
         raise DomainError(TEMP_PASSWORD_EXPIRED)
     await db.execute(text("DELETE FROM login_attempt WHERE login = :l"), {"l": body.login})
     await issue_session(db, response, user.id)
@@ -230,10 +226,27 @@ async def refresh(request: Request, response: Response, db: DB) -> None:
     user = (
         await db.execute(select(AppUser).where(AppUser.id == row.user_id, AppUser.is_active))
     ).scalar_one_or_none()
-    if user is None:
+    if user is None or _temp_password_expired(user, now):
         raise DomainError(NOT_AUTHENTICATED)
-    row.used_at = now
+    # Claim the token atomically: of concurrent requests with the same token only one wins,
+    # so a stolen copy cannot fork a second live session.
+    claimed = await db.execute(
+        update(RefreshToken)
+        .where(RefreshToken.id == row.id, RefreshToken.used_at.is_(None))
+        .values(used_at=now)
+        .returning(RefreshToken.id)
+    )
+    if claimed.first() is None:
+        raise DomainError(NOT_AUTHENTICATED)
     await issue_session(db, response, user.id, row.family_id)
+
+
+def _temp_password_expired(user: AppUser, now: datetime) -> bool:
+    return (
+        user.must_change_password
+        and user.temp_password_expires_at is not None
+        and user.temp_password_expires_at < now
+    )
 
 
 async def revoke_family(db: AsyncSession, family_id: uuid.UUID) -> None:
@@ -271,6 +284,8 @@ async def change_password(
     body: ChangePasswordIn, request: Request, response: Response, p: CurrentUser, db: DB
 ) -> dict[str, Any]:
     u = p.user
+    if _temp_password_expired(u, datetime.now(UTC)):  # a session opened before the expiry
+        raise DomainError(TEMP_PASSWORD_EXPIRED)
     if not verify_password(u.password_hash, body.current_password):
         raise DomainError(WRONG_PASSWORD)
     if body.new_password == body.current_password:

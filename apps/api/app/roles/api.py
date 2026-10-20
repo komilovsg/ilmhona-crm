@@ -168,6 +168,7 @@ async def delete_role(role_id: uuid.UUID, p: Change, db: DB) -> None:
         raise DomainError(ROLE_SYSTEM)
     if p.branch_id is not None:
         raise DomainError(FORBIDDEN)
+    _writer(p, await permissions_of(db, role))  # nobody removes a role above their own rights
     users = (
         await db.execute(
             select(func.count()).select_from(AppUser).where(AppUser.role_id == role.id)

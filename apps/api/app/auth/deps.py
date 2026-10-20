@@ -8,7 +8,7 @@ from uuid import UUID
 
 import jwt
 from fastapi import Depends, Request
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from app.auth.errors import PASSWORD_CHANGE_REQUIRED
 from app.core.config import settings
@@ -20,7 +20,7 @@ from app.core.errors import (
     NOT_FOUND,
     DomainError,
 )
-from app.models import AppUser, Role, RolePermission
+from app.models import AppUser, RefreshToken, Role, RolePermission
 from app.permissions import SECTIONS, SUPERADMIN_CODE, allows
 
 ACCESS_COOKIE = "ilm_access"
@@ -36,10 +36,13 @@ def require_csrf_header(request: Request) -> None:
         raise DomainError(CSRF_HEADER_MISSING)
 
 
-def make_access_token(user_id: UUID) -> str:
+def make_access_token(user_id: UUID, session_id: UUID) -> str:
+    """`sid` is the refresh token family: revoking the family (logout, password change,
+    refresh reuse) ends this access token at once, not when it expires."""
     now = datetime.now(UTC)
     claims = {
         "sub": str(user_id),
+        "sid": str(session_id),
         "iat": now,
         "exp": now + timedelta(minutes=settings.access_ttl_minutes),
         "typ": "access",
@@ -47,17 +50,20 @@ def make_access_token(user_id: UUID) -> str:
     return jwt.encode(claims, settings.jwt_secret, algorithm="HS256")
 
 
-def _user_id_of(token: str | None) -> UUID | None:
+def _claims_of(token: str | None) -> tuple[UUID, UUID] | None:
     if not token:
         return None
     try:
         claims = jwt.decode(
-            token, settings.jwt_secret, algorithms=["HS256"], options={"require": ["exp", "sub"]}
+            token,
+            settings.jwt_secret,
+            algorithms=["HS256"],
+            options={"require": ["exp", "sub", "sid"]},
         )
         if claims.get("typ") != "access":
             return None
-        return UUID(claims["sub"])
-    except jwt.PyJWTError, ValueError:
+        return UUID(claims["sub"]), UUID(claims["sid"])
+    except jwt.PyJWTError, ValueError, TypeError:
         return None
 
 
@@ -110,14 +116,20 @@ async def permissions_of(db: DB, role: Role) -> dict[str, str]:
 
 
 async def _principal(request: Request, db: DB) -> Principal:
-    user_id = _user_id_of(request.cookies.get(ACCESS_COOKIE))
-    if user_id is None:
+    claims = _claims_of(request.cookies.get(ACCESS_COOKIE))
+    if claims is None:
         raise DomainError(NOT_AUTHENTICATED)
+    user_id, session_id = claims
+    live_session = exists().where(
+        RefreshToken.family_id == session_id,
+        RefreshToken.user_id == AppUser.id,
+        RefreshToken.revoked_at.is_(None),
+    )
     row = (
         await db.execute(
             select(AppUser, Role)
             .join(Role, Role.id == AppUser.role_id)
-            .where(AppUser.id == user_id, AppUser.is_active)
+            .where(AppUser.id == user_id, AppUser.is_active, live_session)
         )
     ).first()
     if row is None:

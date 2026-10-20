@@ -26,5 +26,8 @@ their own database `ilmhona_test`, override with `TEST_DB_NAME`, server with `DA
 
 ## Settings (env)
 
-`DATABASE_URL`, `JWT_SECRET`, `COOKIE_SECURE`, `ENV` (`production` refuses the dev secret),
-`API_URL` for the web proxy. See `apps/api/app/core/config.py`.
+`DATABASE_URL`, `JWT_SECRET`, `COOKIE_SECURE`, `ENV`, `PROXY_SHARED_SECRET` (same value on the
+API and the web app; the API then refuses requests that bypass the web proxy), `API_URL` for the
+web proxy. `ENV=production` refuses to start without a strong `JWT_SECRET` and
+`PROXY_SHARED_SECRET` (32+ characters) and `COOKIE_SECURE=true`. See
+`apps/api/app/core/config.py`.

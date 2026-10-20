@@ -120,8 +120,8 @@ async def test_reset_revokes_open_sessions(admin: httpx.AsyncClient, login_as) -
     uid = (await sql("SELECT id FROM app_user WHERE login = 'anna'"))[0][0]
     assert (await admin.post(f"{U}/{uid}/reset-password")).status_code == 200
     assert (await c.post("/api/v1/auth/refresh")).status_code == 401
-    # the short access token still works until it expires, but the reset user must change password
-    assert (await c.get("/api/v1/auth/me")).json()["code"] == "password_change_required"
+    # the access token is bound to the revoked session: it stops at once too
+    assert (await c.get("/api/v1/auth/me")).json()["code"] == "not_authenticated"
 
 
 async def test_guards_against_locking_everyone_out(admin: httpx.AsyncClient) -> None:

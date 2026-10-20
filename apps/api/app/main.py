@@ -8,6 +8,7 @@ from app.auth.api import router as auth_router
 from app.branches.api import router as branches_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
+from app.core.proxy import ProxySecretRequired
 from app.roles.api import router as roles_router
 from app.users.api import router as users_router
 
@@ -19,9 +20,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="ilmhona CRM", lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json"
+    title="ilmhona CRM",
+    lifespan=lifespan,
+    docs_url="/api/docs" if settings.api_docs else None,
+    openapi_url="/api/openapi.json" if settings.api_docs else None,
+    redoc_url=None,
 )
 install_error_handlers(app)
+if settings.proxy_secrets:
+    app.add_middleware(ProxySecretRequired, secrets=settings.proxy_secrets)
 for router in (auth_router, users_router, roles_router, audit_router, branches_router):
     app.include_router(router)
 
