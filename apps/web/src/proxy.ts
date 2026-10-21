@@ -6,6 +6,8 @@ import { apiRequestHeaders, trustedClientIp } from "./lib/forward";
 const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login", "/forgot-password"]);
 // Link-preview and install assets: reachable without a session (static, no data).
+// Sentry tunnel (src/app/monitoring/route.ts): public, an error can happen before login.
+const PUBLIC_PATHS = ["/monitoring"];
 const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-icon"];
 
 /**
@@ -41,7 +43,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.next({ request: { headers: apiRequestHeaders(request.headers, ip) } });
   }
 
-  if (PUBLIC_ASSETS.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (PUBLIC_PATHS.includes(pathname) || PUBLIC_ASSETS.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
   const signedIn = request.cookies.has(ACCESS_COOKIE);
 
