@@ -26,7 +26,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
-from app.core.versioning import Version, check_version
+from app.core.versioning import Version, check_version, lock
 from app.education.scope import check_cohort_visible, cohort_filters, is_instructor
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
@@ -228,7 +228,7 @@ async def list_payments(
     month: MonthParam = None,
     cohort_id: uuid.UUID | None = None,
     enrollment_id: uuid.UUID | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
     where = _where(p, q, status, method, branch_id, month, cohort_id, enrollment_id)
@@ -370,7 +370,7 @@ async def list_debtors(
     q: str | None = None,
     branch_id: uuid.UUID | None = None,
     cohort_id: uuid.UUID | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
     rows = await _debtors(db, p, q, branch_id, cohort_id)
@@ -610,11 +610,13 @@ async def update_payment(
 
 
 async def _set_status(
-    db: AsyncSession, p: Principal, payment_id: uuid.UUID, status: str, action: str
+    db: AsyncSession, p: Principal, payment_id: uuid.UUID, version: int, status: str, action: str
 ) -> dict[str, Any]:
+    """Confirming is a decision on the payment as the confirmer saw it: an edit made meanwhile is
+    a 409 (#25). The row lock makes two people confirming at once see each other."""
     row = await _row(db, p, payment_id)
     pay: Payment = row[0]
-    await db.refresh(pay, with_for_update=True)  # two people confirming: the second sees the first
+    await check_version(db, pay, version, "payment", lambda: _load(db, p, payment_id))
     if pay.status != status:
         pay.status = status
         pay.confirmed_by = p.id if status == CONFIRMED else None
@@ -634,20 +636,24 @@ async def _set_status(
 
 
 @router.post("/{payment_id}/confirm")
-async def confirm_payment(payment_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]:
-    return await _set_status(db, p, payment_id, CONFIRMED, "payment.confirm")
+async def confirm_payment(
+    payment_id: uuid.UUID, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    return await _set_status(db, p, payment_id, version, CONFIRMED, "payment.confirm")
 
 
 @router.post("/{payment_id}/unconfirm")
-async def unconfirm_payment(payment_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]:
-    return await _set_status(db, p, payment_id, PENDING, "payment.unconfirm")
+async def unconfirm_payment(
+    payment_id: uuid.UUID, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    return await _set_status(db, p, payment_id, version, PENDING, "payment.unconfirm")
 
 
 @router.delete("/{payment_id}", status_code=204)
 async def delete_payment(payment_id: uuid.UUID, p: Change, db: DB) -> None:
     row = await _row(db, p, payment_id)
     pay: Payment = row[0]
-    await db.refresh(pay, with_for_update=True)
+    await lock(db, pay)
     if pay.status == CONFIRMED:
         raise DomainError(PAYMENT_CONFIRMED)
     snapshot, label, branch_id = _snapshot(pay), _label(row[1], row[2], pay), row[2].branch_id

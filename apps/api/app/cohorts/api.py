@@ -470,7 +470,11 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
         "cohort.create",
         "cohort",
         cohort.id,
-        {**diff_of({}, _snapshot(cohort)), "lessons": [0, count]},
+        {
+            **diff_of({}, _snapshot(cohort)),
+            "instructor_rate": [None, str(cohort.instructor_rate)],
+            "lessons": [0, count],
+        },
         branch_id=cohort.branch_id,
     )
     return await _detail(db, cohort.id)

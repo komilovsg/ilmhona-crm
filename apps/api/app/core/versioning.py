@@ -12,9 +12,16 @@ from typing import Annotated, Any
 
 from fastapi import Depends, Header
 from sqlalchemy import select
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import BAD_REQUEST, STALE_VERSION, VERSION_REQUIRED, DomainError
+from app.core.errors import (
+    BAD_REQUEST,
+    NOT_FOUND,
+    STALE_VERSION,
+    VERSION_REQUIRED,
+    DomainError,
+)
 from app.models import AppUser, AuditLog, Versioned
 
 
@@ -43,6 +50,14 @@ async def _last_change(db: AsyncSession, entity: str, entity_id: object) -> dict
     return {"changed_by": row[1], "changed_at": row[0]} if row else {}
 
 
+async def lock(db: AsyncSession, row: Versioned) -> None:
+    """Re-read `row` under a row lock; a row a parallel request deleted meanwhile is a 404."""
+    try:
+        await db.refresh(row, with_for_update=True)
+    except InvalidRequestError:
+        raise DomainError(NOT_FOUND) from None
+
+
 async def check_version[T: Versioned](
     db: AsyncSession,
     row: T,
@@ -52,7 +67,7 @@ async def check_version[T: Versioned](
 ) -> T:
     """Lock `row` (a concurrent edit waits here, then sees the new version) and compare. Call it
     right after loading, before changing anything: it re-reads the row."""
-    await db.refresh(row, with_for_update=True)
+    await lock(db, row)
     if row.version != expected:
         record = current()
         if inspect.isawaitable(record):
