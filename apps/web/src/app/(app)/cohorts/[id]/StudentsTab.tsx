@@ -27,10 +27,12 @@ import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
+  const overlayMotion = useOverlayMotion();
   return (
-    <Dropdown placement="bottom-end">
+    <Dropdown motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" variant="flat">
           {row.status}
@@ -248,7 +250,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
               </tbody>
             </table>
           </div>
-          <ul className="space-y-3 md:hidden">
+          <ul data-rows className="space-y-3 md:hidden">
             {rows.map((r) => (
               <li key={r.id} className="rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">

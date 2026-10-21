@@ -197,7 +197,7 @@ export default function MarketingPage() {
                 </tbody>
               </table>
             </div>
-            <ul className="space-y-3 md:hidden">
+            <ul data-rows className="space-y-3 md:hidden">
               {data.items.map((c) => (
                 <li key={c.id} className="rounded-2xl bg-content1 p-4">
                   <div className="flex items-start justify-between gap-2">

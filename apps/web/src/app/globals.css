@@ -38,6 +38,52 @@ body {
   min-height: 100dvh;
 }
 
+/* Desktop sidebar: 256 px open, 72 px collapsed. The state sits on <html data-sidebar> (set before the
+   first paint by the theme-init script), so the width is right from the first frame: no jump. */
+:root {
+  --sb-w: 16rem;
+}
+
+html[data-sidebar="collapsed"] {
+  --sb-w: 4.5rem;
+}
+
+@media (min-width: 768px) {
+  .sb-shell {
+    padding-left: var(--sb-w);
+  }
+}
+
+.sb-aside {
+  width: var(--sb-w);
+  overflow: hidden;
+}
+
+/* open: long labels wrap as before; collapsed: one line, clipped by the 72 px rail while it fades out */
+html[data-sidebar="collapsed"] .sb-label {
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sb-aside {
+    transition: width 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .sb-shell {
+    transition: padding-left 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+
+  .sb-label {
+    transition: opacity 150ms ease-out 60ms;
+  }
+
+  html[data-sidebar="collapsed"] .sb-label {
+    transition-delay: 0ms;
+  }
+}
+
 /* Loading states. Skeletons and the progress bar appear only after a delay (no flash on a fast
    answer) but take their space at once (no layout jump). Pure CSS: also works in loading.tsx. */
 @keyframes appear {
@@ -87,4 +133,124 @@ body {
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation-duration: 200ms;
+}
+
+/* Motion. Short (150-250 ms), opacity + transform only, so nothing ever shifts the layout; all off under
+   prefers-reduced-motion except plain fades. Framer-motion handles the touched things (modals, tabs,
+   marks, toasts, page changes); these are the cheap mount-only ones. */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Route change: the new page fades in and rises 6 px (CSS, so it is never stuck hidden). */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .fade-in {
+    animation: fade-in 180ms ease-out backwards;
+  }
+
+  .page-in {
+    animation: page-in 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  /* List rows: a row plays this only when it is mounted (first load, a new page of rows, a new row),
+     never on a refetch (React keeps the same row). The first 10 rows are staggered by 24 ms. */
+  main tbody > tr,
+  main [data-rows] > li {
+    animation: row-in 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+
+  main :is(tbody > tr, [data-rows] > li):nth-child(2) { animation-delay: 24ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(3) { animation-delay: 48ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(4) { animation-delay: 72ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(5) { animation-delay: 96ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(6) { animation-delay: 120ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(7) { animation-delay: 144ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(8) { animation-delay: 168ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(9) { animation-delay: 192ms; }
+  main :is(tbody > tr, [data-rows] > li):nth-child(n + 10) { animation-delay: 216ms; }
+}
+
+/* Safety net for every HeroUI overlay (modal, drawer, popover, dropdown, select, tooltip, toast): under
+   reduced motion nothing scales or slides, whatever motionProps they were given (the fade-only ones come
+   from useOverlayMotion). Inline framer transforms lose against !important. The animated element differs per
+   overlay: the modal / drawer [data-slot=wrapper] (a drawer slides it by 100%), the unnamed div around a
+   popover's [data-slot=base] (dropdown, select), the tooltip base, the toast and its parent. */
+@media (prefers-reduced-motion: reduce) {
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="tooltip"],
+  [role="menu"],
+  [role="listbox"],
+  [data-toast],
+  [data-slot="wrapper"],
+  [data-slot="wrapper"] > section,
+  [data-slot="base"][data-placement],
+  :has(> [data-slot="base"][role="dialog"]),
+  :has(> [data-slot="base"][data-placement]),
+  :has(> [data-toast]),
+  li[data-placement] {
+    transform: none !important;
+    /* Tailwind 4 moves with the separate translate / scale properties; written as `translate: none` the
+       minifier folds them into the transform shorthand and they survive, so their variables are reset */
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    --tw-scale-x: 100% !important;
+    --tw-scale-y: 100% !important;
+  }
+
+  /* A closing toast normally slides out (its inline opacity stays 1) and is removed on transitionend. With the
+     slide gone it fades instead, so a transition still runs and ends. */
+  [data-toast][data-toast-exiting="true"] {
+    opacity: 0 !important;
+    transition: opacity 120ms ease-out !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-in {
+    animation: fade-in 120ms linear backwards;
+  }
+}
+
+html[data-sidebar="collapsed"] .sb-dot {
+  display: block;
+}
+
+/* Entrance of the sign-in blocks: visible by default (also in the server HTML and with JS off);
+   the animation only plays from a transparent start when motion is allowed. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 450ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
 }

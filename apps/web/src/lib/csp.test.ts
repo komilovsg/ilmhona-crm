@@ -41,6 +41,8 @@ test("production upgrades insecure requests; dev relaxes for HMR only", () => {
   assert.ok(prod.has("upgrade-insecure-requests"));
   const dev = directives(buildCsp("n", { dev: true }));
   assert.ok(!dev.has("upgrade-insecure-requests"));
+  // production served over plain http (a local `next start`): no upgrade
+  assert.ok(!directives(buildCsp("n", { dev: false, https: false })).has("upgrade-insecure-requests"));
   assert.match(dev.get("script-src") ?? "", /'unsafe-eval'/);
   assert.match(dev.get("connect-src") ?? "", /ws:/);
 });

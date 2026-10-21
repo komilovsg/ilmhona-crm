@@ -10,7 +10,8 @@
  * `upgrade-insecure-requests`. The nonce is generated in `proxy.ts` per request and propagated
  * to Next through the request `Content-Security-Policy` header so Next nonces its own scripts.
  */
-export function buildCsp(nonce: string, { dev }: { dev: boolean }): string {
+/** `https`: the request came over https; the upgrade directive is only for that (plain http://localhost would break). */
+export function buildCsp(nonce: string, { dev, https = true }: { dev: boolean; https?: boolean }): string {
   const script = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   if (dev) script.push("'unsafe-eval'");
   const connect = ["'self'"];
@@ -29,7 +30,7 @@ export function buildCsp(nonce: string, { dev }: { dev: boolean }): string {
     "object-src": ["'none'"],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
-    "upgrade-insecure-requests": dev ? null : [],
+    "upgrade-insecure-requests": dev || !https ? null : [],
   };
   return Object.entries(directives)
     .filter(([, v]) => v !== null)

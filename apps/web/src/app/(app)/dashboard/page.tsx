@@ -34,7 +34,7 @@ const money = (n: number) => formatPrice(n);
 
 function Widget({ title, count, children, empty }: { title: string; count?: number; children: React.ReactNode; empty: string }) {
   return (
-    <section aria-label={title} className="rounded-2xl bg-content1 p-4">
+    <section aria-label={title} className="min-w-0 rounded-2xl bg-content1 p-4">
       <h2 className="mb-2 flex items-baseline justify-between text-sm font-medium">
         {title}
         {count !== undefined && <span className="text-xs font-normal text-default-500">{count}</span>}

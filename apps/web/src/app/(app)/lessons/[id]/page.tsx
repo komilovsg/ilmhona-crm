@@ -8,6 +8,7 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
+import { animate, motion } from "framer-motion";
 
 import { Icon } from "@/components/Icon";
 import { LoadingButton } from "@/components/LoadingButton";
@@ -17,6 +18,8 @@ import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
 import { dayTitle, fullDate, todayIso } from "@/lib/education";
+import { useReducedMotion } from "@/lib/client-store";
+import { SPRING_POP, SPRING_SNAPPY } from "@/lib/motion";
 import { notify, notifyError } from "@/lib/toast";
 import type { LessonAttendance, MarkRow } from "@/lib/types";
 
@@ -64,9 +67,11 @@ function Toggle({
   onPress: () => void;
 }) {
   const yes = kind === "yes";
+  const icon = useRef<HTMLSpanElement>(null);
+  const reduced = useReducedMotion();
 
   return (
-    <button
+    <motion.button
       aria-label={label}
       aria-pressed={active}
       className={clsx(
@@ -80,11 +85,20 @@ function Toggle({
             : "border-default-300 text-default-500 hover:border-danger hover:text-danger",
       )}
       disabled={disabled}
+      transition={SPRING_SNAPPY}
       type="button"
-      onClick={onPress}
+      whileTap={disabled || reduced ? undefined : { scale: 0.9 }}
+      onClick={() => {
+        // the mark pops when it becomes the chosen one (not on load, not under reduced motion)
+        if (!active && !reduced && icon.current)
+          void animate(icon.current, { scale: [0.55, 1], rotate: [yes ? -14 : 14, 0] }, SPRING_POP);
+        onPress();
+      }}
     >
-      <Icon name={yes ? "check" : "x"} size={26} strokeWidth={2.6} />
-    </button>
+      <span ref={icon} className="flex">
+        <Icon name={yes ? "check" : "x"} size={26} strokeWidth={2.6} />
+      </span>
+    </motion.button>
   );
 }
 
@@ -137,7 +151,7 @@ function StudentRow({
         </div>
       </div>
       {present === false && (
-        <div className="mt-3 space-y-2">
+        <div className="fade-in mt-3 space-y-2">
           <Input
             aria-label={`Причина отсутствия: ${row.student_name}`}
             isDisabled={!canMark || disabled}
@@ -320,7 +334,7 @@ function LessonMark({ data }: { data: LessonAttendance }) {
       {total === 0 ? (
         <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">На этом уроке нет студентов.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul data-rows className="space-y-2">
           {data.students.map((s) => (
             <StudentRow
               key={s.enrollment_id}

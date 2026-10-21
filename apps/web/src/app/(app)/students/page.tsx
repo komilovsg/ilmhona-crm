@@ -224,7 +224,7 @@ export default function StudentsPage() {
               </tbody>
             </table>
           </div>
-          <ul className="space-y-3 md:hidden">
+          <ul data-rows className="space-y-3 md:hidden">
             {students.map((s) => (
               <li key={s.id} className="rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">

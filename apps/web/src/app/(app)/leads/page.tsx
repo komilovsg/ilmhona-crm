@@ -390,7 +390,7 @@ export default function LeadsPage() {
               </tbody>
             </table>
           </div>
-          <ul className="space-y-3 md:hidden">
+          <ul data-rows className="space-y-3 md:hidden">
             {leads.map((l) => (
               <li key={l.id} className="space-y-3 rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">

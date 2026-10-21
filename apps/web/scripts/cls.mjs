@@ -25,6 +25,8 @@ if (!LOGIN || !PASSWORD) {
 
 const VIEWPORTS = [
   { name: "desktop 1440", width: 1440, height: 900 },
+  // the sidebar remembered as collapsed: the page must not jump from 256 to 72 px after hydration
+  { name: "desktop 1440 collapsed", width: 1440, height: 900, collapsed: true },
   { name: "phone 390", width: 390, height: 844 },
 ];
 
@@ -78,6 +80,7 @@ for (const vp of VIEWPORTS) {
     const page = await context.newPage();
 
     await page.addInitScript(observe);
+    if (vp.collapsed) await page.addInitScript(() => localStorage.setItem("ilm-sidebar", "collapsed"));
     // a slow API: every call waits DELAY ms, so skeletons and the swap to data are really exercised
     await page.route("**/api/v1/**", async (route) => {
       const response = await route.fetch();

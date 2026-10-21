@@ -5,6 +5,8 @@ import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/d
 
 import { Icon } from "./Icon";
 
+import { useOverlayMotion } from "@/lib/motion";
+
 export type MenuAction = { key: string; label: string; icon: string; danger?: boolean };
 
 /** The «…» menu of a row or card. */
@@ -17,8 +19,10 @@ export function RowMenu({
   label: string;
   onAction: (key: string) => void;
 }) {
+  const overlayMotion = useOverlayMotion();
+
   return (
-    <Dropdown placement="bottom-end">
+    <Dropdown motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={label} size="sm" variant="light">
           <Icon name="more" size={20} strokeWidth={3} />

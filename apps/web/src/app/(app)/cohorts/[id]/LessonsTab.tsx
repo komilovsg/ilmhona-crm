@@ -145,7 +145,7 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
               </tbody>
             </table>
           </div>
-          <ul className="space-y-2 md:hidden">
+          <ul data-rows className="space-y-2 md:hidden">
             {lessons.map((l) => (
               <li
                 key={l.id}

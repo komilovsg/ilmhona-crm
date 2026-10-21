@@ -326,7 +326,7 @@ function GradesList({ cohortId, canMark, rows }: { cohortId: string; canMark: bo
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rows.map((r) => (
           <li key={r.enrollment_id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-center justify-between gap-2">

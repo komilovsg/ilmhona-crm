@@ -126,7 +126,7 @@ export default function EmploymentPage() {
                 </tbody>
               </table>
             </div>
-            <ul className="space-y-3 md:hidden">
+            <ul data-rows className="space-y-3 md:hidden">
               {d.items.map((j) => (
                 <li key={j.id} className="rounded-2xl bg-content1 p-4">
                   <div className="flex items-start justify-between gap-2">

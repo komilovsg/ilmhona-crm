@@ -4,12 +4,14 @@ import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/system";
 import { ToastProvider } from "@heroui/toast";
+import { MotionConfig } from "framer-motion";
 import { useRouter } from "next/navigation";
 
-import { useIsPhone } from "@/lib/client-store";
+import { useIsPhone, useReducedMotion } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
+import { toastMotion, toastMotionReduced } from "@/lib/motion";
 
 function HeroUI({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -24,11 +26,19 @@ function HeroUI({ children }: { children: ReactNode }) {
 /** Desktop: top centre. Phone: bottom, above the tab bar, so a toast never covers a dialog's title. */
 function Toasts() {
   const phone = useIsPhone();
+  const reduced = useReducedMotion();
 
-  return <ToastProvider placement={phone ? "bottom-center" : "top-center"} toastOffset={phone ? 76 : 12} />;
+  return (
+    <ToastProvider
+      placement={phone ? "bottom-center" : "top-center"}
+      toastOffset={phone ? 76 : 12}
+      toastProps={{ motionProps: reduced ? toastMotionReduced : toastMotion }}
+    />
+  );
 }
 
 export function Providers({ children }: { children: ReactNode }) {
+  const reduced = useReducedMotion();
   // One client per browser tab; useState keeps it stable across re-renders.
   const [queryClient] = useState(
     () =>
@@ -48,13 +58,17 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <HeroUI>
-        <ThemeProvider>
-          <Toasts />
-          <ServerWakeup />
-          {children}
-        </ThemeProvider>
-      </HeroUI>
+      {/* reducedMotion follows the OS live: under prefers-reduced-motion every transform / layout animation (ours and
+          HeroUI's) is dropped and only opacity changes stay */}
+      <MotionConfig reducedMotion={reduced ? "always" : "never"}>
+        <HeroUI>
+          <ThemeProvider>
+            <Toasts />
+            <ServerWakeup />
+            {children}
+          </ThemeProvider>
+        </HeroUI>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

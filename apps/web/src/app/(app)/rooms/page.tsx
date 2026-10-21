@@ -79,7 +79,7 @@ function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rooms.data.map((r) => (
           <li key={r.id} className="flex items-start justify-between gap-2 rounded-2xl bg-content1 p-4">
             <div>
@@ -149,7 +149,7 @@ function CoursesList({ canChange, onEdit, onDelete }: { canChange: boolean; onEd
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {courses.data.map((c) => (
           <li key={c.id} className="flex items-start justify-between gap-2 rounded-2xl bg-content1 p-4">
             <div className="min-w-0">

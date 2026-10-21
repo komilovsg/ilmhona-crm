@@ -47,6 +47,11 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
+/** The OS asks for less motion. Live (a change after load is followed), `false` on the server. */
+export function useReducedMotion(): boolean {
+  return useMediaQuery("(prefers-reduced-motion: reduce)");
+}
+
 /** Phone layout: below Tailwind's `md` (768 px). */
 export function useIsPhone(): boolean {
   return useMediaQuery("(max-width: 767.98px)");

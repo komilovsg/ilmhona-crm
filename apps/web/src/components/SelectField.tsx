@@ -1,6 +1,7 @@
 "use client";
 
 import { Select, SelectItem } from "@heroui/select";
+import { useOverlayMotion } from "@/lib/motion";
 
 const ALL = "__all__";
 
@@ -31,9 +32,11 @@ export function SelectField({
 }) {
   const items: Option[] = allLabel ? [{ key: ALL, label: allLabel }, ...options] : options;
   const selected = value ?? (allLabel ? ALL : null);
+  const overlayMotion = useOverlayMotion();
 
   return (
     <Select
+      popoverProps={{ motionProps: overlayMotion }}
       className={className}
       disallowEmptySelection
       isDisabled={isDisabled}
