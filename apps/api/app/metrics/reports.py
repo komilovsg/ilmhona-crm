@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import Principal
 from app.education.scope import cohort_filters, student_filters
+from app.export import Col
 from app.leads.query import lead_where
 from app.leads.scope import campaign_filters
 from app.metrics import cohort_counts, cohort_enrolled, enrollment_results, student_counts
@@ -70,11 +71,47 @@ from app.models import (
     Payment,
     Student,
 )
+from app.permissions import allows
 
 GRADUATE = "выпускник"
 LEAD_WINDOW_DAYS = 45
 ZERO_LESSON_OR_LATER = ("нулевой урок", CONVERTED)
 MONTHS = 12
+
+# Money a report shows only to who may view the section it comes from: income (and LTV, paid)
+# ⇐ Оплаты, payroll ⇐ Инструкторы и зарплаты, ads and CAC ⇐ Маркетинг, profit ⇐ all three.
+# Hidden = null in JSON and no column in Excel.
+MONEY_SECTIONS: dict[str, tuple[str, ...]] = {
+    "income": ("payments",),
+    "ltv": ("payments",),
+    "paid": ("payments",),
+    "payroll": ("instructors",),
+    "ads": ("marketing",),
+    "cac": ("marketing",),
+    "profit": ("payments", "instructors", "marketing"),
+}
+
+
+def hidden_money(p: Principal) -> set[str]:
+    return {
+        key
+        for key, sections in MONEY_SECTIONS.items()
+        if not all(allows(p.level(s), "view") for s in sections)
+    }
+
+
+def hide_money[R: dict[str, Any]](rows: list[R], hidden: set[str]) -> list[R]:
+    for row in rows:
+        for key in hidden & row.keys():
+            row[key] = None
+    return rows
+
+
+def shown_columns[T](
+    columns: list[Col[T]], money: dict[str, str], hidden: set[str]
+) -> list[Col[T]]:
+    """`columns` without those whose key (`money`: header -> key) is hidden."""
+    return [c for c in columns if money.get(c.header, "") not in hidden]
 
 
 @dataclass
@@ -615,6 +652,8 @@ __all__ = [
     "graduate_rows",
     "graduate_where",
     "graduates_by_course",
+    "hidden_money",
+    "hide_money",
     "master_count",
     "master_rows",
     "master_select",
@@ -622,4 +661,5 @@ __all__ = [
     "month_list",
     "overview",
     "recent_leads",
+    "shown_columns",
 ]

@@ -23,6 +23,7 @@ import { useCanChangeGraduates, useRefreshReports } from "@/hooks/reports";
 import { api } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import { dushanbeDay } from "@/lib/format";
+import { orDash } from "@/lib/reports";
 import { percentLabel } from "@/lib/sales";
 import type { GraduateCourseRow, GraduateRow, Paged } from "@/lib/reports-types";
 import { notify, notifyError } from "@/lib/toast";
@@ -170,7 +171,7 @@ export default function GraduatesPage() {
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">{fullDate(dushanbeDay(g.enrolled_at))}</td>
                         <td className="px-4 py-3 text-right tabular-nums">{g.score}</td>
-                        <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{formatPrice(g.paid)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{orDash(g.paid, formatPrice)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{g.certificate_no ?? "—"}</td>
                         <td className="px-4 py-3">{g.employed ? g.organization : "—"}</td>
                         <td className="px-2 py-3">{canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
@@ -200,7 +201,7 @@ export default function GraduatesPage() {
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
                       {[
                         ["Зачислен", fullDate(dushanbeDay(g.enrolled_at))],
-                        ["Оплачено", formatPrice(g.paid)],
+                        ["Оплачено", orDash(g.paid, formatPrice)],
                         ["Сертификат", g.certificate_no ?? "—"],
                         ["Трудоустроен", g.employed ? (g.organization ?? "Да") : "—"],
                       ].map(([k, v]) => (

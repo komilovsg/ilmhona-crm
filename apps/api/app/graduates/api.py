@@ -1,6 +1,7 @@
 """Graduates: by students, by courses, certificates (stage 4).
 
-Rights: `graduates` view / change; the instructor role has no access. Branch scope applies.
+Rights: `graduates` view / change; the instructor role has no access; «оплачено» needs
+`payments` view (`MONEY_SECTIONS`). Branch scope applies.
 The list, the Excel files and the dashboard's «Выпускники» tile share `graduate_where`; score,
 paid and employment come from `app.metrics`.
 """
@@ -9,7 +10,7 @@ import uuid
 from datetime import UTC, date, datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select, text
 
 from app.audit.log import record
@@ -17,6 +18,7 @@ from app.auth.deps import Principal, require_csrf_header
 from app.cohorts.status import GRADUATE
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.paging import Page, PageSize
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import CERTIFICATE_ISSUED, NOT_GRADUATE
 from app.leads.scope import reader, writer
@@ -26,6 +28,9 @@ from app.metrics.reports import (
     graduate_rows,
     graduate_where,
     graduates_by_course,
+    hidden_money,
+    hide_money,
+    shown_columns,
 )
 from app.models import Cohort, Enrollment, Student
 
@@ -61,8 +66,8 @@ async def graduates_by_students(
     certificate: bool | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = _where(
         p, branch_id, date_from, date_to, course_id=course_id, instructor_id=instructor_id,
@@ -72,7 +77,7 @@ async def graduates_by_students(
     rows = await graduate_rows(db, where, MAX_ROWS)
     start = (page - 1) * page_size
     return {
-        "items": rows[start : start + page_size],
+        "items": hide_money(rows[start : start + page_size], hidden_money(p)),
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -120,7 +125,7 @@ async def export_graduates_by_students(
         entity="graduate",
         slug="vypuskniki",
         title="Выпускники",
-        columns=STUDENT_COLUMNS,
+        columns=shown_columns(STUDENT_COLUMNS, {"Оплачено": "paid"}, hidden_money(p)),
         rows=rows,
         filters={
             "q": q, "branch_id": branch_id, "course_id": course_id, "instructor_id": instructor_id,

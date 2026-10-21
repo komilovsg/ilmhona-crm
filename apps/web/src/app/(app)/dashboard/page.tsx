@@ -12,8 +12,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { Segmented } from "@/components/Segmented";
 import { Bone } from "@/components/Skeletons";
-import { StatCards, StatCardsSkeleton } from "@/components/StatCards";
+import { type Stat, StatCards, StatCardsSkeleton } from "@/components/StatCards";
 import { useBranches, useMe } from "@/hooks/queries";
+import { can } from "@/lib/permissions";
 import { api } from "@/lib/api";
 import { dayTitle, formatPrice } from "@/lib/education";
 import { formatDateTime } from "@/lib/format";
@@ -61,7 +62,7 @@ function LeadList({ items, when }: { items: LeadItem[]; when: "created" | "callb
   );
 }
 
-function OverviewTab({ data }: { data: Overview }) {
+function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
   const total = data.funnel["всего"] ?? 0;
   const funnel = LEAD_STATUSES.map((s) => ({
     key: s,
@@ -74,22 +75,22 @@ function OverviewTab({ data }: { data: Overview }) {
   return (
     <>
       <StatCards
-        stats={[
+        stats={([
           { label: "Лиды", value: String(data.leads), hint: `Конверсия: ${percentLabel(data.conversion)}` },
           { label: "Активные студенты", value: String(data.active_students), hint: `Всего в базе: ${data.students_total}` },
-          { label: "Оплачено", value: formatPrice(data.income), hint: "Подтверждённые оплаты" },
+          data.income != null && { label: "Оплачено", value: formatPrice(data.income), hint: "Подтверждённые оплаты" },
           { label: "Активные потоки", value: String(data.active_cohorts), hint: `На наборе: ${data.recruiting_cohorts}` },
-          { label: "Расходы на ЗП", value: formatPrice(data.payroll), hint: "Фактические выплаты" },
-          {
+          data.payroll != null && { label: "Расходы на ЗП", value: formatPrice(data.payroll), hint: "Фактические выплаты" },
+          data.profit != null && {
             label: "Прибыль",
             value: formatPrice(data.profit),
             hint: "Доход − реклама − ЗП",
-            tone: Number(data.profit) < 0 ? "danger" : "success",
+            tone: Number(data.profit) < 0 ? ("danger" as const) : ("success" as const),
           },
-          { label: "Реклама", value: formatPrice(data.ads), hint: `Кампаний: ${data.campaigns}` },
+          data.ads != null && { label: "Реклама", value: formatPrice(data.ads), hint: `Кампаний: ${data.campaigns}` },
           { label: "Выпускники", value: String(data.graduates), hint: "Балл 70 и выше" },
-          { label: "CAC", value: orDash(data.cac, formatPrice), hint: "Реклама ÷ записавшиеся" },
-        ]}
+          data.ads != null && { label: "CAC", value: orDash(data.cac, formatPrice), hint: "Реклама ÷ записавшиеся" },
+        ] as (Stat | false)[]).filter((s): s is Stat => !!s)}
       />
       <div className="mb-4 grid gap-4 lg:grid-cols-2">
         <BarList note="доля от всех лидов периода" rows={funnel} title="Воронка лидов" />
@@ -113,26 +114,29 @@ function OverviewTab({ data }: { data: Overview }) {
           </ul>
         </Widget>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
+      {leads && <div className="grid gap-4 lg:grid-cols-2">
         <Widget count={data.callbacks.count} empty="Звонков на сегодня нет" title="Перезвонить сегодня">
           <LeadList items={data.callbacks.items} when="callback" />
         </Widget>
         <Widget count={data.recent_leads.length} empty="Лидов пока нет" title="Последние лиды">
           <LeadList items={data.recent_leads} when="created" />
         </Widget>
-      </div>
+      </div>}
     </>
   );
 }
 
+type MoneyKey = "income" | "payroll" | "ads" | "profit";
+
 function MonthsTab({ items }: { items: MonthRow[] }) {
   const labels = items.map((m) => shortMonth(m.month));
   const full = items.map((m) => monthLabel(m.month));
-  const num = (key: "income" | "payroll" | "ads" | "profit") => items.map((m) => Number(m[key]));
+  const num = (key: MoneyKey) => items.map((m) => Number(m[key]));
+  const anyMoney = items.some((m) => m.income != null || m.payroll != null || m.ads != null);
 
   return (
     <div className="grid gap-4">
-      <TrendChart
+      {anyMoney && <TrendChart
         fullLabels={full}
         format={money}
         labels={labels}
@@ -141,9 +145,9 @@ function MonthsTab({ items }: { items: MonthRow[] }) {
           { key: "payroll", label: "Зарплата", color: "var(--series-2)", values: num("payroll") },
           { key: "ads", label: "Реклама", color: "var(--series-3)", values: num("ads") },
           { key: "profit", label: "Прибыль", color: "var(--series-4)", values: num("profit") },
-        ]}
+        ].filter((s) => items.some((m) => m[s.key as MoneyKey] != null))}
         title="Деньги по месяцам, TJS"
-      />
+      />}
       <TrendChart
         fullLabels={full}
         format={(n) => String(n)}
@@ -166,7 +170,9 @@ function CoursesTab({ items }: { items: CourseRow[] }) {
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <BarList rows={by((c) => Number(c.income), (c) => `${compact(Number(c.income))} TJS`)} title="Доход по курсам" />
+      {items.some((c) => c.income != null) && (
+        <BarList rows={by((c) => Number(c.income), (c) => `${compact(Number(c.income))} TJS`)} title="Доход по курсам" />
+      )}
       <BarList rows={by((c) => c.students, (c) => String(c.students))} title="Студенты по курсам" />
     </div>
   );
@@ -237,7 +243,7 @@ export default function DashboardPage() {
             </>
           }
         >
-          {(data) => <OverviewTab data={data} />}
+          {(data) => <OverviewTab data={data} leads={can(me?.permissions, "leads")} />}
         </QueryState>
       )}
       {tab === "months" && (
