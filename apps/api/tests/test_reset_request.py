@@ -1,9 +1,14 @@
 """«Забыли пароль?»: the same answer for every login, limits per address and login, scope."""
 
+import asyncio
 import time
+from io import BytesIO
 
 import httpx
+import pytest
+from openpyxl import load_workbook
 
+from app.auth import reset
 from tests.conftest import SignedIn, make_client, make_role, make_user, sql
 
 A = "/api/v1/auth"
@@ -158,3 +163,34 @@ async def test_issued_password_works(admin: httpx.AsyncClient) -> None:
     async with make_client() as c:
         r = await c.post(f"{A}/login", json={"login": "anna", "password": pw})
         assert r.status_code == 200 and r.json()["must_change_password"] is True
+
+
+async def test_global_cap_stops_a_spread_out_flood(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Many addresses, many invented logins: the table still stops growing (and the answer
+    stays the same)."""
+    monkeypatch.setattr(reset, "GLOBAL_LIMIT", 5)
+    answers = {(await _ask(f"bot{n}", f"192.0.2.{n + 1}")).text for n in range(8)}
+    assert len(answers) == 1
+    assert (await sql("SELECT count(*) FROM password_reset_request"))[0][0] == 5
+
+
+async def test_concurrent_rejects_handle_a_request_once(admin: httpx.AsyncClient) -> None:
+    await make_user("anna", "manager")
+    await _ask("anna")
+    rid = (await sql("SELECT id FROM password_reset_request"))[0][0]
+    path = f"/api/v1/users/reset-requests/{rid}/reject"
+    answers = await asyncio.gather(*(admin.post(path) for _ in range(4)))
+    assert sorted(r.status_code for r in answers) == [204, 404, 404, 404]
+    rows = await sql("SELECT count(*) FROM audit_log WHERE action = 'user.reset_rejected'")
+    assert rows[0][0] == 1
+
+
+async def test_attacker_login_text_is_neutralised_in_audit_export(
+    admin: httpx.AsyncClient,
+) -> None:
+    await _ask('=HYPERLINK("http://evil.example","x")')
+    r = await admin.get("/api/v1/audit/export?action=auth.reset_requested")
+    assert r.status_code == 200
+    ws = load_workbook(BytesIO(r.content)).active
+    texts = [str(c.value) for row in ws.iter_rows() for c in row if "HYPERLINK" in str(c.value)]
+    assert texts and all(not t.startswith("=") for t in texts)

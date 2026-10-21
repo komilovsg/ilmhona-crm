@@ -109,6 +109,7 @@ async def _target(db: AsyncSession, p: Principal, user_id: uuid.UUID) -> AppUser
     u = await db.get(AppUser, user_id)
     if u is None:
         raise DomainError(NOT_FOUND)
+    p.check_scope(u.branch_id)  # the same 404 as the user card outside the actor's branch
     return u
 
 

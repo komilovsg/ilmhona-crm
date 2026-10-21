@@ -338,7 +338,14 @@ async def reject_reset_request(request_id: uuid.UUID, p: Change, db: DB) -> None
     if req is None or req.status != "новый" or req.user_id is None:
         raise DomainError(NOT_FOUND)
     u = await _load(db, p, req.user_id, touch=True)
-    req.status, req.handled_by, req.handled_at = "отклонён", p.id, datetime.now(UTC)
+    claimed = await db.execute(  # only one of concurrent answers handles the request
+        update(PasswordResetRequest)
+        .where(PasswordResetRequest.id == req.id, PasswordResetRequest.status == "новый")
+        .values(status="отклонён", handled_by=p.id, handled_at=datetime.now(UTC))
+        .returning(PasswordResetRequest.id)
+    )
+    if claimed.first() is None:
+        raise DomainError(NOT_FOUND)
     await record(db, p.id, "user.reset_rejected", "app_user", u.id, branch_id=u.branch_id)
 
 

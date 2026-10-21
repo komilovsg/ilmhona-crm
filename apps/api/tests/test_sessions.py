@@ -186,3 +186,20 @@ async def test_session_endings_are_audited() -> None:
     await pc.post(f"{A}/sessions/end-others")
     rows = await sql("SELECT action FROM audit_log WHERE action LIKE 'auth.session%'")
     assert [r[0] for r in rows] == ["auth.session_end_others"]
+
+
+async def test_branch_bound_superadmin_sees_only_own_branch_sessions(login_as: SignedIn) -> None:
+    uid = await make_user("anna", "manager", branch="Истаравшан")
+    await _in("anna", MAC)
+    boss = await login_as("boss", "superadmin", branch="Душанбе")
+    assert (await boss.get(f"/api/v1/users/{uid}")).status_code == 404
+    assert (await boss.get(f"/api/v1/users/{uid}/sessions")).status_code == 404
+    sid = (await sql("SELECT family_id FROM refresh_token WHERE user_agent = :a", a=MAC))[0][0]
+    assert (await boss.delete(f"/api/v1/users/{uid}/sessions/{sid}")).status_code == 404
+
+
+async def test_session_cookies_have_no_expiry_without_remember() -> None:
+    await make_user("anna", "manager")
+    c = await _in("anna", MAC)
+    r = await c.post(f"{A}/refresh")
+    assert all("expires" not in x.lower() for x in r.headers.get_list("set-cookie"))

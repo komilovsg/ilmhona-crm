@@ -2,7 +2,7 @@
 
 The answer is always the same 202 with the same text and the same database work, whether the
 login exists, is deactivated, or the limit was hit: nothing tells an outsider which logins are
-real. Limits (3 per hour) count per client address and per login."""
+real. Limits (3 per hour) count per client address and per login, plus a global cap."""
 
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -22,6 +22,7 @@ router = APIRouter(
 )
 
 LIMIT = 3
+GLOBAL_LIMIT = 100  # all addresses together: a spread-out flood cannot grow the table
 WINDOW = timedelta(hours=1)
 NEUTRAL = "Если такой логин есть, администратор получит запрос"
 
@@ -48,10 +49,11 @@ async def forgot_password(body: ForgotIn, request: Request, db: DB) -> dict[str,
             )
         )
     ).scalar_one()
+    overall = (await db.execute(recent.where(PasswordResetRequest.created_at > since))).scalar_one()
     user = (
         await db.execute(select(AppUser).where(AppUser.login == body.login, AppUser.is_active))
     ).scalar_one_or_none()
-    if by_ip < LIMIT and by_login < LIMIT:
+    if by_ip < LIMIT and by_login < LIMIT and overall < GLOBAL_LIMIT:
         db.add(PasswordResetRequest(login=body.login, user_id=user.id if user else None, ip=ip))
         await db.flush()
         await record(db, None, "auth.reset_requested", "login", body.login[:64])
