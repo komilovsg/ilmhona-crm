@@ -55,6 +55,8 @@ class StudentUpdate(Strict):
     full_name: Name | None = None
     gender: Gender | None = None
     phone: Phone | None = None
+    # a manager clears the import's «check» flag (false); the reason goes with it
+    needs_review: bool | None = None
 
 
 def _out(s: Student, branch: str, status: str, enrollments: int) -> dict[str, Any]:
@@ -69,11 +71,18 @@ def _out(s: Student, branch: str, status: str, enrollments: int) -> dict[str, An
         "status": status,
         "enrollments_count": enrollments,
         "created_at": s.created_at,
+        "needs_review": s.needs_review,
+        "review_reason": s.review_reason,
     }
 
 
 def _snapshot(s: Student) -> dict[str, Any]:
-    return {"full_name": s.full_name, "gender": s.gender, "phone": s.phone}
+    return {
+        "full_name": s.full_name,
+        "gender": s.gender,
+        "phone": s.phone,
+        "needs_review": s.needs_review,
+    }
 
 
 async def _counts(db: AsyncSession, p: Principal, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
@@ -124,6 +133,8 @@ async def _detail(db: AsyncSession, p: Principal, student: Student, branch: str)
             "end_date": c.end_date,
             "status": e.status,
             "enrolled_at": e.enrolled_at,
+            "needs_review": e.needs_review,
+            "review_reason": e.review_reason,
         }
         for e, c, course in rows.all()
     ]
@@ -131,9 +142,15 @@ async def _detail(db: AsyncSession, p: Principal, student: Student, branch: str)
 
 
 def _student_where(
-    p: Principal, q: str | None, status: str | None, branch_id: uuid.UUID | None
+    p: Principal,
+    q: str | None,
+    status: str | None,
+    branch_id: uuid.UUID | None,
+    needs_review: bool | None = None,
 ) -> list[Any]:
     where: list[Any] = list(student_filters(p))
+    if needs_review is not None:
+        where.append(Student.needs_review == needs_review)
     if branch_id:
         where.append(Student.branch_id == branch_id)
     if status:
@@ -160,10 +177,11 @@ async def list_students(
     q: str | None = None,
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
+    needs_review: bool | None = None,
     page: Page = 1,
     page_size: PageSize = 25,
 ) -> dict[str, Any]:
-    where = _student_where(p, q, status, branch_id)
+    where = _student_where(p, q, status, branch_id, needs_review)
     total = (await db.execute(select(func.count()).select_from(Student).where(*where))).scalar_one()
     rows = (
         await db.execute(_student_select(where).limit(page_size).offset((page - 1) * page_size))
@@ -195,8 +213,9 @@ async def export_students(
     q: str | None = None,
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
+    needs_review: bool | None = None,
 ) -> Response:
-    where = _student_where(p, q, status, branch_id)
+    where = _student_where(p, q, status, branch_id, needs_review)
     rows = (await db.execute(_student_select(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     counts = await _counts(db, p, [s.id for s, _, _ in rows])
@@ -258,6 +277,10 @@ async def update_student(
         student.gender = body.gender
     if "phone" in sent:
         student.phone = body.phone or None
+    if "needs_review" in sent and body.needs_review is not None:
+        student.needs_review = body.needs_review
+        if not body.needs_review:
+            student.review_reason = None
     await db.flush()
     await record(
         db,

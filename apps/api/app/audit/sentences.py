@@ -367,6 +367,19 @@ def sentence(
         )
         return f"{head} (фильтры: {shown})" if shown else head
 
+    if a == "import.apply":
+        counts = [
+            f"{what} {_pair(e.diff.get(key))[1]}"
+            for key, what in (
+                ("student", "студентов"),
+                ("enrollment", "зачислений"),
+                ("payment", "оплат"),
+                ("lead", "лидов"),
+            )
+            if _pair(e.diff.get(key))[1]
+        ]
+        tail = f" — {', '.join(counts)}" if counts else ""
+        return f"{who}: выполнен перенос из старой системы{tail}"
     if a == "enrollment.create":
         student, cohort = _pair(e.diff.get("student"))[1], _pair(e.diff.get("cohort"))[1]
         return f"{who}: зачислен студент {student} в поток {cohort}"

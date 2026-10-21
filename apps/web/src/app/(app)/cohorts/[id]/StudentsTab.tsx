@@ -15,6 +15,7 @@ import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
+import { ReviewChip } from "@/components/ReviewChip";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation } from "@/hooks/education";
 import { useCanPay, useSeesPayments } from "@/hooks/money";
@@ -79,6 +80,19 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     },
   });
 
+  const clear = useMutation({
+    mutationFn: (r: EnrollmentRow) =>
+      api(`/api/v1/enrollments/${r.id}/review`, { method: "PATCH", body: { needs_review: false }, version: r.version }),
+    onSuccess: () => {
+      void refresh();
+      notify("Отметка снята");
+    },
+    onError: (e) => {
+      void refresh();
+      notifyError(e);
+    },
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => api(`/api/v1/enrollments/${id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -94,6 +108,16 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const confirm = useSubmit(() => removing ? remove.mutateAsync(removing.id) : Promise.resolve());
 
   const rows = list.data ?? [];
+  const flag = (r: EnrollmentRow) =>
+    r.needs_review && (
+      <div className="mt-1">
+        <ReviewChip
+          clearing={clear.isPending && clear.variables?.id === r.id}
+          reason={r.review_reason}
+          onClear={canChange ? () => clear.mutate(r) : undefined}
+        />
+      </div>
+    );
   const phone = (r: EnrollmentRow) =>
     r.phone ? (
       <a className="text-brand-text" href={telHref(r.phone)}>
@@ -207,6 +231,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                       <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
                         {r.student_name}
                       </Link>
+                      {flag(r)}
                     </td>
                     <td className="px-4 py-3">{phone(r)}</td>
                     <td className="px-4 py-2">{status(r)}</td>
@@ -232,6 +257,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   </Link>
                   {trash(r)}
                 </div>
+                {flag(r)}
                 <div className="mt-1 text-sm">{phone(r)}</div>
                 <div className="mt-2">{status(r)}</div>
                 {seesMoney && (

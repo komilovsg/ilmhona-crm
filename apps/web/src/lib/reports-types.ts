@@ -99,6 +99,8 @@ export type GraduateRow = {
   instructor_name: string | null;
   enrolled_at: string;
   score: number;
+  /** The total came from the old system (no homework / final): shown as such. */
+  score_legacy: boolean;
   paid: string | null;
   certificate_no: string | null;
   employed: boolean;

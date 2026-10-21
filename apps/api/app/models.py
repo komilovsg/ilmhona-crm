@@ -44,6 +44,13 @@ class Versioned:
     )
 
 
+class Legacy:
+    """`legacy_ref`: where a row came from in the old system (`SHEET:old-id~hash`), set by the
+    import only. A re-run finds its rows by it; rows without it are never touched."""
+
+    legacy_ref: Mapped[str | None] = mapped_column(Text)
+
+
 class Branch(Base):
     __tablename__ = "branch"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
@@ -69,7 +76,7 @@ class RolePermission(Base):
     level: Mapped[str] = mapped_column(Text)
 
 
-class AppUser(Versioned, Base):
+class AppUser(Versioned, Legacy, Base):
     __tablename__ = "app_user"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     login: Mapped[str] = mapped_column(CITEXT, unique=True)
@@ -141,7 +148,7 @@ class LoginIpAttempt(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Room(Versioned, Base):
+class Room(Versioned, Legacy, Base):
     __tablename__ = "room"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
@@ -150,7 +157,7 @@ class Room(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Course(Versioned, Base):
+class Course(Versioned, Legacy, Base):
     __tablename__ = "course"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     name: Mapped[str] = mapped_column(Text, unique=True)
@@ -161,7 +168,7 @@ class Course(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Cohort(Versioned, Base):
+class Cohort(Versioned, Legacy, Base):
     __tablename__ = "cohort"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     # 'G-NNN' from cohort_code_seq (database default)
@@ -186,7 +193,7 @@ class Cohort(Versioned, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Lesson(Versioned, Base):
+class Lesson(Versioned, Legacy, Base):
     __tablename__ = "lesson"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id", ondelete="CASCADE"))
@@ -200,7 +207,7 @@ class Lesson(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Student(Versioned, Base):
+class Student(Versioned, Legacy, Base):
     __tablename__ = "student"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     full_name: Mapped[str] = mapped_column(Text)
@@ -208,10 +215,13 @@ class Student(Versioned, Base):
     phone: Mapped[str | None] = mapped_column(Text)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
     source_lead_id: Mapped[UUID | None] = mapped_column(PG_UUID)
+    # set by the import (no phone, a merge to check ...); a manager clears it
+    needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Enrollment(Versioned, Base):
+class Enrollment(Versioned, Legacy, Base):
     __tablename__ = "enrollment"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
@@ -223,6 +233,10 @@ class Enrollment(Versioned, Base):
     # CERT-YYYY-NNNN, only for a graduate (certificate_no_seq)
     certificate_no: Mapped[str | None] = mapped_column(Text)
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    # the old system's total when it had no homework / final to go with it
+    legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
 
 
 class Attendance(Base):
@@ -257,7 +271,7 @@ class Grade(Versioned, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Payment(Versioned, Base):
+class Payment(Versioned, Legacy, Base):
     __tablename__ = "payment"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     enrollment_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
@@ -275,7 +289,7 @@ class Payment(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class InstructorPayout(Versioned, Base):
+class InstructorPayout(Versioned, Legacy, Base):
     """What was actually paid to an instructor for a cohort's month (#9): profit is computed from
     these rows, never from the schedule."""
 
@@ -291,7 +305,7 @@ class InstructorPayout(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Campaign(Versioned, Base):
+class Campaign(Versioned, Legacy, Base):
     __tablename__ = "campaign"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     name: Mapped[str] = mapped_column(Text)
@@ -305,7 +319,7 @@ class Campaign(Versioned, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
-class Lead(Versioned, Base):
+class Lead(Versioned, Legacy, Base):
     __tablename__ = "lead"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     full_name: Mapped[str] = mapped_column(Text)
