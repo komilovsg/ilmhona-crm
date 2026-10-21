@@ -141,7 +141,7 @@ async def test_list_needs_users_change_and_respects_scope(login_as: SignedIn) ->
     r = await hr.post(f"/api/v1/users/reset-requests/{bob_req}/reject")
     assert r.status_code == 404  # another branch looks like it does not exist
     root_req = (await sql("SELECT id FROM password_reset_request WHERE login = 'rootless'"))[0][0]
-    assert (await hr.post(f"/api/v1/users/reset-requests/{root_req}/reject")).status_code == 403
+    assert (await hr.post(f"/api/v1/users/reset-requests/{root_req}/reject")).status_code == 404
 
     boss = await login_as("boss", "superadmin")
     assert (await boss.get("/api/v1/users/reset-requests")).json()["total"] == 3

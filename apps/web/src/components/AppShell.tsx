@@ -15,9 +15,9 @@ import { HeaderSkeleton, Late, ListSkeleton } from "./Skeletons";
 import { ThemeToggle } from "./ThemeToggle";
 import { TopProgress } from "./TopProgress";
 
-import { useMe } from "@/hooks/queries";
+import { useMe, useResetRequests } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
+import { can, canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 
 function isActive(pathname: string, href: string) {
@@ -35,7 +35,19 @@ function useLogout() {
   };
 }
 
-function Sidebar({ items, pathname }: { items: NavItem[]; pathname: string }) {
+type Badges = Record<string, number>;
+
+function Badge({ n }: { n: number | undefined }) {
+  if (!n) return null;
+
+  return (
+    <span aria-label={`Новых запросов: ${n}`} className="ml-auto min-w-5 rounded-full bg-[#E26A3D] px-1.5 text-center text-xs font-semibold leading-5 text-[#0A0F14]">
+      {n}
+    </span>
+  );
+}
+
+function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
   return (
     <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-sidebar md:flex">
       <div className="px-6 py-6">
@@ -56,6 +68,7 @@ function Sidebar({ items, pathname }: { items: NavItem[]; pathname: string }) {
             >
               <Icon name={item.icon} size={18} />
               {item.label}
+              <Badge n={badges[item.href]} />
             </Link>
           );
         })}
@@ -97,7 +110,7 @@ function UserMenu({ me }: { me: Me }) {
   );
 }
 
-function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[]; pathname: string }) {
+function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: NavItem[]; pathname: string; badges: Badges }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const logout = useLogout();
   const moreActive = more.some((i) => isActive(pathname, i.href)) || pathname === "/profile";
@@ -112,12 +125,18 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
       >
         {main.map((item) => (
           <Link key={item.href} className={tab(isActive(pathname, item.href))} href={item.href}>
-            <Icon name={item.icon} />
+            <span className="relative">
+              <Icon name={item.icon} />
+              {badges[item.href] ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+            </span>
             <span className="max-w-full truncate px-1">{item.label.split(" ")[0]}</span>
           </Link>
         ))}
         <button className={tab(moreActive)} type="button" onClick={() => setMoreOpen(true)}>
-          <Icon name="more" />
+          <span className="relative">
+            <Icon name="more" />
+            {more.some((i) => badges[i.href]) ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+          </span>
           Ещё
         </button>
       </nav>
@@ -136,6 +155,7 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
                   >
                     <Icon name={item.icon} />
                     {item.label}
+                    <Badge n={badges[item.href]} />
                   </Link>
                 ))}
                 <button
@@ -158,6 +178,7 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data: me, isPending, isError, refetch } = useMe();
+  const { data: requests } = useResetRequests(!!me && !me.must_change_password && can(me.permissions, "users", "change"));
 
   if (isError && !me) {
     return (
@@ -187,12 +208,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const items = visibleNav(me.permissions, me.role.code);
+  const badges: Badges = { "/users": requests?.total ?? 0 };
   const { main, more } = splitNav(items);
 
   return (
     <div className="min-h-dvh md:pl-64">
       <TopProgress />
-      <Sidebar items={items} pathname={pathname} />
+      <Sidebar badges={badges} items={items} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 px-4 py-2 md:px-8">
         <div className="rounded-md bg-sidebar px-3 py-2 md:hidden">
           <Logo tagline={false} className="[&>div]:text-xl" />
@@ -214,7 +236,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
         )}
       </main>
-      <BottomNav main={main} more={more} pathname={pathname} />
+      <BottomNav badges={badges} main={main} more={more} pathname={pathname} />
     </div>
   );
 }
