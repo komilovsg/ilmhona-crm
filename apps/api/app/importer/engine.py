@@ -830,7 +830,7 @@ class Importer:
                     branch_id=self.branches[person.branch],
                     created_at=min(created) if created else datetime.now(UTC),
                     needs_review=bool(person.reasons),
-                    review_reason="; ".join(person.reasons) or None,
+                    review_reason=p.clip("; ".join(person.reasons), p.MAX_NAME) or None,
                     legacy_ref=person.ref,
                 )  # fmt: skip
             )
@@ -853,7 +853,10 @@ class Importer:
                     enrolled_at=when,
                     status_manual=plan.manual,
                     needs_review=bool(self.cohorts[plan.cohort_old].reasons),
-                    review_reason="; ".join(self.cohorts[plan.cohort_old].reasons) or None,
+                    review_reason=p.clip(
+                        "; ".join(self.cohorts[plan.cohort_old].reasons), p.MAX_NAME
+                    )
+                    or None,
                     legacy_total=plan.legacy_total,
                     legacy_ref=plan.ref,
                 )  # fmt: skip
