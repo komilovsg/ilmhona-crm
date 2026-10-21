@@ -143,23 +143,31 @@ async def enrollment_money_rows(
     skip building the ORM objects."""
     on = on or today()
     ids = [r[0] for r in rows]
-    paid: dict[uuid.UUID, tuple[Decimal, list[int]]] = {}
+    # one statement: per enrollment and month, everything entered / confirmed / pending
+    entered: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
+    confirmed: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
+    pending: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
     if ids:
         result = await db.execute(
             select(
                 Payment.enrollment_id,
-                func.coalesce(func.sum(Payment.amount), 0),
-                func.array_agg(func.distinct(Payment.month_no)),
+                Payment.month_no,
+                func.sum(Payment.amount),
+                func.coalesce(func.sum(Payment.amount).filter(Payment.status == CONFIRMED), 0),
+                func.coalesce(func.sum(Payment.amount).filter(Payment.status == PENDING), 0),
             )
-            .where(Payment.enrollment_id.in_(ids), Payment.status == CONFIRMED)
-            .group_by(Payment.enrollment_id)
+            .where(Payment.enrollment_id.in_(ids))
+            .group_by(Payment.enrollment_id, Payment.month_no)
         )
-        paid = {i: (money(total), sorted(months)) for i, total, months in result.all()}
-    pending = await month_sums(db, ids, status=PENDING)
-    entered = await month_sums(db, ids)
+        for i, m, total_m, confirmed_m, pending_m in result.all():
+            entered[i][m] = money(total_m)
+            pending[i][m] = money(pending_m)
+            if confirmed_m:
+                confirmed[i][m] = money(confirmed_m)
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for eid, enrolled_at, status, price, start, end in rows:
-        total, months = paid.get(eid, (ZERO, []))
+        total = money(sum(confirmed[eid].values(), ZERO))
+        months = sorted(confirmed[eid])
         local = enrolled_at.astimezone(TZ).date()
         expected = price * expected_months(local, start, end, on)
         states = [
