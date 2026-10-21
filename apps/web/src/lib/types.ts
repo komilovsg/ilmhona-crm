@@ -291,3 +291,21 @@ export type GradeRow = {
   unmarked: number;
   percent: number | null;
 };
+
+export type SessionRow = {
+  id: string;
+  device: string;
+  created_at: string;
+  last_used_at: string;
+  remember: boolean;
+  current: boolean;
+};
+
+export type ResetRequestRow = {
+  id: string;
+  user_id: string;
+  login: string;
+  full_name: string;
+  role_name: string;
+  created_at: string;
+};

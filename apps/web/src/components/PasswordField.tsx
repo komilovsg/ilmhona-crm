@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import clsx from "clsx";
 import { Input, type InputProps } from "@heroui/input";
 
 import { Icon } from "./Icon";
@@ -13,6 +14,8 @@ export function PasswordField(props: Omit<InputProps, "type" | "endContent">) {
   return (
     <Input
       {...props}
+      // no label transition: a mid-flight label (autofill, fast typing) overlapped the masked dots
+      classNames={{ ...props.classNames, label: clsx("!transition-none", props.classNames?.label) }}
       description={caps ? "Включён Caps Lock" : props.description}
       onBlur={(e) => {
         setCaps(false);

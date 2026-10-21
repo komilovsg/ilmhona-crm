@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Input } from "@heroui/input";
 
@@ -8,6 +9,7 @@ import { ConflictDialog } from "@/components/ConflictDialog";
 import { PageHeader } from "@/components/PageHeader";
 import { NewPasswordFields, usePasswordRules } from "@/components/NewPasswordFields";
 import { PasswordField } from "@/components/PasswordField";
+import { SessionsList } from "@/components/SessionsList";
 import { ME_KEY, useMe } from "@/hooks/queries";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
@@ -135,6 +137,26 @@ function PasswordForm({ login }: { login: string }) {
   );
 }
 
+function SessionsCard() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  return (
+    <section className="rounded-2xl bg-content1 p-5 md:col-span-2">
+      <h2 className="text-lg font-semibold">Мои устройства и сессии</h2>
+      <p className="mb-2 text-sm text-default-600">Где открыт ваш аккаунт. Незнакомое устройство можно отключить.</p>
+      <SessionsList
+        base="/api/v1/auth"
+        own
+        onSignedOut={() => {
+          queryClient.clear();
+          router.replace("/login");
+        }}
+      />
+    </section>
+  );
+}
+
 export default function ProfilePage() {
   const { data: me } = useMe();
 
@@ -145,6 +167,7 @@ export default function ProfilePage() {
         <div className="grid gap-5 md:grid-cols-2">
           <ProfileForm key={me.id} me={me} />
           <PasswordForm login={me.login} />
+          <SessionsCard />
         </div>
       )}
     </>

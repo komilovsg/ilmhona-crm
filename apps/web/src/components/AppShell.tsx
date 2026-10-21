@@ -18,12 +18,12 @@ import { HeaderSkeleton, Late, ListSkeleton } from "./Skeletons";
 import { ThemeToggle } from "./ThemeToggle";
 import { TopProgress } from "./TopProgress";
 
-import { useMe } from "@/hooks/queries";
+import { useMe, useResetRequests } from "@/hooks/queries";
 import { SIDEBAR_STORAGE_KEY } from "@/context/theme-init";
 import { api } from "@/lib/api";
 import { useBrowserValue } from "@/lib/client-store";
 import { pageVariants } from "@/lib/motion";
-import { canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
+import { can, canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 
 function isActive(pathname: string, href: string) {
@@ -89,19 +89,22 @@ function useSidebarCollapsed() {
   return { collapsed, toggle };
 }
 
+type Badges = Record<string, number>;
+
+function Badge({ n }: { n: number | undefined }) {
+  if (!n) return null;
+
+  return (
+    <span aria-label={`Новых запросов: ${n}`} className="sb-label ml-auto min-w-5 rounded-full bg-[#E26A3D] px-1.5 text-center text-xs font-semibold leading-5 text-[#0A0F14]">
+      {n}
+    </span>
+  );
+}
+
 const ROW = "relative flex items-center gap-3 rounded-lg px-[15px] py-2.5 text-sm transition-colors";
 
-function Sidebar({
-  items,
-  pathname,
-  badges,
-}: {
-  items: NavItem[];
-  pathname: string;
-  badges?: Record<string, number>;
-}) {
+function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
   const { collapsed, toggle } = useSidebarCollapsed();
-
   return (
     <aside className="sb-aside fixed inset-y-0 left-0 hidden flex-col bg-sidebar md:flex">
       <div className="py-6 pl-[19px]">
@@ -116,7 +119,7 @@ function Sidebar({
       <nav aria-label="Разделы" className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-3 pb-3">
         {items.map((item) => {
           const active = isActive(pathname, item.href);
-          const badge = badges?.[item.section];
+          const badge = badges[item.href];
 
           return (
             <Tooltip
@@ -136,16 +139,11 @@ function Sidebar({
               >
                 <span className="relative shrink-0">
                   <Icon name={item.icon} size={18} />
-                  {badge ? (
-                    <span
-                      aria-label={`${badge}`}
-                      className="absolute -right-2 -top-2 min-w-4 rounded-full bg-secondary px-1 text-center text-[10px] font-semibold leading-4 text-white"
-                    >
-                      {badge > 99 ? "99+" : badge}
-                    </span>
-                  ) : null}
+                  {/* collapsed rail: the count shows as a dot on the icon */}
+                  {badge ? <span className="sb-dot absolute -right-1.5 -top-1 hidden size-2.5 rounded-full bg-[#E26A3D]" /> : null}
                 </span>
                 <span className="sb-label">{item.label}</span>
+                <Badge n={badge} />
               </Link>
             </Tooltip>
           );
@@ -204,7 +202,7 @@ function UserMenu({ me }: { me: Me }) {
   );
 }
 
-function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[]; pathname: string }) {
+function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: NavItem[]; pathname: string; badges: Badges }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const logout = useLogout();
   const moreActive = more.some((i) => isActive(pathname, i.href)) || pathname === "/profile";
@@ -219,12 +217,18 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
       >
         {main.map((item) => (
           <Link key={item.href} className={tab(isActive(pathname, item.href))} href={item.href}>
-            <Icon name={item.icon} />
+            <span className="relative">
+              <Icon name={item.icon} />
+              {badges[item.href] ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+            </span>
             <span className="max-w-full truncate px-1">{item.label.split(" ")[0]}</span>
           </Link>
         ))}
         <button className={tab(moreActive)} type="button" onClick={() => setMoreOpen(true)}>
-          <Icon name="more" />
+          <span className="relative">
+            <Icon name="more" />
+            {more.some((i) => badges[i.href]) ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+          </span>
           Ещё
         </button>
       </nav>
@@ -243,6 +247,7 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
                   >
                     <Icon name={item.icon} />
                     {item.label}
+                    <Badge n={badges[item.href]} />
                   </Link>
                 ))}
                 <button
@@ -265,6 +270,7 @@ function BottomNav({ main, more, pathname }: { main: NavItem[]; more: NavItem[];
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { data: me, isPending, isError, refetch } = useMe();
+  const { data: requests } = useResetRequests(!!me && !me.must_change_password && can(me.permissions, "users", "change"));
 
   if (isError && !me) {
     return (
@@ -294,12 +300,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const items = visibleNav(me.permissions, me.role.code);
+  const badges: Badges = { "/users": requests?.total ?? 0 };
   const { main, more } = splitNav(items);
 
   return (
     <div className="sb-shell min-h-dvh">
       <TopProgress />
-      <Sidebar items={items} pathname={pathname} />
+      <Sidebar badges={badges} items={items} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 px-4 py-2 md:px-8">
         <div className="rounded-md bg-sidebar px-3 py-2 md:hidden">
           <Logo tagline={false} className="[&>div]:text-xl" />
@@ -323,7 +330,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
         )}
       </main>
-      <BottomNav main={main} more={more} pathname={pathname} />
+      <BottomNav badges={badges} main={main} more={more} pathname={pathname} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { buildCsp, makeNonce } from "./lib/csp";
 import { apiRequestHeaders, trustedClientIp } from "./lib/forward";
 
 const ACCESS_COOKIE = "ilm_access";
-const PUBLIC_PAGES = new Set(["/login"]);
+const PUBLIC_PAGES = new Set(["/login", "/forgot-password"]);
 // Link-preview and install assets: reachable without a session (static, no data).
 const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-icon"];
 

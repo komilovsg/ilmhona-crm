@@ -71,6 +71,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "user.activate": ("активирован", "пользователь"),
     "user.reset_password": ("сброшен", "пароль пользователя"),
     "user.deactivate": ("заблокирован", "пользователь"),
+    "user.session_end": ("завершён сеанс", "пользователя"),
+    "user.reset_rejected": ("отклонён запрос на сброс пароля", "пользователя"),
     "role.create": ("создана", "роль"),
     "role.update": ("изменена", "роль"),
     "role.delete": ("удалена", "роль"),
@@ -347,6 +349,13 @@ def sentence(
         return f"Логин {lab} заблокирован на {n} {_plural(n, 'минуту', 'минуты', 'минут')}"
     if a == "auth.login":
         return f"{who} — вход в систему"
+    if a == "auth.reset_requested":
+        return f"Запрос на сброс пароля для логина {lab}"
+    if a == "auth.session_end":
+        return f"{who} — завершён сеанс на одном из устройств"
+    if a == "auth.session_end_others":
+        _, n = _pair(e.diff.get("count"))
+        return f"{who} — завершены сеансы на других устройствах: {n}"
     if a == "auth.change_password":
         return f"{who} — смена пароля"
     if a == "profile.update":

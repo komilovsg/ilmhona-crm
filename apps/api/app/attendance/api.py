@@ -12,7 +12,7 @@ the previous value. «Все присутствуют» fills only the cells nob
 import uuid
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.log import record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
+from app.core import clock
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.versioning import Version, check_version
@@ -85,7 +86,7 @@ def _hm(dt: datetime) -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return clock.now()
 
 
 async def _cohort(db: AsyncSession, p: Principal, cohort_id: uuid.UUID) -> Cohort:

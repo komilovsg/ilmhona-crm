@@ -7,7 +7,7 @@ their lessons and enrollments). Numbers (fill, counts) come from `app.metrics`.
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any, Self
 
@@ -21,6 +21,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
 from app.cohorts.schedule import check_room_free, generate_lessons, local_dt
+from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
@@ -319,7 +320,7 @@ async def _room_in_branch(
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return clock.now()
 
 
 # ---- cohorts -----------------------------------------------------------------------------

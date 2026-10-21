@@ -179,3 +179,7 @@ html[data-sidebar="collapsed"] .sb-label {
     animation: fade-in 120ms linear backwards;
   }
 }
+
+html[data-sidebar="collapsed"] .sb-dot {
+  display: block;
+}
