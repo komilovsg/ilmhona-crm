@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import { Inter } from "next/font/google";
-import Script from "next/script";
 
 import { Providers } from "./providers";
 
@@ -21,10 +20,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html suppressHydrationWarning className={inter.variable} lang="ru">
+      <head>
+        {/* A real inline script in <head> (next/script's beforeInteractive runs only at bootstrap, after the first paint):
+            theme class and sidebar state are on <html> before anything is painted. */}
+        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: themeInitScript }} nonce={nonce} />
+      </head>
       <body className="bg-background text-foreground antialiased">
-        <Script id="theme-init" strategy="beforeInteractive" nonce={nonce}>
-          {themeInitScript}
-        </Script>
         <Providers>{children}</Providers>
       </body>
     </html>
