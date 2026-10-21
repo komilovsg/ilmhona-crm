@@ -77,7 +77,9 @@ async def test_student_card_has_both_sheets_equal_to_screen(admin: httpx.AsyncCl
     ).json()["items"]
     book = sheets(await admin.get(f"/api/v1/students/{student['id']}/export"))
     assert list(book) == ["Зачисления", "Оплаты"]
-    assert [r[0] for r in book["Зачисления"][1:]] == [
+    assert book["Зачисления"][0][:2] == ("Студент", "Филиал")
+    assert book["Зачисления"][1][:2] == ("'=Evil Name", "Душанбе")
+    assert [r[2] for r in book["Зачисления"][1:]] == [
         e["cohort_code"] for e in detail["enrollments"]
     ]
     assert [r[7] for r in book["Оплаты"][1:]] == [float(p["amount"]) for p in paid]

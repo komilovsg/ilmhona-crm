@@ -39,6 +39,7 @@ test("a browser error gets a short stable code that does not contain its message
   assert.match(a, /^E-[0-9A-F]{6}$/);
   assert.equal(a, supportCode(new TypeError("Cannot read properties of null")));
   assert.notEqual(a, supportCode(new TypeError("another failure")));
-  assert.equal(supportCode({ digest: "98765" }), "98765");
+  assert.equal(supportCode({ digest: "1206054280" }), "E-47E2ED88");
+  assert.equal(supportCode({ digest: "abc" }), "E-ABC");
   assert.match(supportCode(undefined), /^E-/);
 });

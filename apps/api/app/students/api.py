@@ -249,7 +249,15 @@ async def export_student_card(student_id: uuid.UUID, p: View, db: DB) -> Respons
     see payments, «Оплаты» (the payments list of this student, same query)."""
     student, branch = await _load(db, p, student_id)
     detail = await _detail(db, p, student, branch)
-    sheets: list[Sheet[Any]] = [Sheet("Зачисления", CARD_ENROLLMENT_COLUMNS, detail["enrollments"])]
+    # the student and branch lead the enrollments sheet (the payments sheet has both columns), so a
+    # file forwarded alone still says whose it is
+    who: list[Col[dict[str, Any]]] = [
+        Col("Студент", lambda r: student.full_name),
+        Col("Филиал", lambda r: branch),
+    ]
+    sheets: list[Sheet[Any]] = [
+        Sheet("Зачисления", [*who, *CARD_ENROLLMENT_COLUMNS], detail["enrollments"])
+    ]
     if can_view_payments(p):
         sheets.append(
             Sheet("Оплаты", PAYMENT_COLUMNS, await student_payment_rows(db, p, student.id))

@@ -54,7 +54,7 @@ for (const vp of VIEWPORTS) {
     };
 
     // 1. unknown routes: 404 status, the Russian page, the shell around it
-    for (const path of ["/net-takoy-stranitsy", "/net/takoy/stranitsy", "/students/not-a-uuid-at-all/x"]) {
+    for (const path of ["/net-takoy-stranitsy", "/net/takoy/stranitsy", "/students/not-a-uuid-at-all/x", "/students/00000000-0000-4000-8000-000000000001", "/cohorts/00000000-0000-4000-8000-000000000001"]) {
       const page = await context.newPage();
       const csp = [];
       page.on("console", (m) => /content security policy/i.test(m.text()) && csp.push(m.text()));

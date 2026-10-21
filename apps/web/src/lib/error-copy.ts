@@ -30,12 +30,14 @@ export function errorCode(error: unknown): string | null {
 }
 
 /**
- * The code shown to the user: the server digest when there is one; an error thrown in the browser
+ * The code shown to the user, always `E-…`: the server digest when there is one; an error thrown in the browser
  * has none, so it gets a short stable hash of its name and message (the text itself is never shown).
  */
 export function supportCode(error: unknown): string {
   const digest = errorCode(error);
-  if (digest) return digest;
+  // a numeric server digest keeps its value (in hex, so it stays short and matches the server log)
+  if (digest && /^\d{1,15}$/.test(digest)) return `E-${Number(digest).toString(16).toUpperCase()}`;
+  if (digest) return `E-${digest.slice(0, 10).toUpperCase()}`;
   const e = error as { name?: unknown; message?: unknown } | null | undefined;
   const text = `${String(e?.name ?? "Error")}:${String(e?.message ?? "")}`;
   let h = 0x811c9dc5; // FNV-1a

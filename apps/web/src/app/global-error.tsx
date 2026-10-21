@@ -1,7 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
-
 import { ILM_MARK_PATH } from "@/components/brand/IlmMark";
 import { ERROR_COPY, supportCode } from "@/lib/error-copy";
 
@@ -24,19 +22,14 @@ p{margin:0;color:var(--muted);font-size:.875rem;line-height:1.5}
 `;
 
 /** The root layout itself failed: a self-contained Russian page with its own <html>/<body>. */
-export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
-  useEffect(() => {
-    console.error(error);
-  }, [error]);
+export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   const code = supportCode(error);
 
   return (
     <html lang="ru">
-      <head>
+      <body>
         <title>{copy.title}</title>
         <style>{CSS}</style>
-      </head>
-      <body>
         <main role="alert">
           <svg aria-hidden="true" fill="none" height="40" style={{ color: "var(--brand)" }} viewBox="0 0 960 754" width="51">
             <path d={ILM_MARK_PATH} fill="currentColor" />
@@ -44,7 +37,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           <h1>{copy.title}</h1>
           <p>{copy.text}</p>
           <div className="row">
-            <button className="btn primary" type="button" onClick={reset}>
+            <button className="btn primary" type="button" onClick={() => window.location.reload()}>
               {copy.retry}
             </button>
             {/* a plain link on purpose: a full reload leaves the broken tree */}
