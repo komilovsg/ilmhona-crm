@@ -47,11 +47,10 @@ ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ilm_app;
 ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO ilm_app;
--- after the first `alembic upgrade head`:
-REVOKE UPDATE, DELETE ON audit_log FROM ilm_app;
-REVOKE ALL ON alembic_version FROM ilm_app;
-GRANT SELECT ON alembic_version TO ilm_app;
 ```
+
+Migration 0010 (re)applies the table grants, the append-only `audit_log` and the read-only
+`alembic_version` whenever the role exists, so a fresh `alembic upgrade head` rebuilds them.
 
 Use the **direct** (non-pooled) Neon host. SQLAlchemy URLs are
 `postgresql+asyncpg://<role>:<password>@<host>/neondb?ssl=require`.

@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0008"
-down_revision = "0007"
+revision = "0010"
+down_revision = "0009"
 
 
 def upgrade() -> None:
@@ -22,6 +22,22 @@ def upgrade() -> None:
     )
     op.execute("CREATE INDEX login_ip_attempt_updated_idx ON login_ip_attempt (updated_at)")
     op.execute("CREATE INDEX login_attempt_updated_idx ON login_attempt (updated_at)")
+    # Production runtime role ilm_app (created by hand, docs/ops/deploy.md): DML only, the
+    # audit log append-only, the version table read-only. No such role (CI, dev): skipped.
+    op.execute(
+        """
+        DO $$ BEGIN
+          IF EXISTS (SELECT FROM pg_roles WHERE rolname = 'ilm_app') THEN
+            GRANT USAGE ON SCHEMA public TO ilm_app;
+            GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ilm_app;
+            GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ilm_app;
+            REVOKE UPDATE, DELETE ON audit_log FROM ilm_app;
+            REVOKE ALL ON alembic_version FROM ilm_app;
+            GRANT SELECT ON alembic_version TO ilm_app;
+          END IF;
+        END $$
+        """
+    )
 
 
 def downgrade() -> None:
