@@ -115,6 +115,10 @@ class Browser(httpx.AsyncClient):
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
             return
+        if parts[-1] == "review":  # /enrollments/<id>/review edits the enrollment row
+            rows = await sql("SELECT version FROM enrollment WHERE id = :i", i=parts[-2])
+            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+            return
         if parts[-1] == "rate":  # /salaries/cohorts/<id>/rate edits the cohort row
             rows = await sql("SELECT version FROM cohort WHERE id = :i", i=parts[-2])
             kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}

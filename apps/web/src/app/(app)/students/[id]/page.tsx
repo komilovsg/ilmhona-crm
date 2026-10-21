@@ -11,6 +11,7 @@ import { StudentEmployment } from "./StudentEmployment";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
+import { ReviewChip } from "@/components/ReviewChip";
 import { RowMenu } from "@/components/RowMenu";
 import { DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
@@ -45,6 +46,18 @@ export default function StudentPage() {
     },
   });
   const confirm = useSubmit(() => remove.mutateAsync());
+  const clear = useMutation({
+    mutationFn: (version: number) =>
+      api(`/api/v1/students/${id}`, { method: "PATCH", body: { needs_review: false }, version }),
+    onSuccess: () => {
+      void refresh();
+      notify("Отметка снята");
+    },
+    onError: (e) => {
+      void refresh();
+      notifyError(e);
+    },
+  });
 
   if (student.data === undefined)
     return (
@@ -85,6 +98,15 @@ export default function StudentPage() {
             {s.branch_name} · добавлен {fullDate(dushanbeDay(s.created_at))}
             {s.gender && ` · ${s.gender === "male" ? "мужской" : "женский"}`}
           </p>
+          {s.needs_review && (
+            <div className="mt-2">
+              <ReviewChip
+                clearing={clear.isPending}
+                reason={s.review_reason}
+                onClear={canChange ? () => clear.mutate(s.version) : undefined}
+              />
+            </div>
+          )}
           {s.phone && (
             <a className="mt-2 inline-flex items-center gap-1.5 text-brand-text" href={telHref(s.phone)}>
               <Icon name="phone" size={16} />
@@ -137,6 +159,11 @@ export default function StudentPage() {
                     </td>
                     <td className="px-4 py-3">
                       <PersonStatus status={e.status} />
+                      {e.needs_review && (
+                        <div className="mt-1">
+                          <ReviewChip reason={e.review_reason} />
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -155,6 +182,11 @@ export default function StudentPage() {
                   </div>
                   <PersonStatus status={e.status} />
                 </div>
+                {e.needs_review && (
+                  <div className="mt-2">
+                    <ReviewChip reason={e.review_reason} />
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-default-600">
                   {fullDate(e.start_date)} – {fullDate(e.end_date)}
                   <CohortStatus status={e.cohort_status} />

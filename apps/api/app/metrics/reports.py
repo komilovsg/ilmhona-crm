@@ -247,6 +247,9 @@ async def graduate_rows(
     rows: list[dict[str, Any]] = []
     for e, s, c, course, instructor, branch in found:
         own = jobs.get(s.id, [])
+        res = results[e.id]
+        # an old total that came without homework / final stands until real grades exist
+        legacy = e.legacy_total is not None and res["homework"] is None and res["final"] is None
         rows.append(
             {
                 "enrollment_id": e.id,
@@ -263,7 +266,8 @@ async def graduate_rows(
                 "instructor_name": instructor,
                 "enrolled_at": e.enrolled_at,
                 "cohort_end": c.end_date,
-                "score": results[e.id]["total"],
+                "score": round(e.legacy_total) if legacy else res["total"],
+                "score_legacy": legacy,
                 "paid": paid[e.id]["paid"],
                 "certificate_no": e.certificate_no,
                 "certificate_issued_at": e.certificate_issued_at,

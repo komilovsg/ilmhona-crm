@@ -129,6 +129,8 @@ export type EnrollmentRow = {
   phone: string | null;
   status: string;
   enrolled_at: string;
+  needs_review: boolean;
+  review_reason: string | null;
 };
 
 export type StudentRow = {
@@ -142,6 +144,8 @@ export type StudentRow = {
   status: string;
   enrollments_count: number;
   created_at: string;
+  needs_review: boolean;
+  review_reason: string | null;
 };
 
 export type StudentDetail = StudentRow & {
@@ -155,6 +159,8 @@ export type StudentDetail = StudentRow & {
     end_date: string;
     status: string;
     enrolled_at: string;
+    needs_review: boolean;
+    review_reason: string | null;
   }[];
 };
 

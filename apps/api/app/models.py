@@ -202,6 +202,9 @@ class Student(Versioned, Legacy, Base):
     phone: Mapped[str | None] = mapped_column(Text)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
     source_lead_id: Mapped[UUID | None] = mapped_column(PG_UUID)
+    # set by the import (no phone, a merge to check ...); a manager clears it
+    needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
@@ -217,6 +220,10 @@ class Enrollment(Versioned, Legacy, Base):
     # CERT-YYYY-NNNN, only for a graduate (certificate_no_seq)
     certificate_no: Mapped[str | None] = mapped_column(Text)
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    review_reason: Mapped[str | None] = mapped_column(Text)
+    # the old system's total when it had no homework / final to go with it
+    legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
 
 
 class Attendance(Base):

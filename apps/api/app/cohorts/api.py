@@ -184,6 +184,10 @@ class EnrollIn(Strict):
         return self
 
 
+class EnrollmentReview(Strict):
+    needs_review: bool
+
+
 class EnrollmentStatus(Strict):
     status: Annotated[str, StringConstraints(pattern=r"^(активный|завершил|выпускник|отчислен)$")]
 
@@ -830,6 +834,8 @@ def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
         "status_manual": e.status_manual,
         "certificate_no": e.certificate_no,
         "enrolled_at": e.enrolled_at,
+        "needs_review": e.needs_review,
+        "review_reason": e.review_reason,
     }
 
 
@@ -970,6 +976,32 @@ async def set_enrollment_status(
         "enrollment",
         enrollment.id,
         {"status": [before, body.status], "cohort": [None, cohort.code]},
+        branch_id=cohort.branch_id,
+    )
+    return _enrollment_out(enrollment, student)
+
+
+@router.patch("/enrollments/{enrollment_id}/review")
+async def set_enrollment_review(
+    enrollment_id: uuid.UUID, body: EnrollmentReview, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    """A manager clears (or sets) the import's «check» flag of an enrollment."""
+    enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
+    await check_version(
+        db, enrollment, version, "enrollment", lambda: _enrollment_out(enrollment, student)
+    )
+    before = enrollment.needs_review
+    enrollment.needs_review = body.needs_review
+    if not body.needs_review:
+        enrollment.review_reason = None
+    await db.flush()
+    await record(
+        db,
+        p.id,
+        "enrollment.update",
+        "enrollment",
+        enrollment.id,
+        {"needs_review": [before, body.needs_review], "cohort": [None, cohort.code]},
         branch_id=cohort.branch_id,
     )
     return _enrollment_out(enrollment, student)

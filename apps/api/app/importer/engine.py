@@ -130,6 +130,7 @@ class Person:
     ref: str = ""
     id: uuid.UUID = field(default_factory=uuid.uuid4)
     branch: str = ""
+    reasons: list[str] = field(default_factory=list)  # «проверить» chip in the app
 
 
 @dataclass
@@ -142,6 +143,7 @@ class EnrollPlan:
     homework: int | None = None
     final: int | None = None
     old_total: Decimal | None = None
+    legacy_total: Decimal | None = None  # the old total, when it has no breakdown
     enrolled_at: datetime | None = None
     ref: str = ""
     id: uuid.UUID = field(default_factory=uuid.uuid4)
@@ -164,6 +166,7 @@ class CohortCtx:
     branch: str
     created: bool
     status_old: str = ""
+    reasons: list[str] = field(default_factory=list)  # shown on the cohort's enrollments
 
 
 class Importer:
@@ -493,6 +496,7 @@ class Importer:
             rep.existing["COHORTS"] += 1
             return
         # course
+        reasons: list[str] = []
         course_text = first(rows, "course_name")
         course_id = self.course_old.get(first(rows, "course_id"))
         if course_id is None:
@@ -503,6 +507,7 @@ class Importer:
                 rep.drop("COHORTS", "курс не определить", old_id)
                 return
             course_id = await self._new_course_from_cohort(old_id, course_text, rows, cost)
+            reasons.append("курс создан из названия потока")
         price_default, months = self.course_info[course_id]
         # dates
         start = p.parse_date(first(rows, "start_date"))
@@ -554,6 +559,7 @@ class Importer:
         if has_schedule:
             assert t_start is not None and t_end is not None  # noqa: S101
         else:
+            reasons.append("нет расписания")
             reason = "время уроков вне 07:00–22:00 или длительность не 30–240 мин (#6)"
             if not days:
                 reason = "расписание (дни) не указано"
@@ -587,7 +593,7 @@ class Importer:
         self.refs["cohort"][ref] = obj.id
         self.created_cohorts.append(obj.id)
         rep.imported["COHORTS"] += 1
-        self.cohorts[old_id] = CohortCtx(old_id, obj, branch, True, status_old)
+        self.cohorts[old_id] = CohortCtx(old_id, obj, branch, True, status_old, reasons)
         if has_schedule:
             await self._generate_lessons(self.cohorts[old_id])
         else:
@@ -702,6 +708,7 @@ class Importer:
             person.ref = p.make_ref("STUDENTS", old_id or "—", person.key)
             ids = {p.text(r.get("student_id")) for r in rows}
             if person.key.startswith("n:") and len(rows) > 1 and len(ids) > 1:
+                person.reasons.append("проверить слияние: то же ФИО без телефона")
                 rep.flag(
                     "STUDENTS", "проверить слияние: то же ФИО без телефона, разные ID", old_id,
                     name=person.name, ids=", ".join(sorted(ids)),
@@ -709,6 +716,7 @@ class Importer:
             if person.key.startswith("p:"):
                 toks = [set(p.norm_name(r.get("full_name")).split()) for r in rows]
                 if len(rows) > 1 and not set.intersection(*toks):
+                    person.reasons.append("проверить слияние: один телефон, разные ФИО")
                     rep.flag(
                         "STUDENTS", "проверить слияние: один телефон, совсем разные ФИО", old_id,
                         names=" / ".join(sorted({p.name_of(r.get("full_name"))[0] for r in rows})),
@@ -804,6 +812,7 @@ class Importer:
             phone, raw = p.phone_of(first(person.rows, "phone"))
             old_id = first(person.rows, "student_id")
             if not raw:
+                person.reasons.append("нет телефона")
                 rep.flag("STUDENTS", "заполнить телефон", old_id, name=person.name)
             elif phone is None:
                 rep.flag("STUDENTS", "телефон не распознан", old_id, name=person.name, phone=raw)
@@ -820,6 +829,8 @@ class Importer:
                     phone=phone,
                     branch_id=self.branches[person.branch],
                     created_at=min(created) if created else datetime.now(UTC),
+                    needs_review=bool(person.reasons),
+                    review_reason="; ".join(person.reasons) or None,
                     legacy_ref=person.ref,
                 )  # fmt: skip
             )
@@ -841,6 +852,9 @@ class Importer:
                     status=plan.status,
                     enrolled_at=when,
                     status_manual=plan.manual,
+                    needs_review=bool(self.cohorts[plan.cohort_old].reasons),
+                    review_reason="; ".join(self.cohorts[plan.cohort_old].reasons) or None,
+                    legacy_total=plan.legacy_total,
                     legacy_ref=plan.ref,
                 )  # fmt: skip
             )
@@ -883,6 +897,7 @@ class Importer:
                 plan.old_total = total
                 break
         if plan.old_total is not None and plan.homework is None:
+            plan.legacy_total = min(Decimal(100), max(Decimal(0), plan.old_total))
             rep.note("зачисление только с итоговым баллом (Д/З и финал пусты)")
         # a finished cohort: the old total decides the graduate (>= 70), as the new rule does
         ctx = self.cohorts[plan.cohort_old]
@@ -905,6 +920,7 @@ class Importer:
     async def _grades(self) -> None:
         rep = self.rep
         extra: dict[uuid.UUID, EnrollPlan] = {}
+        applied: list[uuid.UUID] = []
         for r in self.rows("GRADES"):
             gid = p.text(r.get("grade_id"))
             plan = self.plan_of(
@@ -934,8 +950,10 @@ class Importer:
                 rep.drop("GRADES", "неизвестный тип оценки", gid)
                 continue
             extra[plan.id] = plan
-            rep.imported["GRADES"] += 1
+            applied.append(plan.id)
         existing = set((await self.db.execute(select(Grade.enrollment_id))).scalars())
+        for enrollment_id in applied:  # a grade already in the database is «уже было»
+            (rep.existing if enrollment_id in existing else rep.imported)["GRADES"] += 1
         rows = [
             {"enrollment_id": plan.id, "homework": plan.homework, "final": plan.final}
             for plan in self.plans.values()
@@ -978,6 +996,8 @@ class Importer:
                     status=plan.status,
                     enrolled_at=noon(ctx.obj.start_date),
                     status_manual=True,
+                    needs_review=True,
+                    review_reason="восстановлено из оплаты",
                     legacy_ref=plan.ref,
                 )
             )

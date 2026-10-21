@@ -170,7 +170,10 @@ export default function GraduatesPage() {
                           <div className="text-xs text-default-500">{[g.cohort_code, g.instructor_name].filter(Boolean).join(" · ")}</div>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">{fullDate(dushanbeDay(g.enrolled_at))}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">{g.score}</td>
+                        <td className="px-4 py-3 text-right tabular-nums">
+                          {g.score}
+                          {g.score_legacy && <div className="text-xs font-normal text-default-500">итог из старой системы</div>}
+                        </td>
                         <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{orDash(g.paid, formatPrice)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{g.certificate_no ?? "—"}</td>
                         <td className="px-4 py-3">{g.employed ? g.organization : "—"}</td>
@@ -193,7 +196,7 @@ export default function GraduatesPage() {
                       </div>
                       <div className="flex items-center gap-1">
                         <Chip color="success" size="sm" variant="flat">
-                          {g.score} б.
+                          {g.score} б.{g.score_legacy && " (старая система)"}
                         </Chip>
                         {canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}
                       </div>
