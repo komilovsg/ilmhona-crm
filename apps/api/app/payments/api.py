@@ -64,6 +64,7 @@ from app.payments.errors import (
     PAYMENT_CONFIRMED,
     PAYMENT_MONTH_INVALID,
 )
+from app.permissions import allows
 
 router = APIRouter(
     prefix="/api/v1/payments", tags=["payments"], dependencies=[Depends(require_csrf_header)]
@@ -210,8 +211,11 @@ def _where(
     month: str | None,
     cohort_id: uuid.UUID | None,
     enrollment_id: uuid.UUID | None = None,
+    student_id: uuid.UUID | None = None,
 ) -> list[ColumnElement[bool]]:
     where = list(cohort_filters(p))
+    if student_id:
+        where.append(Student.id == student_id)
     if status:
         where.append(Payment.status == status)
     if method:
@@ -325,6 +329,24 @@ async def export_payments(
             "cohort": cohort_id,
         },
     )
+
+
+async def student_payment_rows(db: AsyncSession, p: Principal, student_id: uuid.UUID) -> list[Any]:
+    """All payments of one student in the user's scope (the student card's Excel sheet)."""
+    where = _where(p, None, None, None, None, None, None, student_id=student_id)
+    rows = (
+        await db.execute(
+            _select()
+            .where(*where)
+            .order_by(Payment.paid_at.desc(), Payment.created_at.desc(), Payment.id)
+            .limit(MAX_ROWS + 1)
+        )
+    ).all()
+    return [_out(*r) for r in rows]
+
+
+def can_view_payments(p: Principal) -> bool:
+    return allows(p.level("payments"), "view") and not is_instructor(p)
 
 
 # ---- debtors and per-cohort sums ---------------------------------------------------------

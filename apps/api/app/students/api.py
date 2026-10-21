@@ -22,9 +22,10 @@ from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
 from app.education.errors import STUDENT_IN_USE
 from app.education.scope import branch_for_write, cohort_filters, student_filters, writer
-from app.export import MAX_ROWS, Col, check_cap, xlsx_response
+from app.export import MAX_ROWS, Col, Sheet, check_cap, workbook_response, xlsx_response
 from app.metrics import student_status_expr, student_statuses
 from app.models import Branch, Cohort, Course, Enrollment, Student
+from app.payments.api import PAYMENT_COLUMNS, can_view_payments, student_payment_rows
 
 router = APIRouter(
     prefix="/api/v1/students", tags=["students"], dependencies=[Depends(require_csrf_header)]
@@ -228,6 +229,38 @@ async def export_students(
         columns=STUDENT_COLUMNS,
         rows=[_out(s, b, st, counts.get(s.id, 0)) for s, b, st in rows],
         filters={"q": q, "status": status, "branch_id": branch_id},
+    )
+
+
+CARD_ENROLLMENT_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Поток", lambda r: r["cohort_code"]),
+    Col("Курс", lambda r: r["course_name"]),
+    Col("Статус потока", lambda r: r["cohort_status"]),
+    Col("Начало", lambda r: r["start_date"], "date"),
+    Col("Окончание", lambda r: r["end_date"], "date"),
+    Col("Статус студента", lambda r: r["status"]),
+    Col("Зачислен", lambda r: r["enrolled_at"], "date"),
+]
+
+
+@router.get("/{student_id}/export")
+async def export_student_card(student_id: uuid.UUID, p: View, db: DB) -> Response:
+    """The student card as one workbook: «Зачисления» (the card's history) and, for users who may
+    see payments, «Оплаты» (the payments list of this student, same query)."""
+    student, branch = await _load(db, p, student_id)
+    detail = await _detail(db, p, student, branch)
+    sheets: list[Sheet[Any]] = [Sheet("Зачисления", CARD_ENROLLMENT_COLUMNS, detail["enrollments"])]
+    if can_view_payments(p):
+        sheets.append(
+            Sheet("Оплаты", PAYMENT_COLUMNS, await student_payment_rows(db, p, student.id))
+        )
+    return await workbook_response(
+        db,
+        p,
+        entity="student_card",
+        slug=f"student_{student.id.hex[:8]}",
+        sheets=sheets,
+        filters={"student": student.full_name},
     )
 
 

@@ -83,22 +83,29 @@ def _shown_len(value: Any) -> int:
     return len(str(value)) if value is not None else 0
 
 
-def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> bytes:
-    # imported here: openpyxl is slow to import and only exports need it (cold start)
-    from openpyxl import Workbook
+@dataclass(frozen=True)
+class Sheet[T]:
+    """One sheet of a workbook: its tab name, its columns and its rows."""
+
+    title: str
+    columns: Sequence[Col[T]]
+    rows: Sequence[T]
+
+
+def _write_sheet[T](wb: Any, sheet: Sheet[T]) -> None:
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
 
+    columns = sheet.columns
     # write-only mode streams the rows (several times faster than building a cell tree), so the
     # column widths are measured first and set before the first row is written
-    table = [[_cell(c.value(row), c.kind) for c in columns] for row in rows]
+    table = [[_cell(c.value(row), c.kind) for c in columns] for row in sheet.rows]
     widths = [len(c.header) for c in columns]
     for cells in table:
         for i, (value, _) in enumerate(cells):
             widths[i] = max(widths[i], _shown_len(value))
-    wb = Workbook(write_only=True)
-    ws = wb.create_sheet(title[:31])
+    ws = wb.create_sheet(sheet.title[:31])
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = min(max(w + 2, 8), 60)
     ws.freeze_panes = "A2"
@@ -118,15 +125,63 @@ def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> b
             else:
                 out.append(value)
         ws.append(out)
+
+
+def build_workbook(sheets: Sequence[Sheet[Any]]) -> bytes:
+    # imported here: openpyxl is slow to import and only exports need it (cold start)
+    from openpyxl import Workbook
+
+    wb = Workbook(write_only=True)
+    for sheet in sheets:
+        _write_sheet(wb, sheet)
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> bytes:
+    return build_workbook([Sheet(title, columns, rows)])
 
 
 def check_cap(rows: Sequence[Any]) -> None:
     """Callers fetch at most MAX_ROWS + 1 rows; one extra means the table is too big."""
     if len(rows) > MAX_ROWS:
         raise DomainError(EXPORT_TOO_LARGE, limit=MAX_ROWS)
+
+
+async def workbook_response(
+    db: AsyncSession,
+    p: Principal,
+    *,
+    entity: str,
+    slug: str,
+    sheets: Sequence[Sheet[Any]],
+    filters: dict[str, Any],
+) -> Response:
+    """Build a file of one or more sheets and write the audit entry (same transaction as the
+    request). Every sheet is capped; the entry counts the rows of all sheets."""
+    for sheet in sheets:
+        check_cap(sheet.rows)
+    # CPU-bound: off the event loop, so one big export does not stall every other request
+    data = await run_in_threadpool(build_workbook, sheets)
+    await record(
+        db,
+        p.id,
+        "export",
+        entity,
+        None,
+        {
+            "rows": sum(len(s.rows) for s in sheets),
+            "filters": {k: v for k, v in filters.items() if v not in (None, "")},
+        },
+        branch_id=p.branch_id,
+    )
+    name = f"{slug}_{datetime.now(UTC).astimezone(TZ):%Y-%m-%d}.xlsx"
+    return Response(
+        data,
+        media_type=XLSX,
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 async def xlsx_response[T](
@@ -140,22 +195,7 @@ async def xlsx_response[T](
     rows: Sequence[T],
     filters: dict[str, Any],
 ) -> Response:
-    """Build the file and write the audit entry (same transaction as the request)."""
-    check_cap(rows)
-    # CPU-bound: off the event loop, so one big export does not stall every other request
-    data = await run_in_threadpool(build_xlsx, title, columns, rows)
-    await record(
-        db,
-        p.id,
-        "export",
-        entity,
-        None,
-        {"rows": len(rows), "filters": {k: v for k, v in filters.items() if v not in (None, "")}},
-        branch_id=p.branch_id,
-    )
-    name = f"{slug}_{datetime.now(UTC).astimezone(TZ):%Y-%m-%d}.xlsx"
-    return Response(
-        data,
-        media_type=XLSX,
-        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    """One-sheet file (the usual list export)."""
+    return await workbook_response(
+        db, p, entity=entity, slug=slug, sheets=[Sheet(title, columns, rows)], filters=filters
     )

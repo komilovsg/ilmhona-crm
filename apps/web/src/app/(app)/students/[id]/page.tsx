@@ -16,6 +16,7 @@ import { ReviewChip } from "@/components/ReviewChip";
 import { RowMenu } from "@/components/RowMenu";
 import { Bone, DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
+import { ExportButton } from "@/components/ExportButton";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
@@ -133,16 +134,19 @@ export default function StudentPage() {
             </a>
           )}
         </div>
-        {canChange && (
-          <RowMenu
-            actions={[
-              { key: "edit", label: "Изменить", icon: "edit" },
-              { key: "delete", label: "Удалить", icon: "trash", danger: true },
-            ]}
-            label="Действия со студентом"
-            onAction={(k) => (k === "edit" ? setEditing(true) : setDeleting(true))}
-          />
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          <ExportButton path={`/api/v1/students/${s.id}/export`} />
+          {canChange && (
+            <RowMenu
+              actions={[
+                { key: "edit", label: "Изменить", icon: "edit" },
+                { key: "delete", label: "Удалить", icon: "trash", danger: true },
+              ]}
+              label="Действия со студентом"
+              onAction={(k) => (k === "edit" ? setEditing(true) : setDeleting(true))}
+            />
+          )}
+        </div>
       </div>
 
       <h2 className="mb-3 text-lg font-semibold">История зачислений</h2>
