@@ -21,7 +21,8 @@ INDEXES = (
     # leads: course filter, the callback list, the FK of a converted student
     "lead_course_idx ON lead (course_id)",
     "lead_callback_idx ON lead (next_contact_at) WHERE next_contact_at IS NOT NULL",
-    "lead_converted_student_idx ON lead (converted_student_id) WHERE converted_student_id IS NOT NULL",
+    "lead_converted_student_idx ON lead (converted_student_id) "
+    "WHERE converted_student_id IS NOT NULL",
     # payroll by month, ads by branch and start date
     "payout_paid_at_idx ON instructor_payout (paid_at)",
     "campaign_branch_start_idx ON campaign (branch_id, start_date)",

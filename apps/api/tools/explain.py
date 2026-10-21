@@ -38,7 +38,9 @@ async def main() -> None:
         async with engine.connect() as conn:
             cohort = (
                 await conn.execute(
-                    text("SELECT id FROM cohort WHERE status <> 'набор' ORDER BY code LIMIT 1 OFFSET 40")
+                    text(
+                        "SELECT id FROM cohort WHERE status <> 'набор' ORDER BY code LIMIT 1 OFFSET 40"
+                    )
                 )
             ).scalar_one()
         urls = [
@@ -88,7 +90,10 @@ async def main() -> None:
         import json
 
         json.dump(
-            {" ".join(st.split()): {"ms": ms, "url": url, "plan": plan} for ms, url, st, plan in results},
+            {
+                " ".join(st.split()): {"ms": ms, "url": url, "plan": plan}
+                for ms, url, st, plan in results
+            },
             open(sys.argv[2], "w"),
             ensure_ascii=False,
         )
