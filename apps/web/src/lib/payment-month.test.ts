@@ -88,7 +88,7 @@ test("month states and the partial amount", () => {
   assert.equal(paidCountLabel(states, 4), "2 из 4 (1 ожидает подтверждения)");
   assert.equal(paidCountLabel([states[2]], 4), "1 из 4");
   assert.equal(monthOptionLabel(1, states[0]), "1-й · оплачен · ожидает");
-  assert.equal(monthOptionLabel(2, states[1]), "2-й · частично: 200 из 500 TJS");
+  assert.equal(monthOptionLabel(2, states[1]), "2-й · 200 / 500");
   assert.equal(monthOptionLabel(4, undefined), "4-й");
   assert.ok(partialAmountOk("200", "200.00"));
   assert.ok(partialAmountOk("0.5", "200"));

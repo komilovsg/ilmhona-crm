@@ -150,7 +150,13 @@ export function monthOptionLabel(
 ): string {
   if (!state || state.state === "не оплачен") return `${month}-й`;
 
-  return `${month}-й · ${monthStateLabel(state)}${Number(state.pending) > 0 ? " · ожидает" : ""}`;
+  // short enough for a 390 px phone: «3-й · 50,50 / 350 · ожидает»
+  const text =
+    state.state === "частично" && !(Number(state.overpaid ?? 0) > 0)
+      ? `${tjs(state.paid).replace(" TJS", "")} / ${tjs(state.price).replace(" TJS", "")}`
+      : monthStateLabel(state);
+
+  return `${month}-й · ${text}${Number(state.pending) > 0 ? " · ожидает" : ""}`;
 }
 
 /** Amount of a partial payment: more than 0 and not more than what the month still needs. */

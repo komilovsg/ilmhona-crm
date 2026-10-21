@@ -3,8 +3,8 @@
 - A cohort runs over calendar months: `cohort_months` = months from the start month to the end
   month, inclusive. Payment `month_no` is 1..cohort_months; the salary period is the first day of
   the month.
-- Only a confirmed payment counts. Per enrollment: paid = confirmed sum, paid months = distinct
-  `month_no` with a confirmed payment, expected = price_month × months started since enrollment
+- Only a confirmed payment counts. Per enrollment: paid = confirmed sum, paid months = months
+  whose pending + confirmed payments reach the price (the payment cap's «full»), expected = price_month × months started since enrollment
   (from the later of the enrollment month and the cohort start month, to the earlier of this month
   and the cohort's last month), debt = max(expected − paid, 0). An expelled student owes nothing
   more: debt 0.
@@ -167,7 +167,6 @@ async def enrollment_money_rows(
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for eid, enrolled_at, status, price, start, end in rows:
         total = money(sum(confirmed[eid].values(), ZERO))
-        months = sorted(confirmed[eid])
         local = enrolled_at.astimezone(TZ).date()
         expected = price * expected_months(local, start, end, on)
         states = [
@@ -177,7 +176,8 @@ async def enrollment_money_rows(
         owed = owed_month_numbers(enrolled_at, start, end, on)
         out[eid] = {
             "paid": total,
-            "paid_months": months,
+            # one definition with the payment cap: pending + confirmed reach the price
+            "paid_months": [st["month_no"] for st in states if st["state"] == MONTH_PAID],
             "expected": expected,
             "debt": debt_of(expected, total, status),
             "month_states": states,

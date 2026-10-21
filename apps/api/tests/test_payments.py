@@ -209,7 +209,7 @@ async def test_debt_math_mid_course_enrollment_and_partial_payments(
     await pay(admin, full, month=1, amount=500, confirm=True)
     await pay(admin, full, month=2, amount=300, confirm=True)  # partial month 2
     await pay(admin, full, month=2, amount=200, confirm=True)  # the rest, a second payment
-    await pay(admin, full, month=3, amount=500)  # pending: does not count
+    await pay(admin, full, month=3, amount=500)  # pending: not income, but the month is taken
     await pay(admin, mid, month=1, amount=500, confirm=True)
     await pay(admin, mid, month=2, amount=200, confirm=True)
     m = await cohort_money(admin, cohort)
@@ -218,7 +218,7 @@ async def test_debt_math_mid_course_enrollment_and_partial_payments(
         "2000.00",
         "1000.00",
         "1000.00",
-        [1, 2],
+        [1, 2, 3],  # paid months follow the cap: pending + confirmed reach the price
     )
     assert (b["expected"], b["paid"], b["debt"]) == ("1000.00", "700.00", "300.00")
     # overpaying never makes a negative debt
