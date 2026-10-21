@@ -14,6 +14,7 @@ from app.campaigns.api import router as campaigns_router
 from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
+from app.core.monitoring import init_sentry
 from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.employment.api import router as employment_router
@@ -29,6 +30,9 @@ from app.rooms.api import router as rooms_router
 from app.salaries.api import router as salaries_router
 from app.students.api import router as students_router
 from app.users.api import router as users_router
+
+# before the app exists: the SDK patches Starlette's classes when it starts
+init_sentry()
 
 
 @asynccontextmanager
