@@ -108,6 +108,8 @@ class PaymentIn(Strict):
     method: Method
     paid_at: Day
     note: Note | None = None
+    # «Частично» in the form: the server prefixes the note with what is left of the month
+    partial: bool = False
 
 
 class PaymentUpdate(Strict):
@@ -412,6 +414,10 @@ DEBTOR_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Оплачено", lambda r: r["paid"], "money"),
     Col("Долг", lambda r: r["debt"], "money"),
     Col("Оплачены месяцы", lambda r: ", ".join(map(str, r["paid_months"]))),
+    Col(
+        "Осталось по месяцам",
+        lambda r: ", ".join(f"{d['month_no']}: {tjs(d['remaining'])}" for d in r["due_months"]),
+    ),
 ]
 
 
@@ -457,6 +463,19 @@ async def cohort_payments(cohort_id: uuid.UUID, p: View, db: DB) -> dict[str, An
         "enrolled": (await cohort_enrolled(db, [cohort.id]))[cohort.id],
         "payers": (await cohort_payers(db, [cohort.id]))[cohort.id],
         "items": [{"enrollment_id": e.id, **money[e.id]} for e in enrollments],
+    }
+
+
+@router.get("/enrollment/{enrollment_id}")
+async def enrollment_payments(enrollment_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
+    """Money of one enrollment with the state of every month (the student's card)."""
+    enrollment, cohort = await _enrollment(db, p, enrollment_id)
+    money = await enrollment_money(db, [(enrollment, cohort)])
+    return {
+        "enrollment_id": enrollment.id,
+        "months": cohort_months(cohort.start_date, cohort.end_date),
+        "price_month": cohort.price_month,
+        **money[enrollment.id],
     }
 
 
@@ -533,6 +552,19 @@ async def enrollment_options(
 HOLD_TTL = timedelta(seconds=120)
 
 
+def tjs(amount: Decimal) -> str:
+    """«250 TJS», «250.50 TJS»."""
+    whole = amount == amount.to_integral_value()
+    return f"{amount.quantize(Decimal(1)) if whole else amount.quantize(Decimal('0.01'))} TJS"
+
+
+def partial_note(left: Decimal) -> str:
+    """The note a partial payment gets; `left` = what the month still needs after it."""
+    if left <= 0:
+        return "Месяц оплачен полностью"
+    return f"Частичная оплата. Осталось оплатить {tjs(left)}"
+
+
 async def _enrollment(
     db: AsyncSession, p: Principal, enrollment_id: uuid.UUID, *, for_update: bool = False
 ) -> tuple[Enrollment, Cohort]:
@@ -585,6 +617,8 @@ async def _month_payments(
         {
             "id": x.id,
             "amount": str(x.amount),
+            "method": x.method,
+            "paid_at": x.paid_at,
             "status": x.status,
             "created_by": by.get(str(x.id)),
             "created_at": x.created_at,
@@ -620,14 +654,13 @@ async def _check_month(
     month_no: int,
     amount: Decimal,
     exclude: uuid.UUID | None = None,
-) -> None:
-    """Call with the enrollment row locked."""
-    if cohort.price_month <= 0:  # no price set: nothing to cap (see `month_full`)
-        return
+) -> Decimal:
+    """Call with the enrollment row locked. Returns what was entered for the month before."""
     entered = (await month_sums(db, [enrollment_id], exclude=exclude))[enrollment_id]
     paid = entered.get(month_no, ZERO)
-    if paid + amount <= cohort.price_month:
-        return
+    # no price set: nothing to cap (see `month_full`)
+    if cohort.price_month <= 0 or paid + amount <= cohort.price_month:
+        return paid
     state = await _month_state(db, enrollment_id, cohort, month_no, exclude)
     raise DomainError(MONTH_ALREADY_PAID if state["full"] else MONTH_OVERPAID, **state)
 
@@ -740,7 +773,11 @@ async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB)
         # a retry of the same create that waited on the lock finds the stored payment now
         existing = await _by_key(db, body.idempotency_key)
     if existing is None:
-        await _check_month(db, body.enrollment_id, cohort, body.month_no, body.amount)
+        before = await _check_month(db, body.enrollment_id, cohort, body.month_no, body.amount)
+        note = body.note or None
+        left = cohort.price_month - before - body.amount
+        if cohort.price_month > 0 and (body.partial or left > 0):
+            note = partial_note(left) + (f". {note}" if note else "")
         new_id = (
             await db.execute(
                 pg_insert(Payment)
@@ -750,7 +787,7 @@ async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB)
                     amount=body.amount,
                     method=body.method,
                     paid_at=body.paid_at,
-                    note=body.note or None,
+                    note=note,
                     idempotency_key=body.idempotency_key,
                 )
                 .on_conflict_do_nothing(index_elements=[Payment.idempotency_key])

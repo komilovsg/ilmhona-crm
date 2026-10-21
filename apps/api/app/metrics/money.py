@@ -144,29 +144,84 @@ async def enrollment_money(
             .group_by(Payment.enrollment_id)
         )
         paid = {i: (money(total), sorted(months)) for i, total, months in result.all()}
+    pending = await month_sums(db, ids, status=PENDING)
+    entered = await month_sums(db, ids)
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for e, cohort in rows:
         total, months = paid.get(e.id, (ZERO, []))
         expected = expected_amount(cohort.price_month, e.enrolled_at, cohort, on)
+        states = [
+            month_info(
+                m, entered[e.id].get(m, ZERO), pending[e.id].get(m, ZERO), cohort.price_month
+            )
+            for m in range(1, cohort_months(cohort.start_date, cohort.end_date) + 1)
+        ]
+        owed = owed_month_numbers(e.enrolled_at, cohort, on)
         out[e.id] = {
             "paid": total,
             "paid_months": months,
             "expected": expected,
             "debt": debt_of(expected, total, e.status),
+            "month_states": states,
+            # months started so far that are not covered yet, with what is left of each
+            "due_months": []
+            if e.status == EXPELLED
+            else [
+                {"month_no": st["month_no"], "remaining": st["remaining"]}
+                for st in states
+                if st["month_no"] in owed and st["state"] != MONTH_PAID
+            ],
         }
     return out
 
 
+MONTH_UNPAID, MONTH_PARTIAL, MONTH_PAID = "не оплачен", "частично", "оплачен"
+
+
+def month_info(month_no: int, entered: Decimal, pending: Decimal, price: Decimal) -> dict[str, Any]:
+    """The state of one month of an enrollment (pending + confirmed count, like the payment rule):
+    оплачен (reaches the price), частично (something, less than the price), не оплачен."""
+    if month_full(entered, price) or (price <= 0 and entered > 0):
+        state = MONTH_PAID
+    elif entered > 0:
+        state = MONTH_PARTIAL
+    else:
+        state = MONTH_UNPAID
+    return {
+        "month_no": month_no,
+        "paid": entered,
+        "pending": pending,
+        "price": price,
+        "remaining": max(price - entered, ZERO),
+        "state": state,
+    }
+
+
+def owed_month_numbers(enrolled_at: datetime, cohort: Cohort, on: date) -> range:
+    """`month_no`s the student has started so far (the months `expected_amount` counts)."""
+    start = month_index(cohort.start_date)
+    first = max(month_index(enrolled_at.astimezone(TZ).date()), start)
+    last = min(month_index(on), month_index(cohort.end_date))
+    return range(first - start + 1, last - start + 2)
+
+
 async def month_sums(
-    db: AsyncSession, enrollment_ids: Sequence[uuid.UUID], *, exclude: uuid.UUID | None = None
+    db: AsyncSession,
+    enrollment_ids: Sequence[uuid.UUID],
+    *,
+    exclude: uuid.UUID | None = None,
+    status: str | None = None,
 ) -> dict[uuid.UUID, dict[int, Decimal]]:
     """What is entered per enrollment and month: pending + confirmed (a month is «taken» as soon
-    as a payment for it exists, confirmed or not). `exclude` leaves one payment out (an edit)."""
+    as a payment for it exists, confirmed or not). `exclude` leaves one payment out (an edit);
+    `status` sums only that status."""
     if not enrollment_ids:
         return {}
     where: list[ColumnElement[bool]] = [Payment.enrollment_id.in_(enrollment_ids)]
     if exclude is not None:
         where.append(Payment.id != exclude)
+    if status is not None:
+        where.append(Payment.status == status)
     rows = await db.execute(
         select(Payment.enrollment_id, Payment.month_no, func.sum(Payment.amount))
         .where(*where)
