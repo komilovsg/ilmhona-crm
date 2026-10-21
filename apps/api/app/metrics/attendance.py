@@ -12,12 +12,13 @@
 """
 
 import uuid
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import ColumnElement, Date, and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.models import Attendance, Cohort, Course, Enrollment, Grade, Lesson, Room
 
 TZ_NAME = "Asia/Dushanbe"
@@ -29,7 +30,7 @@ EXPELLED = "отчислен"
 
 
 def _now() -> datetime:
-    return datetime.now(UTC)
+    return clock.now()
 
 
 def attendance_score(present: int, held: int) -> int:

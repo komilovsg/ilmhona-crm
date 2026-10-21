@@ -6,13 +6,14 @@ call `sync_status`; when a cohort becomes завершён its активный 
 (total ≥ 70) or завершил.
 """
 
-from datetime import date, datetime
+from datetime import date
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import record
+from app.core import clock
 from app.metrics import enrollment_results
 from app.models import Cohort, Enrollment
 
@@ -28,7 +29,7 @@ STATUSES = (RECRUITING, ACTIVE, DONE, CANCELLED)
 
 
 def today() -> date:
-    return datetime.now(TZ).date()
+    return clock.today()
 
 
 def status_for(start: date, end: date, on: date) -> str:

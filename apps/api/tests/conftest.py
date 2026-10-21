@@ -4,7 +4,7 @@ that DATABASE_URL points to (compose.yaml, CI service). Never the dev database."
 import asyncio
 import os
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from typing import Any
 
 import httpx
@@ -48,6 +48,26 @@ def migrated_database() -> None:
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", TEST_URL.render_as_string(hide_password=False))
     command.upgrade(cfg, "head")
+
+
+@pytest.fixture(autouse=True)
+def clock() -> Iterator[Callable[[str], None]]:
+    """`clock("08:00")` pins «now» to that Dushanbe wall-clock time of today's Dushanbe date;
+    released after the test. FREEZE_AT=HH:MM runs the whole suite at that time of day (to hunt
+    tests that only pass at some hours)."""
+    from datetime import datetime
+
+    from app.core import clock as app_clock
+
+    def freeze(hhmm: str) -> None:
+        h, m = map(int, hhmm.split(":"))
+        day = datetime.now(app_clock.TZ).date()
+        app_clock.freeze(datetime(day.year, day.month, day.day, h, m, tzinfo=app_clock.TZ))
+
+    if os.environ.get("FREEZE_AT"):
+        freeze(os.environ["FREEZE_AT"])
+    yield freeze
+    app_clock.freeze(None)
 
 
 @pytest.fixture(autouse=True)

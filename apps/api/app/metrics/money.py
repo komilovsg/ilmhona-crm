@@ -20,7 +20,7 @@
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -28,6 +28,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.models import (
     AppUser,
     Campaign,
@@ -54,7 +55,7 @@ def money(value: Any) -> Decimal:
 
 
 def today() -> date:
-    return datetime.now(UTC).astimezone(TZ).date()
+    return clock.today()
 
 
 def month_index(d: date) -> int:
