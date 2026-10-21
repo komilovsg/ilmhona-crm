@@ -18,14 +18,15 @@ import { usePaymentMonth } from "@/hooks/payment-month";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { formatPrice, MAX_DATE, MIN_DATE, todayIso } from "@/lib/education";
-import { amountText, methodLabel, newKey, PAYMENT_METHODS, paidMonthsLabel, validAmount } from "@/lib/money";
+import { amountText, methodLabel, newKey, PAYMENT_METHODS, validAmount } from "@/lib/money";
 import type { EnrollmentOption, PaymentRow } from "@/lib/money-types";
 import {
   defaultMonth,
   holdText,
   monthConflictText,
-  monthStateLabel,
+  monthOptionLabel,
   nextOpenMonth,
+  paidCountLabel,
   paidText,
   partialAmountOk,
   statusText,
@@ -53,7 +54,7 @@ function OptionButton({
         <span className="shrink-0 text-xs font-medium text-brand-text">{o.cohort_code}</span>
       </span>
       <span className="mt-0.5 block truncate text-xs text-default-500">
-        {o.course_name} · {formatPrice(o.price_month)}/мес · оплачено: {paidMonthsLabel(o.paid_months, o.months)}
+        {o.course_name} · {formatPrice(o.price_month)}/мес · оплачено: {paidCountLabel(o.month_states ?? [], o.months)}
         {Number(o.debt) > 0 ? ` · долг ${formatPrice(o.debt)}` : ""}
       </span>
     </>
@@ -348,14 +349,12 @@ export function PaymentFormModal({
               {option ? (
                 <SelectField
                   isRequired
+                  className="col-span-2"
                   label="Месяц"
                   options={Array.from({ length: option.months }, (_, i) => {
                     const state = option.month_states?.find((s) => s.month_no === i + 1);
 
-                    return {
-                      key: String(i + 1),
-                      label: `${i + 1}-й${state && state.state !== "не оплачен" ? ` · ${monthStateLabel(state)}` : ""}`,
-                    };
+                    return { key: String(i + 1), label: monthOptionLabel(i + 1, state) };
                   })}
                   value={month === null ? "" : String(month)}
                   onChange={(m) => {
@@ -374,6 +373,7 @@ export function PaymentFormModal({
               )}
               <Input
                 isRequired
+                className={option ? "col-span-2" : undefined}
                 description={creating && st && capped && mode === "full" && Number(st.paid) > 0 ? "Остаток месяца" : undefined}
                 endContent={<span className="text-xs text-default-500">TJS</span>}
                 errorMessage={creating && st && capped ? `Не больше ${tjs(st.remaining)}` : undefined}

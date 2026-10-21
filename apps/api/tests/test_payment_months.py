@@ -132,7 +132,7 @@ async def test_partial_payment_gets_the_note_of_what_is_left(admin: httpx.AsyncC
     cohort = await running_cohort(admin, price=700)
     e = await enroll(admin, cohort)
     first = await admin.post(P, json=body(e, amount="250.50", partial=True, note="от брата"))
-    assert first.json()["note"] == "Частичная оплата. Осталось оплатить 449.50 TJS. от брата"
+    assert first.json()["note"] == "Частичная оплата. Осталось оплатить 449,50 TJS. от брата"
     # a smaller amount without the flag is partial as well
     second = await admin.post(P, json=body(e, amount="49.50"))
     assert second.json()["note"] == "Частичная оплата. Осталось оплатить 400 TJS"

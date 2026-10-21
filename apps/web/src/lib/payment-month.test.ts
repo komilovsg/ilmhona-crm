@@ -6,8 +6,10 @@ import {
   dueText,
   holdText,
   monthConflictText,
+  monthOptionLabel,
   monthStateLabel,
   nextOpenMonth,
+  paidCountLabel,
   paidText,
   partialAmountOk,
   whenText,
@@ -71,6 +73,17 @@ test("month states and the partial amount", () => {
   assert.equal(monthStateLabel({ state: "не оплачен", paid: "0.00", price: "500.00" }), "не оплачен");
   assert.equal(monthStateLabel({ state: "частично", paid: "200.00", price: "500.00" }), "частично: 200 из 500 TJS");
   assert.equal(monthStateLabel({ state: "оплачен", paid: "500.00", price: "500.00" }), "оплачен");
+  // one definition with the cap: a month covered by a pending payment is «оплачен» everywhere
+  const states = [
+    { month_no: 1, state: "оплачен" as const, paid: "500.00", pending: "500.00", price: "500.00" },
+    { month_no: 2, state: "частично" as const, paid: "200.00", pending: "0.00", price: "500.00" },
+    { month_no: 3, state: "оплачен" as const, paid: "500.00", pending: "0.00", price: "500.00" },
+  ];
+  assert.equal(paidCountLabel(states, 4), "2 из 4 (1 ожидает подтверждения)");
+  assert.equal(paidCountLabel([states[2]], 4), "1 из 4");
+  assert.equal(monthOptionLabel(1, states[0]), "1-й · оплачен · ожидает");
+  assert.equal(monthOptionLabel(2, states[1]), "2-й · частично: 200 из 500 TJS");
+  assert.equal(monthOptionLabel(4, undefined), "4-й");
   assert.ok(partialAmountOk("200", "200.00"));
   assert.ok(partialAmountOk("0.5", "200"));
   for (const bad of ["0", "", "200.01", "-1", "abc"]) assert.ok(!partialAmountOk(bad, "200.00"), bad);

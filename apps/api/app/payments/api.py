@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.audit.log import diff_of, record
+from app.audit.sentences import money_text
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core import clock
 from app.core.db import DB
@@ -570,9 +571,8 @@ HOLD_TTL = timedelta(seconds=120)
 
 
 def tjs(amount: Decimal) -> str:
-    """«250 TJS», «250.50 TJS»."""
-    whole = amount == amount.to_integral_value()
-    return f"{amount.quantize(Decimal(1)) if whole else amount.quantize(Decimal('0.01'))} TJS"
+    """«250 TJS», «1 349,50 TJS» (the audit's money format)."""
+    return f"{money_text(amount)} TJS"
 
 
 def partial_note(left: Decimal) -> str:

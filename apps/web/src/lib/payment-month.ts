@@ -126,6 +126,24 @@ export function monthStateLabel(s: Pick<MonthState, "state" | "paid" | "price">)
   return s.state;
 }
 
+/**
+ * «1 из 4» — months оплачен by the same definition as the cap (pending + confirmed ≥ price);
+ * «(1 ожидает подтверждения)» when some of them are covered by pending payments.
+ */
+export function paidCountLabel(states: Pick<MonthState, "state" | "pending">[], months: number): string {
+  const paid = states.filter((s) => s.state === "оплачен");
+  const waiting = paid.filter((s) => Number(s.pending) > 0).length;
+
+  return `${paid.length} из ${months}${waiting ? ` (${waiting} ожидает подтверждения)` : ""}`;
+}
+
+/** The month picker's label: «2-й», «2-й · оплачен», «2-й · частично: 200 из 500 TJS · ожидает». */
+export function monthOptionLabel(month: number, state: Pick<MonthState, "state" | "paid" | "price" | "pending"> | undefined): string {
+  if (!state || state.state === "не оплачен") return `${month}-й`;
+
+  return `${month}-й · ${monthStateLabel(state)}${Number(state.pending) > 0 ? " · ожидает" : ""}`;
+}
+
 /** Amount of a partial payment: more than 0 and not more than what the month still needs. */
 export function partialAmountOk(amount: string, remaining: Money): boolean {
   const n = Number(amount);
