@@ -1,18 +1,20 @@
 """Dashboard and master list (stage 4). Every number comes from `app.metrics.reports`.
 
 Rights: `dashboard` and `master_list` view; the instructor role gets 403 whatever the matrix says
-(money and sales numbers). Branch scope applies; the branch toggle narrows within it (another
-branch than the user's is a 404).
+(money and sales numbers). Money needs its own section too (`MONEY_SECTIONS`: hidden = null,
+no Excel column); lead names on the dashboard need `leads` view. Branch scope applies; the
+branch toggle narrows within it (another branch than the user's is a 404).
 """
 
 import uuid
 from datetime import date
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 
 from app.auth.deps import Principal, require_csrf_header
 from app.core.db import DB
+from app.core.paging import Page, PageSize
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.leads.scope import reader
 from app.metrics import unfilled_lessons
@@ -21,14 +23,18 @@ from app.metrics.reports import (
     by_course,
     by_month,
     callback_leads,
+    hidden_money,
+    hide_money,
     master_count,
     master_rows,
     master_select,
     master_where,
     overview,
     recent_leads,
+    shown_columns,
 )
 from app.metrics.sales import callbacks_today
+from app.permissions import allows
 
 router = APIRouter(prefix="/api/v1", tags=["reports"], dependencies=[Depends(require_csrf_header)])
 
@@ -56,8 +62,10 @@ async def dashboard_overview(
 ) -> dict[str, Any]:
     scope = scope_of(p, branch_id)
     unfilled = await unfilled_lessons(db, scope.cohort)
+    names = allows(p.level("leads"), "view")  # lead names and phones: the leads section's
+    (numbers,) = hide_money([await overview(db, scope, date_from, date_to)], hidden_money(p))
     return {
-        **await overview(db, scope, date_from, date_to),
+        **numbers,
         "unfilled": {
             "count": len(unfilled),
             "items": [
@@ -75,9 +83,9 @@ async def dashboard_overview(
         },
         "callbacks": {
             "count": await callbacks_today(db, scope.leads()),
-            "items": await callback_leads(db, scope, WIDGET_ROWS),
+            "items": await callback_leads(db, scope, WIDGET_ROWS) if names else [],
         },
-        "recent_leads": await recent_leads(db, scope, WIDGET_ROWS),
+        "recent_leads": await recent_leads(db, scope, WIDGET_ROWS) if names else [],
     }
 
 
@@ -85,7 +93,9 @@ async def dashboard_overview(
 async def dashboard_by_month(
     p: DashboardReader, db: DB, branch_id: uuid.UUID | None = None
 ) -> dict[str, Any]:
-    return await by_month(db, scope_of(p, branch_id))
+    data = await by_month(db, scope_of(p, branch_id))
+    hide_money(data["items"], hidden_money(p))
+    return data
 
 
 MONTH_COLUMNS: list[Col[dict[str, Any]]] = [
@@ -97,6 +107,7 @@ MONTH_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Новых студентов", lambda r: r["new_students"], "int"),
     Col("Лидов", lambda r: r["leads"], "int"),
 ]
+MONTH_MONEY = {"Доход": "income", "Зарплата": "payroll", "Реклама": "ads", "Прибыль": "profit"}
 
 
 @router.get("/dashboard/by-month/export")
@@ -110,7 +121,7 @@ async def export_by_month(
         entity="dashboard_month",
         slug="dashbord_po_mesyatsam",
         title="Дашборд по месяцам",
-        columns=MONTH_COLUMNS,
+        columns=shown_columns(MONTH_COLUMNS, MONTH_MONEY, hidden_money(p)),
         rows=data["items"],
         filters={"branch_id": branch_id},
     )
@@ -125,7 +136,10 @@ async def dashboard_by_course(
     date_to: date | None = None,
 ) -> dict[str, Any]:
     items = await by_course(db, scope_of(p, branch_id), date_from, date_to)
-    return {"items": items}
+    hidden = hidden_money(p)
+    if "income" in hidden:  # the order by income would rank what the numbers hide
+        items.sort(key=lambda r: r["course_name"])
+    return {"items": hide_money(items, hidden)}
 
 
 # ---- master list -------------------------------------------------------------------------
@@ -139,8 +153,8 @@ async def master_list(
     status: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = master_where(scope_of(p, branch_id), status, date_from, date_to)
     total = await master_count(db, where)
@@ -148,7 +162,7 @@ async def master_list(
         await db.execute(master_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
     return {
-        "items": await master_rows(db, [tuple(r) for r in found]),
+        "items": hide_money(await master_rows(db, [tuple(r) for r in found]), hidden_money(p)),
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -175,6 +189,7 @@ MASTER_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Выпускников", lambda r: r["graduates"], "int"),
     Col("Трудоустроено", lambda r: r["employed"], "int"),
 ]
+MASTER_MONEY = {"LTV/чел": "ltv", "Доход": "income"}
 
 
 @router.get("/master-list/export")
@@ -196,7 +211,7 @@ async def export_master_list(
         entity="master_list",
         slug="master_list",
         title="Мастер-лист",
-        columns=MASTER_COLUMNS,
+        columns=shown_columns(MASTER_COLUMNS, MASTER_MONEY, hidden_money(p)),
         rows=rows,
         filters={
             "branch_id": branch_id,

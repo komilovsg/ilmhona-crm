@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any, Self
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.cohorts import status as st
 from app.cohorts.schedule import check_room_free, generate_lessons, local_dt
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
+from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
@@ -347,8 +348,8 @@ async def list_cohorts(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 24,
+    page: Page = 1,
+    page_size: PageSize = 24,
 ) -> dict[str, Any]:
     where = _cohort_where(p, status, branch_id, q)
     total = (

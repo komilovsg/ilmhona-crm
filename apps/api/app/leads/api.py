@@ -20,6 +20,7 @@ from app.auth.deps import Principal, require_csrf_header
 from app.cohorts import status as cohort_status
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
+from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
 from app.education.errors import COHORT_CLOSED, COHORT_FULL, STUDENT_BRANCH_MISMATCH
 from app.education.scope import (
@@ -279,8 +280,8 @@ async def list_leads(
     callback: bool = False,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = lead_where(
         p,

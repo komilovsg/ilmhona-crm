@@ -398,7 +398,8 @@ def sentence(
         _, number = _pair(e.diff.get("certificate_no"))
         return f"{who}: выдан сертификат {number} студенту {student} (поток {cohort})"
     if a.startswith("employment."):
-        student = _pair(e.diff.get("student"))[0 if a.endswith("delete") else 1]
+        # an update's diff has no «student»: the label (the student's name) names them
+        student = _pair(e.diff.get("student"))[0 if a.endswith("delete") else 1] or lab
         verb, _ = ACTIONS[a]
         diff = {k: v for k, v in e.diff.items() if k != "student"}
         return _with_changes(

@@ -111,7 +111,7 @@ export default function MasterListPage() {
                       <td className={NUM}>{r.paid_2}</td>
                       <td className={NUM}>{r.paid_3}</td>
                       <td className={NUM}>{orDash(r.ltv, formatPrice)}</td>
-                      <td className={NUM}>{formatPrice(r.income)}</td>
+                      <td className={NUM}>{orDash(r.income, formatPrice)}</td>
                       <td className={NUM}>{r.graduates}</td>
                       <td className={NUM}>{r.employed}</td>
                     </tr>
@@ -142,7 +142,7 @@ export default function MasterListPage() {
                       ["Оплатили мес. 1", String(r.paid_1)],
                       ["Мес. 2", String(r.paid_2)],
                       ["Мес. 3", String(r.paid_3)],
-                      ["Доход", formatPrice(r.income)],
+                      ["Доход", orDash(r.income, formatPrice)],
                       ["LTV/чел", orDash(r.ltv, formatPrice)],
                       ["Выпускников", String(r.graduates)],
                       ["Трудоустроено", String(r.employed)],

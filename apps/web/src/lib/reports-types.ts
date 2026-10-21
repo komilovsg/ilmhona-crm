@@ -16,13 +16,14 @@ export type Overview = {
   funnel: Record<string, number>;
   active_students: number;
   students_total: number;
-  income: string;
+  // money is null without the section it comes from (payments / instructors / marketing)
+  income: string | null;
   active_cohorts: number;
   recruiting_cohorts: number;
   cohorts_total: number;
-  payroll: string;
-  profit: string;
-  ads: string;
+  payroll: string | null;
+  profit: string | null;
+  ads: string | null;
   campaigns: number;
   graduates: number;
   converted: number;
@@ -45,10 +46,10 @@ export type Overview = {
 
 export type MonthRow = {
   month: string;
-  income: string;
-  payroll: string;
-  ads: string;
-  profit: string;
+  income: string | null;
+  payroll: string | null;
+  ads: string | null;
+  profit: string | null;
   new_students: number;
   leads: number;
 };
@@ -57,7 +58,7 @@ export type CourseRow = {
   course_id: string;
   course_name: string;
   cohorts: number;
-  income: string;
+  income: string | null;
   students: number;
   graduates: number;
 };
@@ -78,7 +79,7 @@ export type MasterRow = {
   paid_1: number;
   paid_2: number;
   paid_3: number;
-  income: string;
+  income: string | null;
   ltv: string | null;
   graduates: number;
   employed: number;
@@ -98,7 +99,7 @@ export type GraduateRow = {
   instructor_name: string | null;
   enrolled_at: string;
   score: number;
-  paid: string;
+  paid: string | null;
   certificate_no: string | null;
   employed: boolean;
   organization: string | null;

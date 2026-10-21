@@ -212,7 +212,8 @@ async def test_branch_manager_sees_only_their_branch_and_cannot_toggle_out(
     mgr = await login_as("mgr", await manager_role(), branch="Душанбе")
     o = (await mgr.get(f"{D}/overview")).json()
     dushanbe = (await admin.get(f"{D}/overview", params=await _branch_params("Душанбе"))).json()
-    assert o == dushanbe
+    # the manager has no `instructors` view: payroll and profit are hidden, the rest is equal
+    assert o == {**dushanbe, "payroll": None, "profit": None}
     assert o["leads"] == 4 and o["income"] == "1300.00" and o["ads"] == "1000.00"
     # the toggle can narrow to their own branch, never reach into another
     own = (await mgr.get(f"{D}/overview", params=await _branch_params("Душанбе"))).json()
