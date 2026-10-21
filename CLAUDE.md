@@ -15,7 +15,7 @@ Patterns come from `~/Developer/my-hrm` — copy and simplify, don't reinvent. N
 
 ## Rules
 - Every bug in ANALYSIS.md is prevented by a DB constraint or a single code path, with a test naming the bug (`test_bug_04_…`).
-- Every update checks the row version (#25): the client sends the version it loaded in `If-Match`, the endpoint calls `check_version` (`app/core/versioning.py`), a mismatch is 409 `stale_version`; updates apply only the fields sent (PATCH). Web edit forms save through `useVersionedSave` + `ConflictDialog`.
+- Every update checks the row version (#25): the client sends the version it loaded in `X-Record-Version`, the endpoint calls `check_version` (`app/core/versioning.py`), a mismatch is 409 `stale_version`; updates apply only the fields sent (PATCH). Web edit forms save through `useVersionedSave` + `ConflictDialog`.
 - All numbers shown anywhere come from `app/metrics` only.
 - Every endpoint checks permission + scope (branch; instructor sees only own cohorts) on the backend. Every write goes to `audit_log` and reads as a Russian sentence: add the action to `app/audit/sentences.py` (the one formatter).
 - Every table has an Excel export through the one shared mechanism: the list module declares `Col`s and a `GET <list>/export` that reuses the list's `where`/select (`app/export.py`), the web uses `ExportButton`. Rights = view of the section, scope applies, every export writes an `export` audit entry; text cells are formula-neutralised, rows capped at 50 000.

@@ -504,7 +504,9 @@ async def set_grade(
         ]
         return _grade_out(enrollment.id, result)
 
-    await check_version(db, grade, version, "grade", current)
+    await check_version(
+        db, grade, version, "grade", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = {"homework": grade.homework, "final": grade.final}
     for field in body.model_fields_set:
         setattr(grade, field, getattr(body, field))

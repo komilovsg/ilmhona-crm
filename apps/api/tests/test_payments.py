@@ -354,7 +354,9 @@ async def test_version_conflict_on_payment_edit(
     p = await pay(admin, e)
     other = await login_as("anna", await manager_role())
     assert (await other.patch(f"{P}/{p['id']}", json={"amount": "510"})).status_code == 200
-    r = await admin.patch(f"{P}/{p['id']}", json={"amount": "520"}, headers={"If-Match": "1"})
+    r = await admin.patch(
+        f"{P}/{p['id']}", json={"amount": "520"}, headers={"X-Record-Version": "1"}
+    )
     assert (r.status_code, r.json()["code"]) == (409, "stale_version")
     assert r.json()["params"]["version"] == 2
     assert float(r.json()["params"]["current"]["amount"]) == 510

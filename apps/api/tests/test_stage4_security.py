@@ -167,7 +167,7 @@ async def test_instructor_is_denied_every_report_endpoint_even_with_grants(
                     json={"student_id": grad, "organization": "X", "employed_at": "2026-01-01"}
                     if method in ("POST", "PATCH")
                     else None,
-                    headers={"If-Match": "1"} if method == "PATCH" else None,
+                    headers={"X-Record-Version": "1"} if method == "PATCH" else None,
                 )
                 assert r.status_code == 403, (method, url, r.status_code)
 

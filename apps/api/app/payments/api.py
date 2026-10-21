@@ -580,7 +580,14 @@ async def update_payment(
 ) -> dict[str, Any]:
     row = await _row(db, p, payment_id)
     pay: Payment = row[0]
-    await check_version(db, pay, version, "payment", lambda: _load(db, p, payment_id))
+    await check_version(
+        db,
+        pay,
+        version,
+        "payment",
+        lambda: _load(db, p, payment_id),
+        changes=body.model_dump(exclude_unset=True),
+    )
     if pay.status == CONFIRMED:
         raise DomainError(PAYMENT_CONFIRMED)
     before = _snapshot(pay)

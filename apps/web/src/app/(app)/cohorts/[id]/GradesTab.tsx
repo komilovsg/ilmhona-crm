@@ -83,7 +83,7 @@ const fieldValue = (draft: string, fallback: number | null) => {
 
 /**
  * One student: Д/З and финал inputs. Each saves on blur through `useVersionedSave` (#25): the
- * version of the grade goes in `If-Match`, and a 409 opens the shared conflict dialog, where
+ * version of the grade goes in `X-Record-Version`, and a 409 opens the shared conflict dialog, where
  * «Обновить и повторить» keeps the typed value on top of what the other user saved. A save made
  * while another is still in flight waits for it, so two quick edits never conflict with each other.
  */

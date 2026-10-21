@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   apiRequestHeaders,
   CLIENT_IP_HEADER,
+  CLIENT_UA_HEADER,
   PROXY_SECRET_HEADER,
   trustedClientIp,
 } from "./forward.ts";
@@ -48,4 +49,12 @@ test("trusts Vercel's own header, never the spoofable x-forwarded-for", () => {
   );
   assert.equal(trustedClientIp(new Headers({ "x-real-ip": "198.51.100.4" })), "198.51.100.4");
   assert.equal(trustedClientIp(new Headers({ "x-forwarded-for": "6.6.6.6" })), "");
+});
+
+test("forwards the browser User-Agent in its own header, capped, never a forged one", () => {
+  const incoming = new Headers({ "user-agent": "Chrome/130 " + "x".repeat(600), [CLIENT_UA_HEADER]: "forged" });
+  const out = apiRequestHeaders(incoming, "", "secret");
+  assert.equal(out.get(CLIENT_UA_HEADER)?.length, 400);
+  assert.ok(out.get(CLIENT_UA_HEADER)?.startsWith("Chrome/130"));
+  assert.equal(apiRequestHeaders(new Headers({ [CLIENT_UA_HEADER]: "forged" }), "", "s").has(CLIENT_UA_HEADER), false);
 });

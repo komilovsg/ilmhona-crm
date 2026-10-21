@@ -500,7 +500,14 @@ async def update_cohort(
     cohort_id: uuid.UUID, body: CohortUpdate, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     cohort = await _load(db, p, cohort_id)
-    await check_version(db, cohort, version, "cohort", lambda: _detail(db, cohort.id))
+    await check_version(
+        db,
+        cohort,
+        version,
+        "cohort",
+        lambda: _detail(db, cohort.id),
+        changes=body.model_dump(exclude_unset=True),
+    )
     if cohort.status == st.CANCELLED:
         raise DomainError(COHORT_CLOSED)
     before = _snapshot(cohort)
@@ -960,7 +967,12 @@ async def set_enrollment_status(
 ) -> dict[str, Any]:
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
     await check_version(
-        db, enrollment, version, "enrollment", lambda: _enrollment_out(enrollment, student)
+        db,
+        enrollment,
+        version,
+        "enrollment",
+        lambda: _enrollment_out(enrollment, student),
+        changes=body.model_dump(exclude_unset=True),
     )
     if body.status == "активный" and cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)  # #11: a finished cohort has no active students
@@ -989,7 +1001,12 @@ async def set_enrollment_review(
     """A manager clears (or sets) the import's «check» flag of an enrollment."""
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
     await check_version(
-        db, enrollment, version, "enrollment", lambda: _enrollment_out(enrollment, student)
+        db,
+        enrollment,
+        version,
+        "enrollment",
+        lambda: _enrollment_out(enrollment, student),
+        changes=body.model_dump(exclude_unset=True),
     )
     before = enrollment.needs_review
     enrollment.needs_review = body.needs_review

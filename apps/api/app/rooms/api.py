@@ -296,7 +296,9 @@ async def update_room(
     async def current() -> dict[str, Any]:
         return room_out(room, branch_name)
 
-    await check_version(db, room, version, "room", current)
+    await check_version(
+        db, room, version, "room", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = {"name": room.name, "capacity": room.capacity}
     if body.name is not None:
         room.name = body.name
@@ -395,7 +397,14 @@ async def update_course(
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)
-    await check_version(db, course, version, "course", lambda: _async(course_out(course)))
+    await check_version(
+        db,
+        course,
+        version,
+        "course",
+        lambda: _async(course_out(course)),
+        changes=body.model_dump(exclude_unset=True),
+    )
     before = _course_snapshot(course)
     for field in body.model_fields_set:
         value = getattr(body, field)

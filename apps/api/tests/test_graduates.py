@@ -85,7 +85,9 @@ async def test_employment_rules_scope_and_versions(
     r = await admin.patch(f"{EM}/{job['id']}", json={"organization": "Другая"})
     assert r.status_code == 200 and r.json()["organization"] == "Другая"
     stale = await admin.patch(
-        f"{EM}/{job['id']}", json={"position": "X"}, headers={"If-Match": str(job["version"])}
+        f"{EM}/{job['id']}",
+        json={"position": "X"},
+        headers={"X-Record-Version": str(job["version"])},
     )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     # a viewer reads but cannot write; a Душанбе manager does not see Истаравшан students

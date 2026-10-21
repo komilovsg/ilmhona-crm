@@ -185,18 +185,20 @@ async def test_confirm_needs_the_version_the_confirmer_saw(admin: httpx.AsyncCli
     seen = payment["version"]
     edited = await admin.patch(f"{P}/{payment['id']}", json={"amount": "5000"})
     assert edited.status_code == 200
-    r = await admin.post(f"{P}/{payment['id']}/confirm", headers={"If-Match": str(seen)})
+    r = await admin.post(f"{P}/{payment['id']}/confirm", headers={"X-Record-Version": str(seen)})
     assert (r.status_code, r.json()["code"]) == (409, "stale_version")
     assert (await sql("SELECT status FROM payment"))[0][0] == "ожидает"
-    r = await admin.post(f"{P}/{payment['id']}/confirm", headers={"If-Match": "x"}, no_version=True)
+    r = await admin.post(
+        f"{P}/{payment['id']}/confirm", headers={"X-Record-Version": "x"}, no_version=True
+    )
     assert r.status_code == 400
     r = await admin.post(f"{P}/{payment['id']}/confirm", no_version=True)
     assert r.status_code == 428
     r = await admin.post(
-        f"{P}/{payment['id']}/confirm", headers={"If-Match": str(edited.json()["version"])}
+        f"{P}/{payment['id']}/confirm", headers={"X-Record-Version": str(edited.json()["version"])}
     )
     assert r.status_code == 200 and r.json()["amount"] == "5000.00"
-    r = await admin.post(f"{P}/{payment['id']}/unconfirm", headers={"If-Match": str(seen)})
+    r = await admin.post(f"{P}/{payment['id']}/unconfirm", headers={"X-Record-Version": str(seen)})
     assert (r.status_code, r.json()["code"]) == (409, "stale_version")
 
 
@@ -208,9 +210,9 @@ async def test_parallel_confirm_unconfirm_and_edit_stay_consistent(
     payment = await pay(admin, e)
     v = str(payment["version"])
     results = await asyncio.gather(
-        admin.post(f"{P}/{payment['id']}/confirm", headers={"If-Match": v}),
-        admin.post(f"{P}/{payment['id']}/confirm", headers={"If-Match": v}),
-        admin.patch(f"{P}/{payment['id']}", json={"amount": "1"}, headers={"If-Match": v}),
+        admin.post(f"{P}/{payment['id']}/confirm", headers={"X-Record-Version": v}),
+        admin.post(f"{P}/{payment['id']}/confirm", headers={"X-Record-Version": v}),
+        admin.patch(f"{P}/{payment['id']}", json={"amount": "1"}, headers={"X-Record-Version": v}),
         admin.delete(f"{P}/{payment['id']}"),
     )
     codes = [r.status_code for r in results]
@@ -235,7 +237,7 @@ async def test_confirm_or_edit_of_a_payment_deleted_meanwhile_is_404_not_500(
     e = await enroll(admin, cohort)
     for month in range(1, 9):
         payment = await pay(admin, e, month=month % cohort["months"] + 1)
-        url, v = f"{P}/{payment['id']}", {"If-Match": str(payment["version"])}
+        url, v = f"{P}/{payment['id']}", {"X-Record-Version": str(payment["version"])}
         results = await asyncio.gather(
             admin.delete(url),
             admin.post(f"{url}/confirm", headers=v),
@@ -320,7 +322,7 @@ async def test_instructor_with_widened_matrix_still_reaches_no_foreign_money(
             await me.get(f"{P}/options"),
             await me.get(f"{P}/debtors/export"),
             await me.get(f"{P}/by-cohort/{theirs['id']}"),
-            await me.post(f"{P}/{payment['id']}/unconfirm", headers={"If-Match": "1"}),
+            await me.post(f"{P}/{payment['id']}/unconfirm", headers={"X-Record-Version": "1"}),
             await me.post(P, json=_body(e)),
             await me.get("/api/v1/metrics/finance"),
             await make_payout(me, theirs, amount="5"),

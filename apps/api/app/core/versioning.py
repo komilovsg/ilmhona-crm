@@ -1,6 +1,8 @@
 """Edit conflicts (#25): every update names the version of the row it loaded.
 
-The client sends it in `If-Match` (the `version` of the record it got). `check_version` locks
+The client sends it in the custom `X-Record-Version` header (the `version` of the record it got).
+Not a standard conditional header: Vercel's edge evaluates those itself on proxied responses and
+answers 412 even though the API already saved the change. `check_version` locks
 the row, compares, and on a mismatch answers 409 `stale_version` with the last change from the
 audit log and the current record, so the screen can show both and re-apply the user's edit.
 The version itself is bumped by a database trigger on any real change of the row.
@@ -11,6 +13,7 @@ from collections.abc import Awaitable, Callable
 from typing import Annotated, Any
 
 from fastapi import Depends, Header
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,16 +28,16 @@ from app.core.errors import (
 from app.models import AppUser, AuditLog, Versioned
 
 
-def _if_match(if_match: Annotated[str | None, Header()] = None) -> int:
-    if if_match is None:
+def _record_version(x_record_version: Annotated[str | None, Header()] = None) -> int:
+    if x_record_version is None:
         raise DomainError(VERSION_REQUIRED)
     try:
-        return int(if_match.strip().removeprefix("W/").strip('"'))
+        return int(x_record_version.strip())
     except ValueError:
         raise DomainError(BAD_REQUEST) from None
 
 
-Version = Annotated[int, Depends(_if_match)]
+Version = Annotated[int, Depends(_record_version)]
 
 
 async def _last_change(db: AsyncSession, entity: str, entity_id: object) -> dict[str, Any]:
@@ -58,17 +61,29 @@ async def lock(db: AsyncSession, row: Versioned) -> None:
         raise DomainError(NOT_FOUND) from None
 
 
+def _already_applied(row: Versioned, changes: dict[str, Any] | None) -> bool:
+    if not changes:
+        return False
+    columns = {c.key for c in sa_inspect(type(row), raiseerr=True).column_attrs}
+    return all(k in columns and getattr(row, k) == v for k, v in changes.items())
+
+
 async def check_version[T: Versioned](
     db: AsyncSession,
     row: T,
     expected: int,
     entity: str,
     current: Callable[[], Awaitable[dict[str, Any]] | dict[str, Any]],
+    changes: dict[str, Any] | None = None,
 ) -> T:
     """Lock `row` (a concurrent edit waits here, then sees the new version) and compare. Call it
-    right after loading, before changing anything: it re-reads the row."""
+    right after loading, before changing anything: it re-reads the row.
+
+    Idempotent retry: a stale version is not a conflict when every field in `changes` (what the
+    client is setting) already equals the stored value (a double submit, a lost response): the
+    caller goes on, changes nothing, and answers 200 with the current record."""
     await lock(db, row)
-    if row.version != expected:
+    if row.version != expected and not _already_applied(row, changes):
         record = current()
         if inspect.isawaitable(record):
             record = await record

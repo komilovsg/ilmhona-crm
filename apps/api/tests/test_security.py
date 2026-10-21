@@ -168,3 +168,18 @@ def test_production_settings_refuse_unsafe_values() -> None:
 def test_api_docs_are_off_in_production() -> None:
     assert not _prod().api_docs
     assert Settings(env="development").api_docs
+
+
+async def test_device_comes_from_the_proxy_forwarded_agent(guarded: httpx.AsyncClient) -> None:
+    """The rewrite drops the browser's User-Agent: the web proxy sends it as X-Client-UA, and the
+    API believes it only together with the proxy secret."""
+    await make_user("anna", "manager")
+    chrome = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Chrome/130.0.0.0 Safari/537.36"
+    r = await guarded.post(
+        f"{A}/login",
+        json={"login": "anna", "password": PASSWORD},
+        headers={"X-Proxy-Secret": SECRET, "X-Client-UA": chrome + "x" * 600, "User-Agent": "py"},
+    )
+    assert r.status_code == 200
+    rows = await sql("SELECT user_agent FROM refresh_token")
+    assert rows[0][0].startswith(chrome) and len(rows[0][0]) == 400

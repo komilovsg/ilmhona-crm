@@ -268,7 +268,9 @@ async def update_student(
     async def current() -> dict[str, Any]:
         return await _detail(db, p, student, branch)
 
-    await check_version(db, student, version, "student", current)
+    await check_version(
+        db, student, version, "student", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = _snapshot(student)
     sent = body.model_fields_set
     if "full_name" in sent and body.full_name:

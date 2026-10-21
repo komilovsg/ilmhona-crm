@@ -203,7 +203,9 @@ async def set_cohort_rate(
     async def current() -> dict[str, Any]:
         return {"cohort_id": cohort.id, "instructor_rate": cohort.instructor_rate}
 
-    await check_version(db, cohort, version, "cohort", current)
+    await check_version(
+        db, cohort, version, "cohort", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = str(cohort.instructor_rate)
     cohort.instructor_rate = body.instructor_rate
     await db.flush()
@@ -446,7 +448,9 @@ async def update_payout(
     async def current() -> dict[str, Any]:
         return _payout_out(*await _payout_row(db, p, payout_id))
 
-    await check_version(db, po, version, "instructor_payout", current)
+    await check_version(
+        db, po, version, "instructor_payout", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = _payout_snapshot(po)
     sent = body.model_fields_set
     for field in ("amount", "paid_at", "method"):
