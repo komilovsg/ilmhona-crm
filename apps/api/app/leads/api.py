@@ -36,7 +36,7 @@ from app.leads.errors import (
     LEAD_CONVERTED,
     LEAD_USE_CONVERT,
 )
-from app.leads.hygiene import clean_name, phone_key, phone_parts
+from app.leads.hygiene import clean_name, phone_key, phone_parts, phone_plausible
 from app.leads.query import lead_where
 from app.leads.scope import LeadReader, LeadWriter
 from app.metrics import cohort_enrolled
@@ -389,6 +389,7 @@ async def create_lead(body: LeadCreate, p: LeadWriter, db: DB) -> dict[str, Any]
         comment=body.comment or None,
     )
     _apply_name(lead, body.full_name)
+    lead.needs_review = lead.needs_review or not phone_plausible(phone_raw)
     db.add(lead)
     await db.flush()
     await record(
@@ -437,6 +438,8 @@ async def update_lead(
         lead.needs_review = body.needs_review  # a person looked: the flag is theirs to set
     if "phone" in sent:
         lead.phone, lead.phone_raw = phone_parts(body.phone)
+        if not phone_plausible(lead.phone_raw) and "needs_review" not in sent:
+            lead.needs_review = True  # a number nobody can call goes to a person
     if "course_id" in sent:
         await _check_course(db, body.course_id)
         lead.course_id = body.course_id

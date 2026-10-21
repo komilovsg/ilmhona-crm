@@ -16,7 +16,7 @@ from app.leads.errors import (
     IMPORT_TOO_MANY_ROWS,
     IMPORT_UNREADABLE,
 )
-from app.leads.hygiene import clean_name, neutral, phone_parts
+from app.leads.hygiene import clean_name, neutral, phone_parts, phone_plausible
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_ROWS = 2000
@@ -187,7 +187,7 @@ def build_rows(
             continue
         cleaned = clean_name(raw)
         # a missing name is a row for a human, not a clean one
-        review = cleaned.needs_review or not raw
+        review = cleaned.needs_review or not raw or not phone_plausible(phone_raw)
         out.append(
             Row(
                 line=n,
