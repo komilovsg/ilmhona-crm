@@ -80,22 +80,30 @@ export function paidMonthsLabel(months: number[], total: number): string {
   return months.length ? `${months.join(", ")} из ${total}` : `0 из ${total}`;
 }
 
+/** What a person typed as an amount, ready to parse: «1 500,50» / «1500,5» -> «1500.50» / «1500.5». */
+export function moneyInput(text: string): string {
+  return text.replace(/[\s\u00a0\u202f]/g, "").replace(",", ".");
+}
+
 /** A normalised amount for the API and for the conflict comparison: «500.00» and 500 are one value. */
 export function amountText(value: string | number): string {
-  const n = Number(String(value).replace(",", "."));
+  const text = moneyInput(String(value));
+  const n = Number(text);
 
-  return Number.isFinite(n) ? String(n) : "";
+  return text !== "" && Number.isFinite(n) ? String(n) : "";
 }
 
-const MONEY_TEXT = /^\d{1,10}([.,]\d{1,2})?$/;
+const MONEY_TEXT = /^\d{1,10}(\.\d{1,2})?$/;
 
 export function validAmount(text: string): boolean {
-  return MONEY_TEXT.test(text.trim()) && Number(text.replace(",", ".")) > 0;
+  const t = moneyInput(text);
+
+  return MONEY_TEXT.test(t) && Number(t) > 0;
 }
 
-/** A rate may be 0 (not set yet), never negative. */
+/** A rate (or a budget) may be 0 (not set yet), never negative. */
 export function validRate(text: string): boolean {
-  return MONEY_TEXT.test(text.trim());
+  return MONEY_TEXT.test(moneyInput(text));
 }
 
 export function newKey(): string {

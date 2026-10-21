@@ -6,6 +6,7 @@ import { HeroUIProvider } from "@heroui/system";
 import { ToastProvider } from "@heroui/toast";
 import { useRouter } from "next/navigation";
 
+import { useIsPhone } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
@@ -18,6 +19,13 @@ function HeroUI({ children }: { children: ReactNode }) {
       {children}
     </HeroUIProvider>
   );
+}
+
+/** Desktop: top centre. Phone: bottom, above the tab bar, so a toast never covers a dialog's title. */
+function Toasts() {
+  const phone = useIsPhone();
+
+  return <ToastProvider placement={phone ? "bottom-center" : "top-center"} toastOffset={phone ? 76 : 12} />;
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -42,7 +50,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <HeroUI>
         <ThemeProvider>
-          <ToastProvider placement="top-center" toastOffset={12} />
+          <Toasts />
           <ServerWakeup />
           {children}
         </ThemeProvider>

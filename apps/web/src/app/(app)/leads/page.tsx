@@ -25,6 +25,7 @@ import { SelectField } from "@/components/SelectField";
 import { ListSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useCanChange } from "@/hooks/education";
 import { useCanChangeSales, useRefreshSales } from "@/hooks/sales";
 import { api } from "@/lib/api";
 import { fullDate } from "@/lib/education";
@@ -140,6 +141,7 @@ function NameCell({ lead }: { lead: LeadRow }) {
 
 export default function LeadsPage() {
   const canChange = useCanChangeSales("leads");
+  const canConvert = useCanChange("students"); // convert creates or links a student
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
@@ -199,7 +201,9 @@ export default function LeadsPage() {
   const leads = list.data?.items ?? [];
   const counts = funnel.data?.counts;
   const rowActions = (l: LeadRow) => [
-    { key: "convert", label: l.status === "записан" ? "Записать в ещё один поток" : "Записать в поток", icon: "user-plus" },
+    ...(canConvert
+      ? [{ key: "convert", label: l.status === "записан" ? "Записать в ещё один поток" : "Записать в поток", icon: "user-plus" }]
+      : []),
     { key: "edit", label: "Изменить", icon: "edit" },
     { key: "delete", label: "Удалить", icon: "trash", danger: true },
   ];

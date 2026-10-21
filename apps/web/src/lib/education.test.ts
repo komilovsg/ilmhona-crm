@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   addDays,
+  formatPrice,
   cohortTone,
   dayTitle,
   daysLabel,
@@ -60,4 +61,10 @@ test("scheduleProblem mirrors the API rules (#6 #8)", () => {
   assert.match(timeProblem("10:00", "14:30") ?? "", /4 часов/);
   assert.equal(timeProblem("07:00", "08:00"), null);
   assert.equal(timeProblem("20:30", "22:00"), null);
+});
+
+test("prices show kopecks only when there are some", () => {
+  assert.equal(formatPrice("650.00").replace(/\s/g, " "), "650 TJS");
+  assert.equal(formatPrice("3450.5").replace(/\s/g, " "), "3 450,50 TJS");
+  assert.equal(formatPrice(1200).replace(/\s/g, " "), "1 200 TJS");
 });

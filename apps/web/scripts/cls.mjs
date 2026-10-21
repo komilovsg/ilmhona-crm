@@ -63,6 +63,8 @@ for (const vp of VIEWPORTS) {
     "/payments",
     "/instructors",
     "/salaries",
+    "/leads",
+    "/marketing",
     "/cohorts",
     ...(cohort ? [`/cohorts/${cohort.id}`] : []),
     "/students",

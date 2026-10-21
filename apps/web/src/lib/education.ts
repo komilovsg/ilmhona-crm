@@ -98,7 +98,10 @@ export function dayTitle(iso: string): string {
 }
 
 export function formatPrice(value: string | number): string {
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(value))} TJS`;
+  const n = Number(value);
+  const fraction = Number.isInteger(n) ? 0 : 2; // «650 TJS», but «3 450,50 TJS»
+
+  return `${new Intl.NumberFormat("ru-RU", { minimumFractionDigits: fraction, maximumFractionDigits: 2 }).format(n)} TJS`;
 }
 
 export const MIN_DATE = "2020-01-01";

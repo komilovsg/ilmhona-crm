@@ -62,7 +62,9 @@ def clean_name(raw: str | None) -> CleanName:
     """The plain name and the «needs review» flag. An empty result becomes «Без имени»."""
     plain = _plain(raw or "")
     cleaned = _strip(plain)
-    flag = _looks_off(plain, cleaned)
+    # decoration that had to be cut (emoji, fancy letters, zero-width) is a sign of an ad form:
+    # anything changed beyond whitespace sends the name to a person
+    flag = _looks_off(plain, cleaned) or " ".join((raw or "").split()) != cleaned
     return CleanName(cleaned or "Без имени", flag)
 
 
@@ -84,6 +86,16 @@ def normalise_phone(raw: str | None) -> str | None:
     if len(digits) == 10 and digits.startswith("0"):
         return "+992" + digits[1:]
     return None
+
+
+def phone_plausible(raw: str | None) -> bool:
+    """An empty phone is fine (not given); a given one must look like a number: only digits and
+    + ( ) - . spaces, 7 to 15 digits."""
+    text = (raw or "").strip()
+    if not text:
+        return True
+    digits = _NON_DIGITS.sub("", text)
+    return bool(re.fullmatch(r"[+\d()\-.\s]+", text)) and 7 <= len(digits) <= 15
 
 
 def phone_key(value: str | None) -> str | None:

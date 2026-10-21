@@ -15,6 +15,7 @@ import { useRefreshSales } from "@/hooks/sales";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { MAX_DATE, MIN_DATE } from "@/lib/education";
+import { amountText, validRate } from "@/lib/money";
 import { CAMPAIGN_STATUSES, PLATFORMS } from "@/lib/sales";
 import type { CampaignRow } from "@/lib/sales-types";
 import { useSubmit } from "@/lib/submit";
@@ -45,7 +46,7 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
   const [status, setStatus] = useState(campaign?.status ?? "запланирована");
   const [error, setError] = useState<string | null>(null);
 
-  const budgetOk = budget.trim() !== "" && Number(budget) >= 0 && /^\d+([.,]\d{1,2})?$/.test(budget.trim());
+  const budgetOk = validRate(budget);
   const datesOk = !end || !start || end >= start;
   const valid = name.trim() && start && budgetOk && datesOk && (campaign || branchId);
   const values: Values = {
@@ -54,7 +55,7 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
     platform,
     start_date: start,
     end_date: end || null,
-    budget: budget.trim().replace(",", "."),
+    budget: amountText(budget),
     status,
   };
   const done = () => {

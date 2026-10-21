@@ -16,7 +16,7 @@ from app.leads.errors import (
     IMPORT_TOO_MANY_ROWS,
     IMPORT_UNREADABLE,
 )
-from app.leads.hygiene import clean_name, neutral, phone_parts
+from app.leads.hygiene import clean_name, neutral, phone_parts, phone_plausible
 
 MAX_BYTES = 2 * 1024 * 1024
 MAX_ROWS = 2000
@@ -82,17 +82,18 @@ def parse_csv(data: bytes) -> tuple[list[str], list[list[str]]]:
         raise DomainError(IMPORT_UNREADABLE)
     first = text.split("\n", 1)[0]
     delimiter = max(",;\t", key=first.count)
+    table: list[list[str]] = []
     try:
-        table = [r for r in csv.reader(io.StringIO(text), delimiter=delimiter) if any(r)]
+        for r in csv.reader(io.StringIO(text), delimiter=delimiter):
+            if any(r):
+                table.append(r)
+                if len(table) > MAX_ROWS + 1:  # header + rows: stop reading at the cap
+                    raise DomainError(IMPORT_TOO_MANY_ROWS, limit=MAX_ROWS)
     except csv.Error:
         raise DomainError(IMPORT_UNREADABLE) from None
     if len(table) < 2:
         raise DomainError(IMPORT_NO_ROWS)
-    header = [h.strip() for h in table[0]]
-    rows = table[1:]
-    if len(rows) > MAX_ROWS:
-        raise DomainError(IMPORT_TOO_MANY_ROWS, limit=MAX_ROWS)
-    return header, rows
+    return [h.strip() for h in table[0]], table[1:]
 
 
 def detect_mapping(header: list[str]) -> dict[str, str | None]:
@@ -186,7 +187,7 @@ def build_rows(
             continue
         cleaned = clean_name(raw)
         # a missing name is a row for a human, not a clean one
-        review = cleaned.needs_review or not raw
+        review = cleaned.needs_review or not raw or not phone_plausible(phone_raw)
         out.append(
             Row(
                 line=n,
