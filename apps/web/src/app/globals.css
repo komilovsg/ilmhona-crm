@@ -59,11 +59,9 @@ html[data-sidebar="collapsed"] {
   overflow: hidden;
 }
 
-.sb-label {
-  white-space: nowrap;
-}
-
+/* open: long labels wrap as before; collapsed: one line, clipped by the 72 px rail while it fades out */
 html[data-sidebar="collapsed"] .sb-label {
+  white-space: nowrap;
   opacity: 0;
   pointer-events: none;
 }
