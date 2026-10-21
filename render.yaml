@@ -24,11 +24,11 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      # Requests arrive only through Render's proxy (behind Vercel's), which has no fixed
-      # address range to list: uvicorn takes the client address from X-Forwarded-For of any
-      # peer. Safe only together with PROXY_SHARED_SECRET: the onrender.com URL is public, and
-      # the secret keeps out everyone but our Vercel proxy (docs/ops/deploy.md).
+      # The onrender.com URL is public; this secret keeps out everyone but our Vercel proxy, which
+      # sends it in X-Proxy-Secret (app/core/proxy.py, docs/ops/deploy.md).
       - key: PROXY_SHARED_SECRET
         sync: false
-      - key: FORWARDED_ALLOW_IPS
-        value: "*"
+      # FORWARDED_ALLOW_IPS is left at the uvicorn default (127.0.0.1): the client address for the
+      # login lockout comes from the X-Client-IP the web proxy derives from Vercel's own header,
+      # NOT from a browser-supplied X-Forwarded-For (which trusting any peer's XFF would let a
+      # spoofed header steer the per-address lockout).

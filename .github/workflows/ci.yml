@@ -6,6 +6,10 @@ on:
   push:
     branches: [main]
 
+# CI only reads the repo; deploys and backups have their own scoped tokens.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

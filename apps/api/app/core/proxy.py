@@ -18,7 +18,10 @@ from app.core.errors import _problem, errors
 
 PROXY_REQUIRED = errors.define("proxy_required", 403, "Direct API access is not allowed")
 HEADER = b"x-proxy-secret"
+CLIENT_IP_HEADER = "x-client-ip"
 OPEN_PATHS = {"/api/health"}
+# Set on the scope once the proxy secret matched: only then is X-Client-IP trustworthy.
+VIA_PROXY = "ilm_via_proxy"
 
 
 def matches_any(presented: bytes, secrets: Sequence[bytes]) -> bool:
@@ -42,22 +45,27 @@ class ProxySecretRequired:
             return
         presented = [v for k, v in scope["headers"] if k.lower() == HEADER]
         scope = {**scope, "headers": [(k, v) for k, v in scope["headers"] if k.lower() != HEADER]}
-        if scope["path"] not in OPEN_PATHS and not (
-            len(presented) == 1 and matches_any(presented[0], self.secrets)
-        ):
+        matched = len(presented) == 1 and matches_any(presented[0], self.secrets)
+        if scope["path"] not in OPEN_PATHS and not matched:
             await _problem(Request(scope), PROXY_REQUIRED)(scope, receive, send)
             return
+        # The request came through the trusted web proxy: X-Client-IP it set may be believed.
+        scope = {**scope, VIA_PROXY: matched}
         await self.app(scope, receive, send)
 
 
 def client_ip(request: Request) -> str:
     """The caller's address for the login lockout, or "" when there is none.
 
-    uvicorn (--proxy-headers, FORWARDED_ALLOW_IPS=* on Render) puts the first X-Forwarded-For
-    entry into `request.client`; Vercel overwrites that header with the address it saw. This is
-    safe only together with PROXY_SHARED_SECRET (every request without it is refused before it
-    gets here); without a secret (local development, tests) it is the direct peer."""
-    host = request.client.host if request.client else ""
+    Behind the proxy (secret matched, `VIA_PROXY` on the scope) the address is the single
+    `X-Client-IP` the web proxy derived from Vercel's own header and set after dropping any the
+    browser sent, so a forged X-Forwarded-For cannot steer the per-address lockout. Without a
+    secret (local development, tests) it is the direct peer. A client-supplied X-Client-IP is
+    never believed on its own: a direct caller is refused by the proxy middleware first."""
+    if request.scope.get(VIA_PROXY):
+        host = request.headers.get(CLIENT_IP_HEADER, "")
+    else:
+        host = request.client.host if request.client else ""
     try:
         return str(ip_address(host))
     except ValueError:

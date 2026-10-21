@@ -36,11 +36,11 @@ from app.auth.errors import (
 from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_AUTHENTICATED, DomainError
+from app.core.password_policy import MAX_LENGTH as PASSWORD_MAX_LENGTH
+from app.core.password_policy import policy, violations
 from app.core.proxy import client_ip
 from app.core.security import (
-    PASSWORD_MAX_LENGTH,
     hash_password,
-    is_strong,
     new_token,
     token_hash,
     verify_password,
@@ -326,6 +326,12 @@ async def update_me(body: ProfileIn, version: Version, p: CurrentUser, db: DB) -
     return me_out(p, await _branch_name(db, u.branch_id))
 
 
+@router.get("/password-policy")
+async def password_policy() -> dict[str, object]:
+    """Public: the rules the web shows while typing. Nothing secret in it."""
+    return policy()
+
+
 @router.post("/change-password")
 @allow_pending_password
 async def change_password(
@@ -338,7 +344,7 @@ async def change_password(
         raise DomainError(WRONG_PASSWORD)
     if body.new_password == body.current_password:
         raise DomainError(SAME_PASSWORD)
-    if not is_strong(body.new_password):
+    if violations(body.new_password, login=u.login):
         raise DomainError(WEAK_PASSWORD)
     u.password_hash = hash_password(body.new_password)
     u.must_change_password = False
