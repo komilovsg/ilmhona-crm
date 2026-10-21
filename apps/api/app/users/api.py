@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
@@ -21,6 +21,7 @@ from app.auth.deps import Principal, permissions_of, require, require_csrf_heade
 from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.paging import Page, PageSize
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
 from app.export import MAX_ROWS, Col, xlsx_response
@@ -209,8 +210,8 @@ async def list_users(
     branch_id: uuid.UUID | None = None,
     role_id: uuid.UUID | None = None,
     is_active: bool | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = _user_where(p, q, branch_id, role_id, is_active)
     total = (await db.execute(select(func.count()).select_from(AppUser).where(*where))).scalar_one()

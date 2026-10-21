@@ -30,7 +30,7 @@ export type NavItem = {
 
 // Order = order in the sidebar. `section` keys are the backend's (app/permissions.py).
 export const NAV_ITEMS: NavItem[] = [
-  { section: "dashboard", href: "/dashboard", label: "Дашборд", icon: "dashboard" },
+  { section: "dashboard", href: "/dashboard", label: "Дашборд", icon: "dashboard", audience: "staff" },
   // the instructor's home (a manager with the attendance right sees it too): today's lessons, «не заполнено»
   { section: "attendance", href: "/today", label: "Сегодня", icon: "attendance" },
   { section: "leads", href: "/leads", label: "Лиды", icon: "leads" },
@@ -38,8 +38,8 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "cohorts", href: "/cohorts", label: "Потоки", icon: "cohorts" },
   { section: "payments", href: "/payments", label: "Оплаты", icon: "payments" },
   { section: "rooms", href: "/rooms", label: "Аудитории", icon: "rooms" },
-  { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates" },
-  { section: "master_list", href: "/master-list", label: "Мастер-лист", icon: "master" },
+  { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
+  { section: "master_list", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
   { section: "marketing", href: "/marketing", label: "Маркетинг", icon: "marketing" },
   // the instructor sees only their own money: one page instead of the instructors and salaries tables
   { section: "instructors", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
@@ -76,7 +76,9 @@ export function homePath(permissions: Permissions | undefined, roleCode?: string
 /** May this user open `pathname`? Profile is always open; unknown paths are left to 404. */
 export function canOpen(permissions: Permissions | undefined, pathname: string, roleCode?: string | null): boolean {
   if (pathname === "/profile") return true;
-  const item = NAV_ITEMS.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`));
+  // the employment list is a page of «Выпускники и трудоустройство»
+  const path = pathname === "/employment" ? "/graduates" : pathname;
+  const item = NAV_ITEMS.find((i) => path === i.href || path.startsWith(`${i.href}/`));
 
   return item ? can(permissions, item.section, "view") && forRole(item, roleCode) : true;
 }

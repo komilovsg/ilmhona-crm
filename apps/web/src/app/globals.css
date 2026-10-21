@@ -7,12 +7,23 @@
 :root {
   --sidebar: #101820;
   --brand-text: #006b99;
+  /* chart series (dataviz skill, validated with scripts/validate_palette.js on the card surface) */
+  --series-1: #0089bd;
+  --series-2: #d65a2f;
+  --series-3: #6b5bb5;
+  --series-4: #2e9b6e;
+  --chart-grid: rgb(21 26 30 / 0.1);
   color-scheme: light;
 }
 
 .dark {
   --sidebar: #0a0f14;
   --brand-text: #38bdf0;
+  --series-1: #2e9bcb;
+  --series-2: #e26a3d;
+  --series-3: #9085e9;
+  --series-4: #2aa073;
+  --chart-grid: rgb(230 237 243 / 0.12);
   color-scheme: dark;
 }
 

@@ -15,6 +15,7 @@ from app.models import (
     Campaign,
     Cohort,
     Course,
+    Employment,
     Enrollment,
     Lead,
     Lesson,
@@ -77,6 +78,15 @@ async def _label(
             )
         ).first()
         return f"{lesson[0]}, {lesson[1]:%d.%m.%Y}" if lesson else None
+    if entity == "employment":
+        name = (
+            await db.execute(
+                select(Student.full_name)
+                .join(Employment, Employment.student_id == Student.id)
+                .where(Employment.id == row_id)
+            )
+        ).scalar_one_or_none()
+        return name or _old(diff.get("student"))
     if entity == "enrollment":
         row = (
             await db.execute(

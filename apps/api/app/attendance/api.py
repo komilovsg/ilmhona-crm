@@ -515,6 +515,7 @@ async def set_grade(
         await record(
             db, p.id, "grade.update", "enrollment", enrollment.id, diff, branch_id=cohort.branch_id
         )
+        await st.reevaluate(db, enrollment, cohort, p.id)
     return await current()
 
 

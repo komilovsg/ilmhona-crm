@@ -26,6 +26,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
+from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version, lock
 from app.education.scope import check_cohort_visible, cohort_filters, is_instructor
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -228,8 +229,8 @@ async def list_payments(
     month: MonthParam = None,
     cohort_id: uuid.UUID | None = None,
     enrollment_id: uuid.UUID | None = None,
-    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = _where(p, q, status, method, branch_id, month, cohort_id, enrollment_id)
     rows = (
@@ -370,8 +371,8 @@ async def list_debtors(
     q: str | None = None,
     branch_id: uuid.UUID | None = None,
     cohort_id: uuid.UUID | None = None,
-    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     rows = await _debtors(db, p, q, branch_id, cohort_id)
     start = (page - 1) * page_size
