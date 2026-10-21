@@ -73,6 +73,12 @@ test("month states and the partial amount", () => {
   assert.equal(monthStateLabel({ state: "не оплачен", paid: "0.00", price: "500.00" }), "не оплачен");
   assert.equal(monthStateLabel({ state: "частично", paid: "200.00", price: "500.00" }), "частично: 200 из 500 TJS");
   assert.equal(monthStateLabel({ state: "оплачен", paid: "500.00", price: "500.00" }), "оплачен");
+  // old-system overpayment: shown as such, never a negative remaining
+  assert.equal(monthStateLabel({ state: "оплачен", paid: "700.00", price: "500.00", overpaid: "200.00" }), "переплата 200 TJS");
+  assert.match(
+    paidText({ month_no: 2, paid: "700.00", overpaid: "200.00", payments: [pending] }),
+    /^Месяц 2 уже оплачен \(переплата 200 TJS\): 700 TJS — /,
+  );
   // one definition with the cap: a month covered by a pending payment is «оплачен» everywhere
   const states = [
     { month_no: 1, state: "оплачен" as const, paid: "500.00", pending: "500.00", price: "500.00" },

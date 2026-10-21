@@ -8,7 +8,8 @@ import { monthStateLabel, type MonthState } from "@/lib/payment-month";
  */
 export function MonthStates({ states, className }: { states: MonthState[]; className?: string }) {
   if (!states.length) return null;
-  const partial = states.filter((s) => s.state === "частично");
+  // spelled out: partial months and old-system overpayments («переплата N TJS»)
+  const partial = states.filter((s) => s.state === "частично" || Number(s.overpaid ?? 0) > 0);
 
   return (
     <div className={clsx("text-xs", className)}>

@@ -38,6 +38,12 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
   const [failed, setFailed] = useState<{ message: string; sig: string } | null>(null);
   const { data: rooms = [] } = useRooms(branchId);
   const { data: instructors = [] } = useInstructors(branchId);
+  // the cohort's own room is always an option (an imported «Без аудитории (G-NNN)» room may be
+  // missing from the branch list, or the list is still loading): the select never holds an
+  // unknown key
+  const roomOptions = rooms.map((r) => ({ key: r.id, label: `${r.name} (${r.capacity})` }));
+  if (cohort && roomId === cohort.room_id && !rooms.some((r) => r.id === roomId))
+    roomOptions.unshift({ key: cohort.room_id, label: cohort.room_name });
 
   const cap = Number(capacity);
   const problem = scheduleProblem({ start, end, startTime, endTime, weekdays });
@@ -177,7 +183,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
           <SelectField
             isRequired
             label="Аудитория"
-            options={rooms.map((r) => ({ key: r.id, label: `${r.name} (${r.capacity})` }))}
+            options={roomOptions}
             value={roomId}
             onChange={setRoomId}
           />

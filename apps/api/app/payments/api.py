@@ -665,6 +665,7 @@ async def _month_state(
         "price": str(price),
         "paid": str(paid),
         "remaining": str(max(price - paid, ZERO)),
+        "overpaid": str(max(paid - price, ZERO) if price > 0 else ZERO),
         "full": month_full(paid, price),
         "payments": await _month_payments(db, enrollment_id, month_no, exclude),
     }

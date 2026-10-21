@@ -258,3 +258,46 @@ async def test_hold_and_status_follow_scope_and_rights(
     assert r.json()["code"] == "payment_month_invalid"
     unknown = {"enrollment_id": str(uuid.uuid4()), "month_no": 1}
     assert (await admin.post(H, json=unknown)).status_code == 404
+
+
+async def test_historic_overpaid_month_reads_and_edits_safely(admin: httpx.AsyncClient) -> None:
+    """Old-system data: pending + confirmed of a month already above the price (no cap then)."""
+    cohort = await running_cohort(admin, back=2, weeks=30, price=500)
+    e = await enroll(admin, cohort)
+    a = await pay(admin, e, month=2, amount=400, confirm=True)
+    b = await pay(admin, e, month=2, amount=100)
+    c = await pay(admin, e, month=3, amount=100)
+    await sql("UPDATE payment SET amount = 300 WHERE id = :i", i=b["id"])  # month 2: 700 of 500
+    # reading: overpaid, nothing negative, the month is full
+    s = await status(admin, e)
+    assert (s["paid"], s["remaining"], s["overpaid"], s["full"]) == (
+        "700.00",
+        "0.00",
+        "200.00",
+        True,
+    )
+    money = (await admin.get(f"{P}/enrollment/{e}")).json()
+    m2 = next(x for x in money["month_states"] if x["month_no"] == 2)
+    assert (m2["state"], m2["remaining"], m2["overpaid"]) == ("оплачен", "0.00", "200.00")
+    assert 2 not in [d["month_no"] for d in money["due_months"]]
+    assert all(float(d["remaining"]) >= 0 for d in money["due_months"])
+    # no new payment for it
+    r = await admin.post(P, json=body(e, amount="1"))
+    assert (r.status_code, r.json()["code"]) == (409, "month_already_paid")
+    # edits that do not raise the month total are fine
+    for change in ({"note": "старая переплата"}, {"method": "alif"}, {"amount": "250"}):
+        r = await admin.patch(f"{P}/{b['id']}", json=change)
+        assert r.status_code == 200, (change, r.text)
+    assert (await admin.post(f"{P}/{b['id']}/confirm")).status_code == 200
+    assert (await admin.post(f"{P}/{b['id']}/unconfirm")).status_code == 200
+    # still above the price (650): raising is refused, moving another payment in is refused
+    r = await admin.patch(f"{P}/{b['id']}", json={"amount": "260"})
+    assert (r.status_code, r.json()["code"]) == (409, "month_overpaid")
+    assert r.json()["params"]["remaining"] == "100.00"  # the others: 400 of 500
+    r = await admin.patch(f"{P}/{c['id']}", json={"month_no": 2})
+    assert (r.status_code, r.json()["code"]) == (409, "month_already_paid")
+    # deleting is allowed; a confirmed one is unconfirmed first
+    assert (await admin.delete(f"{P}/{b['id']}")).status_code == 204
+    assert (await admin.post(f"{P}/{a['id']}/unconfirm")).status_code == 200
+    assert (await admin.delete(f"{P}/{a['id']}")).status_code == 204
+    assert (await status(admin, e))["paid"] == "0.00"

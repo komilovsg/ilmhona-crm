@@ -211,6 +211,8 @@ def month_info(month_no: int, entered: Decimal, pending: Decimal, price: Decimal
         "pending": pending,
         "price": price,
         "remaining": max(price - entered, ZERO),
+        # historic overpayments (the old system had no cap): shown, never a negative remaining
+        "overpaid": max(entered - price, ZERO) if price > 0 else ZERO,
         "state": state,
     }
 

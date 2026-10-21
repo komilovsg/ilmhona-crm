@@ -21,6 +21,8 @@ export type MonthStatus = {
   price: Money;
   paid: Money;
   remaining: Money;
+  /** Above the price (old-system data, no cap then); remaining is 0 then, never negative. */
+  overpaid?: Money;
   full: boolean;
   payments: MonthPayment[];
   held_by: { id: string; name: string } | null;
@@ -36,6 +38,7 @@ export type MonthState = {
   pending: Money;
   price: Money;
   remaining: Money;
+  overpaid?: Money;
   state: "не оплачен" | "частично" | "оплачен";
 };
 
@@ -98,8 +101,10 @@ export function paymentsText(paid: Money, payments: MonthPayment[]): string {
 }
 
 /** «Месяц 2 уже оплачен: 700 TJS — Курбонзода К., 21.10 в 13:39 (ожидает подтверждения)». */
-export function paidText(s: { month_no: number; paid: Money; payments: MonthPayment[] }): string {
-  return `Месяц ${s.month_no} уже оплачен: ${paymentsText(s.paid, s.payments)}`;
+export function paidText(s: { month_no: number; paid: Money; overpaid?: Money; payments: MonthPayment[] }): string {
+  const over = Number(s.overpaid ?? 0) > 0 ? ` (переплата ${tjs(s.overpaid ?? 0)})` : "";
+
+  return `Месяц ${s.month_no} уже оплачен${over}: ${paymentsText(s.paid, s.payments)}`;
 }
 
 export function holdText(name: string, month: number): string {
@@ -119,8 +124,9 @@ export function monthConflictText(error: unknown): string | null {
   return null;
 }
 
-/** «не оплачен» · «частично: 200 из 500 TJS» · «оплачен». */
-export function monthStateLabel(s: Pick<MonthState, "state" | "paid" | "price">): string {
+/** «не оплачен» · «частично: 200 из 500 TJS» · «оплачен» · «переплата 200 TJS». */
+export function monthStateLabel(s: Pick<MonthState, "state" | "paid" | "price" | "overpaid">): string {
+  if (Number(s.overpaid ?? 0) > 0) return `переплата ${tjs(s.overpaid ?? 0)}`;
   if (s.state === "частично") return `частично: ${tjs(s.paid).replace(" TJS", "")} из ${tjs(s.price)}`;
 
   return s.state;
@@ -138,7 +144,10 @@ export function paidCountLabel(states: Pick<MonthState, "state" | "pending">[], 
 }
 
 /** The month picker's label: «2-й», «2-й · оплачен», «2-й · частично: 200 из 500 TJS · ожидает». */
-export function monthOptionLabel(month: number, state: Pick<MonthState, "state" | "paid" | "price" | "pending"> | undefined): string {
+export function monthOptionLabel(
+  month: number,
+  state: Pick<MonthState, "state" | "paid" | "price" | "pending" | "overpaid"> | undefined,
+): string {
   if (!state || state.state === "не оплачен") return `${month}-й`;
 
   return `${month}-й · ${monthStateLabel(state)}${Number(state.pending) > 0 ? " · ожидает" : ""}`;

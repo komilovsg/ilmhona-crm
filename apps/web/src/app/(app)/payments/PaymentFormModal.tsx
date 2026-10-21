@@ -320,7 +320,7 @@ export function PaymentFormModal({
 
         {(payment || (option && !allPaid)) && (
           <>
-            {creating && capped && (
+            {creating && capped && !st.full && (
               <Segmented
                 label="Сумма оплаты"
                 options={[
