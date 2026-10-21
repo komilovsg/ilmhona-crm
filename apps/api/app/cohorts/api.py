@@ -657,6 +657,7 @@ async def delete_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> None:
             await db.flush()
     except IntegrityError as exc:
         raise DomainError(COHORT_IN_USE) from exc
+    await settle_conflicts(db, {snapshot["instructor_id"]})
     await record(
         db, p.id, "cohort.delete", "cohort", cohort_id, diff_of(snapshot, {}), branch_id=branch_id
     )

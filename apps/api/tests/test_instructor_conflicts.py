@@ -26,7 +26,9 @@ async def _instructor(login: str = "ins", branch: str | None = None) -> str:
 
 
 async def _lesson_instructors(cohort: dict[str, Any]) -> set[Any]:
-    rows = await sql("SELECT DISTINCT instructor_id FROM lesson WHERE cohort_id = :c", c=cohort["id"])
+    rows = await sql(
+        "SELECT DISTINCT instructor_id FROM lesson WHERE cohort_id = :c", c=cohort["id"]
+    )
     return {str(r[0]) if r[0] else None for r in rows}
 
 
@@ -91,8 +93,12 @@ async def test_instructor_double_booking_cancelled_lesson_is_ignored(
 ) -> None:
     ins = await _instructor()
     course = await make_course()
-    a = await make_cohort(admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins)
-    b = await make_cohort(admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins)
+    a = await make_cohort(
+        admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins
+    )
+    b = await make_cohort(
+        admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins
+    )
     first = (await admin.get(f"{C}/{a['id']}/lessons")).json()[0]
     slot = {"date": first["date"], "start_time": "10:00", "end_time": "11:30"}
     _busy(await admin.post(f"{C}/{b['id']}/lessons", json=slot))
@@ -134,8 +140,12 @@ async def test_instructor_double_booking_instructor_change_rechecks(
 async def test_instructor_double_booking_moving_a_lesson(admin: httpx.AsyncClient) -> None:
     ins = await _instructor()
     course = await make_course()
-    a = await make_cohort(admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins)
-    b = await make_cohort(admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins)
+    a = await make_cohort(
+        admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins
+    )
+    b = await make_cohort(
+        admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins
+    )
     monday = next_monday()
     _busy(
         await admin.post(
@@ -168,8 +178,12 @@ async def test_instructor_double_booking_moving_a_lesson(admin: httpx.AsyncClien
 async def test_instructor_double_booking_schedule_regeneration(admin: httpx.AsyncClient) -> None:
     ins = await _instructor()
     course = await make_course()
-    a = await make_cohort(admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins)
-    b = await make_cohort(admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins)
+    a = await make_cohort(
+        admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins
+    )
+    b = await make_cohort(
+        admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins
+    )
     before = await sql("SELECT count(*) FROM lesson WHERE cohort_id = :c", c=b["id"])
     r = await admin.patch(
         f"{C}/{b['id']}", json={"weekdays": [1, 2]}, headers={"X-Record-Version": "1"}
@@ -193,8 +207,12 @@ async def test_instructor_conflict_mark_shows_on_the_cohort_and_clears(
     on the cohort, cleared once one of them is cancelled."""
     ins = await _instructor()
     course = await make_course()
-    a = await make_cohort(admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins)
-    b = await make_cohort(admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins)
+    a = await make_cohort(
+        admin, course, await make_room(name="R1"), weekdays=[1], instructor_id=ins
+    )
+    b = await make_cohort(
+        admin, course, await make_room(name="R2"), weekdays=[2], instructor_id=ins
+    )
     first = (await admin.get(f"{C}/{a['id']}/lessons")).json()[0]
     await sql("UPDATE lesson SET instructor_conflict = true WHERE id = :i", i=first["id"])
     await sql(
