@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { buildCsp, makeNonce } from "./lib/csp";
-import { apiRequestHeaders } from "./lib/forward";
+import { apiRequestHeaders, trustedClientIp } from "./lib/forward";
 
 const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login"]);
@@ -33,9 +33,11 @@ function withCsp(request: NextRequest, redirectTo?: URL): NextResponse {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // API calls leave through the next.config rewrite: add the proxy secret on the way.
+  // API calls leave through the next.config rewrite: add the proxy secret and the trusted client
+  // address, and drop any forwarding header the browser tried to set.
   if (pathname.startsWith("/api/")) {
-    return NextResponse.next({ request: { headers: apiRequestHeaders(request.headers) } });
+    const ip = trustedClientIp(request.headers);
+    return NextResponse.next({ request: { headers: apiRequestHeaders(request.headers, ip) } });
   }
 
   if (PUBLIC_ASSETS.some((p) => pathname.startsWith(p))) return NextResponse.next();
