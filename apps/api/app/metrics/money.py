@@ -4,10 +4,10 @@
   month, inclusive. Payment `month_no` is 1..cohort_months; the salary period is the first day of
   the month.
 - Only a confirmed payment counts. Per enrollment: paid = confirmed sum, paid months = months
-  whose pending + confirmed payments reach the price (the payment cap's «full»), expected = price_month × months started since enrollment
-  (from the later of the enrollment month and the cohort start month, to the earlier of this month
-  and the cohort's last month), debt = max(expected − paid, 0). An expelled student owes nothing
-  more: debt 0.
+  whose pending + confirmed payments reach the price (the payment cap's «full»), expected =
+  price_month × months started since enrollment (from the later of the enrollment month and the
+  cohort start month, to the earlier of this month and the cohort's last month),
+  debt = max(expected − paid, 0). An expelled student owes nothing more: debt 0.
 - «Оплатили» (#5) = enrollments with ≥ 1 confirmed payment among the enrolled (not expelled), so
   it can never exceed «записались».
 - Income = confirmed payments; payroll (расходы ЗП, #9) = the sum of instructor payouts, never the
