@@ -10,24 +10,41 @@ import { StudentEmployment } from "./StudentEmployment";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Icon } from "@/components/Icon";
+import { MonthStates } from "@/components/MonthStates";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ReviewChip } from "@/components/ReviewChip";
 import { RowMenu } from "@/components/RowMenu";
-import { DetailSkeleton } from "@/components/Skeletons";
+import { Bone, DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
+import { useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { dushanbeDay, telHref } from "@/lib/format";
 import { fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
+import type { EnrollmentPayments } from "@/lib/money-types";
 import type { StudentDetail } from "@/lib/types";
+
+/** The months of one enrollment: оплачен / частично: A из B / не оплачен. */
+function EnrollmentMonths({ enrollmentId }: { enrollmentId: string }) {
+  const money = useQuery({
+    queryKey: ["cohort-payments", "enrollment", enrollmentId],
+    queryFn: () => api<EnrollmentPayments>(`/api/v1/payments/enrollment/${enrollmentId}`),
+  });
+
+  if (money.isPending) return <Bone className="h-5 w-24 rounded-md" />;
+  if (!money.data) return <span className="text-default-400">—</span>;
+
+  return <MonthStates states={money.data.month_states} />;
+}
 
 export default function StudentPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const refresh = useRefreshEducation();
   const canChange = useCanChange("students");
+  const seesPayments = useSeesPayments();
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -140,6 +157,7 @@ export default function StudentPage() {
                   <th className="px-4 py-3 font-medium">Даты</th>
                   <th className="px-4 py-3 font-medium">Поток</th>
                   <th className="px-4 py-3 font-medium">Зачисление</th>
+                  {seesPayments && <th className="px-4 py-3 font-medium">Месяцы</th>}
                 </tr>
               </thead>
               <tbody>
@@ -165,6 +183,11 @@ export default function StudentPage() {
                         </div>
                       )}
                     </td>
+                    {seesPayments && (
+                      <td className="px-4 py-3">
+                        <EnrollmentMonths enrollmentId={e.id} />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -191,6 +214,11 @@ export default function StudentPage() {
                   {fullDate(e.start_date)} – {fullDate(e.end_date)}
                   <CohortStatus status={e.cohort_status} />
                 </div>
+                {seesPayments && (
+                  <div className="mt-2">
+                    <EnrollmentMonths enrollmentId={e.id} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
