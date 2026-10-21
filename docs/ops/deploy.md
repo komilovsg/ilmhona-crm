@@ -1,0 +1,139 @@
+# Deploying ilmhona CRM
+
+```
+browser -> Vercel (apps/web, ilmhona-crm.vercel.app)
+             -> /api/* rewrite + X-Proxy-Secret -> Render (apps/api, ilmhona-api.onrender.com)
+                  -> Neon Postgres (ilmhona-db, direct URL, role ilm_app)
+```
+
+Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
+
+| Part | Where | Name / id |
+|---|---|---|
+| Database | Neon (Vercel marketplace), aws-eu-central-1, Postgres 18 | project `ilmhona-db` (`icy-waterfall-82517700`), db `neondb` |
+| API | Render free, Frankfurt, Docker | `ilmhona-api` (`srv-dbc1c33ncjis7380m3a0`), `render.yaml` |
+| Web | Vercel, root `apps/web`, production branch `main` | `ilmhona-crm` (`prj_91vTa2EjLoxLAwU1v8sdnLk7Amqg`) |
+| Backups | private repo `komilovsg/ilmhona-backups` | encrypted dumps |
+
+## What runs when
+
+```
+push to main -> ci (green) -> deploy-api: migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
+                           -> Vercel builds and deploys apps/web by itself (git integration)
+every 10 min, 08:00-20:59 Dushanbe  keepalive   curl /api/health through the Vercel URL
+00:30 Dushanbe (19:30 UTC)          daily       python -m app.cli daily (as ilm_app)
+01:30 Dushanbe (20:30 UTC)          backup      pg_dump -> age -> ilmhona-backups, last 30 kept
+```
+
+All workflows have the least `permissions:` (`contents: read`, or none).
+
+## Roles in the database
+
+- `neondb_owner` — the owner. DDL only: used by the `migrate` job (`alembic upgrade head`),
+  never by the API. Secret `MIGRATION_DATABASE_URL` of the GitHub environment `api-production`.
+- `ilm_app` — the runtime role of the API, the daily job and the backup. `LOGIN`, no superuser,
+  no create-db/role, no bypass-rls. `SELECT/INSERT/UPDATE/DELETE` on tables and `USAGE/SELECT`
+  on sequences of schema `public` (default privileges of the owner cover every table a future
+  migration adds), no DDL. `audit_log` is append-only for it (`SELECT, INSERT` only), and
+  `alembic_version` is read-only.
+
+One-time setup (done; kept here to rebuild the database from scratch), as `neondb_owner`:
+
+```sql
+CREATE ROLE ilm_app LOGIN PASSWORD '<generated>' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+GRANT CONNECT ON DATABASE neondb TO ilm_app;
+GRANT USAGE ON SCHEMA public TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO ilm_app;
+```
+
+Migration 0011 (re)applies the table grants, the append-only `audit_log` and the read-only
+`alembic_version` whenever the role exists, so a fresh `alembic upgrade head` rebuilds them.
+
+Use the **direct** (non-pooled) Neon host. SQLAlchemy URLs are
+`postgresql+asyncpg://<role>:<password>@<host>/neondb?ssl=require`.
+
+## Secrets and variables
+
+| Where | Name | What |
+|---|---|---|
+| Render env | `ENV=production`, `COOKIE_SECURE=true`, `FORWARDED_ALLOW_IPS=*` | plain |
+| Render env | `DATABASE_URL` | `ilm_app` URL |
+| Render env | `JWT_SECRET`, `PROXY_SHARED_SECRET` | 32+ random characters; the app refuses to start in production without them |
+| Vercel env (production) | `API_URL` | `https://ilmhona-api.onrender.com` |
+| Vercel env (production) | `PROXY_SHARED_SECRET` | same value as on Render (sensitive) |
+| GitHub env `api-production` | `MIGRATION_DATABASE_URL` | owner URL (asyncpg form) |
+| GitHub env `api-production` | `DATABASE_URL` | `ilm_app` URL, for the daily job |
+| GitHub env `api-production` | `RENDER_DEPLOY_HOOK_URL` | Render *Settings -> Deploy Hook* (not available through the API) |
+| GitHub env `backup` | `BACKUP_DATABASE_URL` | `ilm_app` URL in libpq form (`postgresql://...?sslmode=require`) |
+| GitHub env `backup` | `BACKUP_DEPLOY_KEY` | private half of the write deploy key of `ilmhona-backups` |
+| GitHub variables | `BACKUP_AGE_PUBLIC_KEY`, `API_HEALTH_URL`, `WEB_HEALTH_URL` | public |
+
+Both environments accept deployments from `main` only. Rotating `PROXY_SHARED_SECRET`: the API
+accepts two comma-separated values, so put `old,new` on Render, change Vercel to `new`, then
+drop `old`.
+
+## Forwarded address and the proxy secret
+
+Render's proxy has no fixed address range, so uvicorn runs with `--forwarded-allow-ips=*` and
+takes the client address from `X-Forwarded-For` (Vercel overwrites that header with the address
+it saw). That is safe **only** together with `PROXY_SHARED_SECRET`: the onrender.com URL is
+public and the secret keeps out everyone but the Vercel proxy (`app/core/proxy.py`; only
+`/api/health` is open). The login lockout (`app/auth/api.py`) relies on this address: 5 failed
+tries lock one (login, address) pair for 15 minutes; a higher per-login ceiling (30 failures
+from any addresses together) still locks the login itself.
+
+## Migrations
+
+`alembic upgrade head` with the owner URL in `DATABASE_URL` (`deploy-api.yml`, job `migrate`);
+hand-written SQL, one transaction per migration, a re-run at head does nothing. Changes follow
+expand -> migrate -> contract: the previous version of the API must keep working on the new
+schema while the deploy runs. If `migrate` fails nothing is deployed: fix forward with a new
+migration. Never edit a migration that already ran on Neon.
+
+## Deploy hook and health
+
+`autoDeploy: false`: Render deploys only when `deploy-api` posts the hook with `&ref=<sha>`.
+`GET /api/health` returns `{"status":"ok","version":"<git sha>"}` (`RENDER_GIT_COMMIT`); the
+workflow waits (up to 20 min) until the version equals the commit. Free Render sleeps after 15
+minutes without traffic; `keepalive` keeps it awake 08:00-20:59 Asia/Dushanbe, outside that the
+first visitor waits for a cold start (about a minute).
+
+## Daily job
+
+`python -m app.cli daily`: cohort statuses from their dates, enrollments of finished cohorts
+(`завершил` / `выпускник`), and `login_attempt` / `login_ip_attempt` rows untouched for a day
+are deleted. Safe to run any number of times; also *Actions -> daily -> Run workflow*.
+
+## Demo data
+
+`python -m app.cli seed-demo` loads a fake dataset (both branches: users per role, rooms,
+courses, cohorts with lessons, students, enrollments, attendance, grades, payments, payouts,
+leads, campaigns; all names invented) and prints the demo users' password once.
+`python -m app.cli wipe-demo` deletes exactly those rows: every demo row has an id in the
+reserved range `de000000-0000-4000-...`, nothing else does. Run against production with
+`ENV=production DATABASE_URL=<ilm_app URL> uv run python -m app.cli seed-demo`. A wipe fails
+(and changes nothing) if a real row still points at a demo one, e.g. a real payment on a demo
+enrollment.
+
+## Backups
+
+`backup.yml` dumps schema `public` (plus the `citext` and `btree_gist` extensions), gzips,
+encrypts with `age` to the public key in `BACKUP_AGE_PUBLIC_KEY` and pushes
+`dumps/ilmhona-<UTC time>.sql.gz.age` to `komilovsg/ilmhona-backups`; only the newest 30 files
+stay in the tree (git history keeps older ones: delete or squash the repo when it grows).
+The private key is `~/.config/ilmhona/backup-age-key.txt` on the owner's machine only: keep a
+second copy offline, without it the dumps cannot be read. Restore:
+
+```
+age -d -i ~/.config/ilmhona/backup-age-key.txt dumps/<file>.sql.gz.age | gunzip | psql "<owner URL>"
+```
+
+(on an empty database; create the extensions first if the target forbids `CREATE EXTENSION`).
+
+## Private app
+
+`robots.txt` is `Disallow: /`, every response carries `X-Robots-Tag: noindex, nofollow`, and the
+root layout sets `robots: noindex`.

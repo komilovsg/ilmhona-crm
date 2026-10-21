@@ -1,0 +1,34 @@
+# Render blueprint: the free API of the ilmhona CRM (Vercel proxies /api/* here).
+# The live service ilmhona-api was created from these settings with the Render CLI/API; its
+# secrets were generated locally and live only in Render and GitHub (docs/ops/deploy.md).
+# Database: Neon (direct, not pooled, connection strings).
+services:
+  - type: web
+    name: ilmhona-api
+    runtime: docker
+    rootDir: apps/api
+    plan: free
+    region: frankfurt
+    # Returns {"status":"ok","version":"<git sha>"}: the deploy workflow waits for the sha.
+    healthCheckPath: /api/health
+    # Deploys come from .github/workflows/deploy-api.yml after the migration ran. The owner
+    # URL lives only in GitHub, never in this service.
+    autoDeploy: false
+    envVars:
+      - key: ENV
+        value: production
+      - key: COOKIE_SECURE
+        value: "true"
+      # postgresql+asyncpg://ilm_app:<password>@<neon direct host>/neondb?ssl=require
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      # Requests arrive only through Render's proxy (behind Vercel's), which has no fixed
+      # address range to list: uvicorn takes the client address from X-Forwarded-For of any
+      # peer. Safe only together with PROXY_SHARED_SECRET: the onrender.com URL is public, and
+      # the secret keeps out everyone but our Vercel proxy (docs/ops/deploy.md).
+      - key: PROXY_SHARED_SECRET
+        sync: false
+      - key: FORWARDED_ALLOW_IPS
+        value: "*"

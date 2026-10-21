@@ -36,6 +36,7 @@ from app.auth.errors import (
 from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_AUTHENTICATED, DomainError
+from app.core.proxy import client_ip
 from app.core.security import (
     PASSWORD_MAX_LENGTH,
     hash_password,
@@ -148,29 +149,42 @@ async def revoke_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
     )
 
 
-async def _record_failure(db: AsyncSession, login: str) -> None:
-    """Count a failed login, lock the name after too many, and put both in the audit log
-    (the login name only, never the password)."""
-    row = (
-        await db.execute(
-            text(
-                """
-                INSERT INTO login_attempt (login, failures) VALUES (:l, 1)
-                ON CONFLICT (login) DO UPDATE SET
-                  failures = CASE WHEN login_attempt.failures + 1 >= :max THEN 0
-                                  ELSE login_attempt.failures + 1 END,
-                  locked_until = CASE WHEN login_attempt.failures + 1 >= :max
-                                      THEN now() + make_interval(mins => :mins)
-                                      ELSE login_attempt.locked_until END
-                RETURNING failures
-                """
-            ),
-            {"l": login, "max": settings.max_failed_logins, "mins": settings.lockout_minutes},
-        )
-    ).one()
+_BUMP = """
+    INSERT INTO {table} ({keys}, failures) VALUES ({binds}, 1)
+    ON CONFLICT ({keys}) DO UPDATE SET
+      failures = CASE WHEN {table}.failures + 1 >= :max THEN 0
+                      ELSE {table}.failures + 1 END,
+      locked_until = CASE WHEN {table}.failures + 1 >= :max
+                          THEN now() + make_interval(mins => :mins)
+                          ELSE {table}.locked_until END,
+      updated_at = now()
+    RETURNING failures
+"""
+
+
+async def _bump(db: AsyncSession, table: str, keys: dict[str, str], limit: int) -> bool:
+    """Count one failure; True when it tripped the lock."""
+    sql = _BUMP.format(
+        table=table,
+        keys=", ".join(keys),
+        binds=", ".join(f":{k}" for k in keys),
+    )
+    params = {**keys, "max": limit, "mins": settings.lockout_minutes}
+    return bool((await db.execute(text(sql), params)).scalar_one() == 0)
+
+
+async def _record_failure(db: AsyncSession, login: str, ip: str) -> None:
+    """Count a failed login against (login, address) and against the login as a whole, lock
+    either after too many, and put both in the audit log (the login name only, never the
+    password). Five bad tries from one address lock that address only; the higher per-login
+    ceiling still stops a spread-out attack."""
+    by_ip = await _bump(
+        db, "login_ip_attempt", {"login": login, "ip": ip}, settings.max_failed_logins
+    )
+    overall = await _bump(db, "login_attempt", {"login": login}, settings.max_failed_logins_global)
     name = login[:64]
     await record(db, None, "auth.login_failed", "login", name)
-    if row.failures == 0:  # this failure tripped the lock
+    if by_ip or overall:  # this failure tripped a lock
         await record(
             db, None, "auth.locked", "login", name, {"minutes": [None, settings.lockout_minutes]}
         )
@@ -178,13 +192,18 @@ async def _record_failure(db: AsyncSession, login: str) -> None:
 
 
 @router.post("/login")
-async def login(body: LoginIn, response: Response, db: DB) -> dict[str, Any]:
+async def login(body: LoginIn, request: Request, response: Response, db: DB) -> dict[str, Any]:
+    ip = client_ip(request)
     locked = (
         await db.execute(
-            text("SELECT locked_until > now() FROM login_attempt WHERE login = :l"),
-            {"l": body.login},
+            text(
+                "SELECT coalesce((SELECT locked_until > now() FROM login_attempt WHERE login = :l)"
+                ", false) OR coalesce((SELECT locked_until > now() FROM login_ip_attempt "
+                "WHERE login = :l AND ip = :ip), false)"
+            ),
+            {"l": body.login, "ip": ip},
         )
-    ).scalar_one_or_none()
+    ).scalar_one()
     if locked:
         raise DomainError(TOO_MANY_ATTEMPTS)
     user = (
@@ -192,11 +211,15 @@ async def login(body: LoginIn, response: Response, db: DB) -> dict[str, Any]:
     ).scalar_one_or_none()
     password_ok = verify_password(user.password_hash if user else None, body.password)
     if user is None or not password_ok or not user.is_active:
-        await _record_failure(db, body.login)
+        await _record_failure(db, body.login, ip)
         raise DomainError(INVALID_CREDENTIALS)
     if _temp_password_expired(user, datetime.now(UTC)):
         raise DomainError(TEMP_PASSWORD_EXPIRED)
     await db.execute(text("DELETE FROM login_attempt WHERE login = :l"), {"l": body.login})
+    await db.execute(
+        text("DELETE FROM login_ip_attempt WHERE login = :l AND ip = :ip"),
+        {"l": body.login, "ip": ip},
+    )
     await issue_session(db, response, user.id)
     await record(db, user.id, "auth.login", "app_user", user.id, branch_id=user.branch_id)
     role = (await db.execute(select(Role).where(Role.id == user.role_id))).scalar_one()

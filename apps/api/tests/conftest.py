@@ -71,6 +71,7 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM audit_log",
             "DELETE FROM refresh_token",
             "DELETE FROM login_attempt",
+            "DELETE FROM login_ip_attempt",
             "DELETE FROM app_user",
             "DELETE FROM role WHERE code IS NULL",
         ):
@@ -148,10 +149,11 @@ class Browser(httpx.AsyncClient):
         return await super().put(url, **kw)
 
 
-def make_client() -> httpx.AsyncClient:
-    """A browser: its own cookie jar; the CSRF header is set like the web app does."""
+def make_client(ip: str = "127.0.0.1") -> httpx.AsyncClient:
+    """A browser: its own cookie jar; the CSRF header is set like the web app does. `ip` is the
+    address the API sees (behind the proxy secret uvicorn takes it from X-Forwarded-For)."""
     return Browser(
-        transport=httpx.ASGITransport(app=app),
+        transport=httpx.ASGITransport(app=app, client=(ip, 5000)),
         base_url="http://test",
         headers={"X-Requested-With": "ilm"},
     )

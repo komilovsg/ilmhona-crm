@@ -67,4 +67,4 @@ for router in (
 
 @app.get("/api/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.render_git_commit or "dev"}

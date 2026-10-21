@@ -1,0 +1,88 @@
+# Production deploy of the API (docs/ops/deploy.md): after CI passed on main, migrate the
+# schema with the owner role from GitHub, then tell Render to deploy that commit and wait
+# until it serves. The owner URL lives only in the `api-production` environment here.
+name: deploy-api
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # A green CI of a push to main, and only while its commit is still the tip of main: a CI
+  # run that finishes late or is re-run for an older commit must not roll production back.
+  latest:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      deploy: ${{ steps.tip.outputs.deploy }}
+    steps:
+      - id: tip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          tip=$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)
+          if [ "$tip" = "$SHA" ]; then
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$SHA is no longer the tip of main ($tip): not deployed"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  migrate:
+    needs: latest
+    if: needs.latest.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    environment: api-production
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      # Alembic reads the URL from DATABASE_URL: here that is the OWNER role (DDL); the
+      # running API gets the restricted ilm_app URL on Render. Hand-written SQL, one
+      # transaction per migration; re-running at head is a no-op.
+      - run: uv run --no-sync alembic upgrade head
+        env:
+          DATABASE_URL: ${{ secrets.MIGRATION_DATABASE_URL }}
+
+  deploy:
+    needs: migrate
+    runs-on: ubuntu-latest
+    environment: api-production
+    timeout-minutes: 25
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://ilmhona-api.onrender.com/api/health' }}
+    steps:
+      - name: trigger render deploy of this commit
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: curl -fsS -o /dev/null -X POST "$HOOK&ref=$SHA"
+      # The API reports the commit it runs (RENDER_GIT_COMMIT) in its health response.
+      - name: wait until the new commit is live
+        run: |
+          deadline=$((SECONDS + 1200))
+          until curl -fsS --max-time 20 "$HEALTH_URL" | grep -q "$SHA"; do
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$SHA not live at $HEALTH_URL after 20 min"
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "$SHA is live"

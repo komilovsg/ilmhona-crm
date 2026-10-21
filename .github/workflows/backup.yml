@@ -1,0 +1,60 @@
+# Nightly backup of the production database (docs/ops/deploy.md#backups): pg_dump, encrypted
+# with age to the PUBLIC key in the repo variable BACKUP_AGE_PUBLIC_KEY (the private key lives
+# only on the owner's machine), pushed to the private repo komilovsg/ilmhona-backups through a
+# write deploy key. The newest 30 dumps stay. 20:30 UTC = 01:30 Asia/Dushanbe.
+name: backup
+
+on:
+  schedule:
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: backup
+    timeout-minutes: 20
+    env:
+      KEEP: "30"
+      BACKUPS_REPO: git@github.com:komilovsg/ilmhona-backups.git
+    steps:
+      - name: install age
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq age
+      # pg_dump must not be older than the server (Postgres 18): run it from the official image.
+      - name: dump and encrypt
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          AGE_PUBLIC_KEY: ${{ vars.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          test -n "$AGE_PUBLIC_KEY" || { echo "::error::variable BACKUP_AGE_PUBLIC_KEY is empty"; exit 1; }
+          name="ilmhona-$(date -u +%Y-%m-%dT%H%M)Z.sql.gz.age"
+          docker run --rm -e DATABASE_URL postgres:18 \
+            bash -c 'set -o pipefail; pg_dump --no-owner --no-privileges --schema=public --extension=citext --extension=btree_gist --dbname="$DATABASE_URL" | gzip -9' \
+            | age -r "$AGE_PUBLIC_KEY" -o "$RUNNER_TEMP/$name"
+          test "$(stat -c %s "$RUNNER_TEMP/$name")" -gt 1000
+          echo "NAME=$name" >> "$GITHUB_ENV"
+      - name: push to the backups repo and keep the last 30
+        env:
+          DEPLOY_KEY: ${{ secrets.BACKUP_DEPLOY_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/backup_key
+          chmod 600 ~/.ssh/backup_key
+          ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/backup_key -o IdentitiesOnly=yes"
+          git clone --depth 1 "$BACKUPS_REPO" "$RUNNER_TEMP/repo"
+          cd "$RUNNER_TEMP/repo"
+          mkdir -p dumps
+          cp "$RUNNER_TEMP/$NAME" dumps/
+          ls -1 dumps | sort | head -n -"$KEEP" | while read -r old; do git rm -q "dumps/$old"; done
+          git add dumps
+          git -c user.name=backup-bot -c user.email=backup-bot@users.noreply.github.com \
+            commit -q -m "backup $NAME"
+          git push -q origin HEAD
+          echo "pushed $NAME; $(ls dumps | wc -l) dumps kept"
