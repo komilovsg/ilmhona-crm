@@ -1,6 +1,6 @@
 """Parallel load against a running API (local only): N workers, each M mixed requests.
 
-    uv run python -m tools.load http://127.0.0.1:8580 [workers] [requests per worker]
+uv run python -m tools.load http://127.0.0.1:8580 [workers] [requests per worker]
 """
 
 import asyncio
@@ -36,15 +36,22 @@ async def worker(c: httpx.AsyncClient, k: int, bad: list[str]) -> None:
 async def main() -> None:
     bad: list[str] = []
     async with httpx.AsyncClient(
-        base_url=BASE, headers={"x-requested-with": "ilm"}, timeout=30, limits=httpx.Limits(max_connections=WORKERS)
+        base_url=BASE,
+        headers={"x-requested-with": "ilm"},
+        timeout=30,
+        limits=httpx.Limits(max_connections=WORKERS),
     ) as c:
-        r = await c.post("/api/v1/auth/login", json={"login": "load_admin", "password": "Load-test-pass-1"})
+        r = await c.post(
+            "/api/v1/auth/login", json={"login": "load_admin", "password": "Load-test-pass-1"}
+        )
         assert r.status_code == 200, r.text
         t = time.perf_counter()
         await asyncio.gather(*(worker(c, k, bad) for k in range(WORKERS)))
         dt = time.perf_counter() - t
     total = WORKERS * EACH
-    print(f"{total} requests, {WORKERS} parallel, {dt:.1f}s, {total / dt:.0f} req/s, errors: {len(bad)} {set(bad)}")
+    print(
+        f"{total} requests, {WORKERS} parallel, {dt:.1f}s, {total / dt:.0f} req/s, errors: {len(bad)} {set(bad)}"
+    )
 
 
 asyncio.run(main())
