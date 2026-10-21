@@ -4,10 +4,10 @@ import { test } from "node:test";
 import { canSubmit, checkRules, strengthOf, type PasswordPolicy } from "./password.ts";
 
 const policy: PasswordPolicy = {
-  min_length: 8,
+  min_length: 10,
   max_length: 72,
   rules: [
-    { id: "length", label: "8–72" },
+    { id: "length", label: "10–72" },
     { id: "letter", label: "буква" },
     { id: "digit", label: "цифра" },
     { id: "not_login", label: "не логин" },
@@ -23,8 +23,8 @@ test("empty password passes nothing", () => {
 
 test("each rule turns green on its own", () => {
   assert.deepEqual(ok("Ab1"), { length: false, letter: true, digit: true, not_login: true, not_current: true });
-  assert.equal(ok("12345678").letter, false);
-  assert.equal(ok("abcdefgh").digit, false);
+  assert.equal(ok("1234567890").letter, false);
+  assert.equal(ok("abcdefghij").digit, false);
   assert.equal(ok("абвгдеж1").letter, true);
   assert.equal(ok("ANNA", "anna").not_login, false);
   assert.equal(ok("Old-pass-1").not_current, false);
@@ -41,6 +41,6 @@ test("submit needs every rule and a matching confirm", () => {
 test("strength grows with length and classes", () => {
   assert.equal(strengthOf("").level, 0);
   assert.equal(strengthOf("abcdefgh").label, "слабый");
-  assert.equal(strengthOf("Abcdefg1").label, "средний");
+  assert.equal(strengthOf("Abcdefghi1").label, "средний");
   assert.equal(strengthOf("Abcdefghij1!").label, "надёжный");
 });

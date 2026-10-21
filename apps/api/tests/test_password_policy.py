@@ -5,13 +5,13 @@ from tests.conftest import PASSWORD, make_user, sign_in
 
 
 def test_each_rule_on_its_own() -> None:
-    assert violations("Abcdefg1") == []
+    assert violations("Abcdefghi1") == []
     assert violations("Ab1") == ["length"]
     assert violations("A" * 73 + "1") == ["length"]
-    assert violations("12345678") == ["letter"]
-    assert violations("abcdefgh") == ["digit"]
+    assert violations("1234567890") == ["letter"]
+    assert violations("abcdefghij") == ["digit"]
     assert violations("Anna12345", login="anna12345") == ["not_login"]
-    assert violations("Abcdefg1", current="Abcdefg1") == ["not_current"]
+    assert violations("Abcdefghi1", current="Abcdefghi1") == ["not_current"]
     assert violations("абвгдеж1") == []  # any alphabet counts as a letter
 
 
@@ -25,7 +25,7 @@ async def test_policy_endpoint_is_public_and_lists_the_rules(client: httpx.Async
     assert r.status_code == 200
     body = r.json()
     assert [x["id"] for x in body["rules"]] == [x["id"] for x in RULES]
-    assert (body["min_length"], body["max_length"]) == (8, 72)
+    assert (body["min_length"], body["max_length"]) == (10, 72)
 
 
 async def test_change_password_refuses_the_login(client: httpx.AsyncClient) -> None:

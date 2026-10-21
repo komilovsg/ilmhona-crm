@@ -45,7 +45,7 @@ export type Strength = { level: 0 | 1 | 2 | 3; label: string };
 export function strengthOf(password: string): Strength {
   if (!password) return { level: 0, label: "" };
   const classes = [/\p{Ll}/u, /\p{Lu}/u, /\d/, /[^\p{L}\d]/u].filter((re) => re.test(password)).length;
-  const score = (password.length >= 8 ? 1 : 0) + (password.length >= 12 ? 1 : 0) + (classes >= 3 ? 1 : 0) + (classes >= 4 ? 1 : 0);
+  const score = (password.length >= 10 ? 1 : 0) + (password.length >= 12 ? 1 : 0) + (classes >= 3 ? 1 : 0) + (classes >= 4 ? 1 : 0);
   if (score <= 1) return { level: 1, label: "слабый" };
   if (score <= 2) return { level: 2, label: "средний" };
   return { level: 3, label: "надёжный" };

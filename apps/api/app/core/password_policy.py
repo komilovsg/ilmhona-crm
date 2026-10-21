@@ -5,7 +5,7 @@ read by the web (checklist, hints). A new rule: a new id here and in the web `li
 import re
 import secrets
 
-MIN_LENGTH = 8
+MIN_LENGTH = 10
 MAX_LENGTH = 72
 _LETTER = re.compile(r"[^\W\d_]")
 _DIGIT = re.compile(r"\d")
