@@ -243,12 +243,39 @@ def _personal_values(snapshot: dict[str, list[dict[str, Any]]]) -> set[str]:
     return found
 
 
+def _leaks(snapshot: dict[str, list[dict[str, Any]]], out: str) -> list[str]:
+    """Personal values of the snapshot found in `out`. Text values match as whole words; values
+    without letters count only as phones (≥ 9 digits) — a bare `1 1` left of `=1+1` would match
+    the report's own timestamp («2026-10-21 10:13»)."""
+    leaked = []
+    for v in _personal_values(snapshot):
+        if re.search(r"[^\W\d_]", v):
+            hit = re.search(rf"(?<!\w){re.escape(v)}(?!\w)", out) is not None
+        else:
+            hit = len(re.sub(r"\D", "", v)) >= 9 and v in out
+        if hit:
+            leaked.append(v)
+    return sorted(leaked)
+
+
+def test_the_leak_check_catches_a_real_name_and_phone_but_not_numbers(
+    snapshot: dict[str, Any],
+) -> None:
+    student = snapshot["STUDENTS"][0]
+    name, phone = student["full_name"], student["phone"]
+    noise = "· 2026-10-21 10:13 · 1 1 · 1234 · | 11 | 1 |"
+    assert _leaks(snapshot, noise) == []
+    assert name in _leaks(snapshot, f"{noise} строка 3: {name}.")
+    assert phone in _leaks(snapshot, f"{noise} тел. +992{phone}")
+    assert _leaks(snapshot, f"{noise} +992 93 111 11 11")
+
+
 async def test_report_md_holds_no_name_phone_or_email_of_the_snapshot(
     snapshot: dict[str, Any], tmp_path: Path
 ) -> None:
     report = await do_import(snapshot, apply=False)
     md = report.write(tmp_path, "t")[0].read_text(encoding="utf-8")
-    leaked = sorted(v for v in _personal_values(snapshot) if v in md)
+    leaked = _leaks(snapshot, md)
     assert not leaked, leaked
 
 
@@ -300,7 +327,7 @@ async def test_stdout_lists_no_rows(
 ) -> None:
     assert await cli.main([str(FIXTURE), "--dry-run", "--out-dir", str(tmp_path)]) == 0
     printed = capsys.readouterr()
-    leaked = [v for v in _personal_values(snapshot) if v in printed.out + printed.err]
+    leaked = _leaks(snapshot, printed.out + printed.err)
     assert not leaked, leaked
 
 
