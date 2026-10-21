@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/drawer";
+import { motion } from "framer-motion";
+import { Tooltip } from "@heroui/tooltip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
+import { IlmMark } from "./brand/IlmMark";
 import { Icon } from "./Icon";
 import { Logo } from "./Logo";
 import { ErrorState } from "./QueryState";
@@ -16,7 +19,10 @@ import { ThemeToggle } from "./ThemeToggle";
 import { TopProgress } from "./TopProgress";
 
 import { useMe } from "@/hooks/queries";
+import { SIDEBAR_STORAGE_KEY } from "@/context/theme-init";
 import { api } from "@/lib/api";
+import { useBrowserValue } from "@/lib/client-store";
+import { pageVariants } from "@/lib/motion";
 import { canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 
@@ -35,31 +41,132 @@ function useLogout() {
   };
 }
 
-function Sidebar({ items, pathname }: { items: NavItem[]; pathname: string }) {
+const SIDEBAR_EVENT = "ilm-sidebar-change";
+
+function readCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "collapsed";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Collapsed state. The layout itself reads `html[data-sidebar]` (set before the first paint), so React only
+ * needs the flag for the toggle's label and the tooltips; it is `false` until hydrated.
+ */
+function useSidebarCollapsed() {
+  const collapsed = useBrowserValue(readCollapsed, false, SIDEBAR_EVENT);
+  const toggle = useCallback(() => {
+    const next = !readCollapsed();
+
+    try {
+      if (next) localStorage.setItem(SIDEBAR_STORAGE_KEY, "collapsed");
+      else localStorage.removeItem(SIDEBAR_STORAGE_KEY);
+    } catch {
+      // not remembered, still works for this visit
+    }
+    if (next) document.documentElement.dataset.sidebar = "collapsed";
+    else delete document.documentElement.dataset.sidebar;
+    window.dispatchEvent(new Event(SIDEBAR_EVENT));
+  }, []);
+
+  // «[» toggles, like in Linear / Notion; never while typing
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+
+      if (e.key !== "[" || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (el?.closest("input, textarea, select, [contenteditable='true'], [role='dialog']")) return;
+      toggle();
+    };
+
+    window.addEventListener("keydown", onKey);
+
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggle]);
+
+  return { collapsed, toggle };
+}
+
+const ROW = "relative flex items-center gap-3 rounded-lg px-[15px] py-2.5 text-sm transition-colors";
+
+function Sidebar({
+  items,
+  pathname,
+  badges,
+}: {
+  items: NavItem[];
+  pathname: string;
+  badges?: Record<string, number>;
+}) {
+  const { collapsed, toggle } = useSidebarCollapsed();
+
   return (
-    <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col bg-sidebar md:flex">
-      <div className="px-6 py-6">
-        <Logo />
+    <aside className="sb-aside fixed inset-y-0 left-0 hidden flex-col bg-sidebar md:flex">
+      <div className="py-6 pl-[19px]">
+        <Link aria-label="ilmhona" className="flex items-center gap-3 text-white" href="/">
+          <IlmMark className="shrink-0" height={27} />
+          <span className="sb-label leading-none">
+            <span className="block text-2xl font-bold tracking-tight">ilmhona</span>
+            <span className="mt-1 block text-[11px] tracking-wide text-[#8B98A5]">skills accelerator</span>
+          </span>
+        </Link>
       </div>
-      <nav aria-label="Разделы" className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-6">
+      <nav aria-label="Разделы" className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-3 pb-3">
         {items.map((item) => {
           const active = isActive(pathname, item.href);
+          const badge = badges?.[item.section];
 
           return (
-            <Link
+            <Tooltip
               key={item.href}
-              aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
-                active ? "bg-[#00A0DC]/15 text-[#38BDF0]" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"
-              }`}
-              href={item.href}
+              closeDelay={0}
+              content={item.label}
+              delay={300}
+              isDisabled={!collapsed}
+              placement="right"
             >
-              <Icon name={item.icon} size={18} />
-              {item.label}
-            </Link>
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={`${ROW} ${
+                  active ? "bg-[#00A0DC]/15 text-[#38BDF0]" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"
+                }`}
+                href={item.href}
+              >
+                <span className="relative shrink-0">
+                  <Icon name={item.icon} size={18} />
+                  {badge ? (
+                    <span
+                      aria-label={`${badge}`}
+                      className="absolute -right-2 -top-2 min-w-4 rounded-full bg-secondary px-1 text-center text-[10px] font-semibold leading-4 text-white"
+                    >
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  ) : null}
+                </span>
+                <span className="sb-label">{item.label}</span>
+              </Link>
+            </Tooltip>
           );
         })}
       </nav>
+      <div className="px-3 pb-4">
+        <Tooltip closeDelay={0} content="Развернуть  [" delay={300} isDisabled={!collapsed} placement="right">
+          <button
+            aria-expanded={!collapsed}
+            aria-keyshortcuts="["
+            aria-label={collapsed ? "Развернуть меню" : "Свернуть меню"}
+            className={`${ROW} w-full text-left text-[#8B98A5] hover:bg-white/5 hover:text-white`}
+            type="button"
+            onClick={toggle}
+          >
+            <Icon className="shrink-0" name="sidebar" size={18} />
+            <span className="sb-label flex-1">Свернуть</span>
+            <kbd className="sb-label rounded border border-white/15 px-1.5 text-[11px] text-[#8B98A5]">[</kbd>
+          </button>
+        </Tooltip>
+      </div>
     </aside>
   );
 }
@@ -169,9 +276,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (isPending || !me) {
     // the frame of the real shell, so the page does not jump when the user arrives
     return (
-      <div aria-busy="true" className="min-h-dvh md:pl-64">
+      <div aria-busy="true" className="sb-shell min-h-dvh">
         <TopProgress />
-        <aside className="fixed inset-y-0 left-0 hidden w-64 bg-sidebar md:block" />
+        <aside className="sb-aside fixed inset-y-0 left-0 hidden bg-sidebar md:block" />
         <header className="sticky top-0 z-20 h-[57px] border-b border-divider bg-content1" />
         <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
           <span className="sr-only" role="status">
@@ -190,7 +297,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { main, more } = splitNav(items);
 
   return (
-    <div className="min-h-dvh md:pl-64">
+    <div className="sb-shell min-h-dvh">
       <TopProgress />
       <Sidebar items={items} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 px-4 py-2 md:px-8">
@@ -209,7 +316,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
         {canOpen(me.permissions, pathname, me.role.code) ? (
-          children
+          <motion.div key={pathname} animate="shown" initial="hidden" variants={pageVariants}>
+            {children}
+          </motion.div>
         ) : (
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
         )}
