@@ -1111,11 +1111,13 @@ class Importer:
                     "reason": reason,
                 }
             )
-            rep.imported["ATTENDANCE"] += 1
         for i in range(0, len(values), BATCH):
-            await self.db.execute(
+            done = await self.db.execute(
                 pg_insert(Attendance).values(values[i : i + BATCH]).on_conflict_do_nothing()
             )
+            added = int(done.rowcount)  # type: ignore[attr-defined]
+            rep.imported["ATTENDANCE"] += added
+            rep.existing["ATTENDANCE"] += len(values[i : i + BATCH]) - added
 
     # ---- MARKETING ------------------------------------------------------------------------
 
