@@ -20,6 +20,19 @@ async def test_large_json_is_gzipped_small_json_is_not(admin: httpx.AsyncClient)
     assert "content-encoding" not in small.headers
 
 
+async def test_api_responses_are_no_store(admin: httpx.AsyncClient) -> None:
+    for i in range(30):
+        await make_student(f"Студент {i:02d}")
+    for url, headers in ((STUDENTS, GZIP), (f"{STUDENTS}/export", GZIP), ("/api/v1/auth/me", {})):
+        r = await admin.get(url, headers=headers)
+        assert r.headers["cache-control"] == "no-store", url
+        assert r.headers["pragma"] == "no-cache", url
+    assert (await admin.get(STUDENTS, headers=GZIP)).headers["content-encoding"] == "gzip"
+    bad = await admin.get(f"{STUDENTS}/00000000-0000-0000-0000-000000000000")
+    assert bad.status_code == 404 and bad.headers["cache-control"] == "no-store"
+    assert (await admin.get("/api/health")).headers["cache-control"] == "no-cache"
+
+
 async def test_xlsx_is_not_gzipped(admin: httpx.AsyncClient) -> None:
     for i in range(30):
         await make_student(f"Студент {i:02d}")

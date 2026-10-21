@@ -14,6 +14,7 @@ from app.campaigns.api import router as campaigns_router
 from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
+from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.employment.api import router as employment_router
 from app.export import XLSX
@@ -53,6 +54,7 @@ app.add_middleware(
 )
 if settings.proxy_secrets:
     app.add_middleware(ProxySecretRequired, secrets=settings.proxy_secrets)
+app.add_middleware(NoStore)  # outermost: also covers gzip'd and proxy-secret responses
 for router in (
     auth_router,
     reset_router,
