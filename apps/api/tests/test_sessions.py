@@ -111,7 +111,7 @@ async def test_remember_me_cookie_attributes() -> None:
         cookies = r.headers.get_list("set-cookie")
         assert all(f"max-age={30 * 86400}" in x.lower() for x in cookies)
         days = await sql("SELECT extract(epoch FROM expires_at - now()) / 86400 FROM refresh_token")
-        assert 29.9 < float(days[0][0]) <= 30
+        assert 29.9 < float(days[0][0]) <= 30.001  # db now() vs app clock skew
 
 
 async def test_remember_choice_and_device_survive_refresh() -> None:
