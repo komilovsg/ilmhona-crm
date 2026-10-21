@@ -229,6 +229,12 @@ class Lesson(Versioned, Legacy, Base):
     cancelled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     # 'generated' from the cohort schedule (rebuilt on change); 'manual' added or moved by hand
     source: Mapped[str] = mapped_column(Text, server_default=text("'generated'"))
+    # the cohort's instructor when the lesson was made (a trigger fills it; the lessons ahead
+    # follow an instructor change): EXCLUDE (instructor × time) keeps one lesson at a time
+    instructor_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("app_user.id"))
+    # an overlap that came with old data (migration 0015, import): outside the constraint,
+    # shown as «Проверить: конфликт инструктора» until resolved
+    instructor_conflict: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 

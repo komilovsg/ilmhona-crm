@@ -104,8 +104,9 @@ async def world(
     await pay(admin, e2, month=1)  # pending: not income
     await make_payout(admin, live, amount="400")
     done, done_ids = await finished_cohort(
-        admin, {"Выпускник Один": (40, 35), "Выпускник Два": (30, 30)}, instructor_id=str(ins)
-    )
+        admin, {"Выпускник Один": (40, 35), "Выпускник Два": (30, 30)}, instructor_id=str(ins),
+        start_time="12:00", end_time="13:30",  # one instructor, one lesson at a time
+    )  # fmt: skip
     await pay(admin, done_ids["Выпускник Один"], month=1, amount=300, confirm=True)
     recruiting = await make_cohort(
         admin,

@@ -20,7 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
-from app.cohorts.schedule import check_room_free, generate_lessons, local_dt
+from app.cohorts.schedule import (
+    check_instructor_free,
+    check_room_free,
+    generate_lessons,
+    local_dt,
+    reassign_instructor,
+    settle_conflicts,
+)
 from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
@@ -276,7 +283,13 @@ async def _load(
 
 async def _detail(db: AsyncSession, cohort_id: uuid.UUID) -> dict[str, Any]:
     rows = (await db.execute(_select().where(Cohort.id == cohort_id))).all()
-    return (await _outs(db, rows))[0]
+    conflicts = await db.scalar(
+        select(func.count())
+        .select_from(Lesson)
+        .where(Lesson.cohort_id == cohort_id, Lesson.instructor_conflict)
+    )
+    # lessons that came overlapping another lesson of the instructor (old data): to check
+    return {**(await _outs(db, rows))[0], "instructor_conflicts": conflicts or 0}
 
 
 async def _check_instructor(
@@ -534,14 +547,16 @@ async def update_cohort(
     if "room_id" in sent and body.room_id is not None:
         await _room_in_branch(db, p, body.room_id, cohort.branch_id)
         cohort.room_id = body.room_id
+    instructor_before = cohort.instructor_id
     if "instructor_id" in sent and body.instructor_id != cohort.instructor_id:
         await _check_instructor(db, body.instructor_id, cohort.branch_id)
         cohort.instructor_id = body.instructor_id
         cohort.instructor_rate = await _default_rate(db, body.instructor_id)
     lessons_note: list[int] | None = None
-    if {f: getattr(cohort, f) for f in _SCHEDULE_FIELDS} != schedule_before:
+    now = _now()
+    rebuild = {f: getattr(cohort, f) for f in _SCHEDULE_FIELDS} != schedule_before
+    if rebuild:
         # Past lessons stay, and so does any lesson with marks; the rest ahead is rebuilt.
-        now = _now()
         removed = (
             await db.execute(
                 delete(Lesson).where(
@@ -553,7 +568,12 @@ async def update_cohort(
             )
         ).rowcount  # type: ignore[attr-defined]
         await db.flush()
+    if cohort.instructor_id != instructor_before:
+        # the lessons ahead that stay (manual, with marks) go to the new instructor, checked
+        await reassign_instructor(db, cohort, after=now)
+    if rebuild:
         lessons_note = [removed, await generate_lessons(db, cohort, after=now)]
+    await settle_conflicts(db, {instructor_before, cohort.instructor_id})
     await st.sync_status(db, cohort, p.id)
     cohort.updated_at = _now()
     await db.flush()
@@ -582,6 +602,7 @@ async def cancel_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, An
             .values(cancelled=True)
         )
     ).rowcount  # type: ignore[attr-defined]
+    await settle_conflicts(db, {cohort.instructor_id})
     await record(
         db,
         p.id,
@@ -611,6 +632,7 @@ async def restore_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
     await db.flush()
     cohort.status = st.status_for(cohort.start_date, cohort.end_date, st.today())
     await generate_lessons(db, cohort, after=now)
+    await settle_conflicts(db, {cohort.instructor_id})
     await st.sync_status(db, cohort, p.id)
     cohort.updated_at = now
     await record(
@@ -655,6 +677,7 @@ def _lesson_out(le: Lesson, room: str) -> dict[str, Any]:
         "end": le.ends_at.astimezone(st.TZ).strftime("%H:%M"),
         "cancelled": le.cancelled,
         "source": le.source,
+        "instructor_conflict": le.instructor_conflict,
     }
 
 
@@ -731,9 +754,13 @@ async def add_lesson(cohort_id: uuid.UUID, body: LessonIn, p: Change, db: DB) ->
     await _room_in_branch(db, p, room_id, cohort.branch_id)
     starts, ends = local_dt(body.date, body.start_time), local_dt(body.date, body.end_time)
     await check_room_free(db, room_id, [(starts, ends)])
+    await check_instructor_free(
+        db, cohort.instructor_id, [(starts, ends)], branch_id=cohort.branch_id
+    )
     lesson = Lesson(
         cohort_id=cohort.id,
         room_id=room_id,
+        instructor_id=cohort.instructor_id,
         lesson_date=body.date,
         starts_at=starts,
         ends_at=ends,
@@ -788,7 +815,12 @@ async def move_lesson(
     await _room_in_branch(db, p, room_id, cohort.branch_id)
     starts, ends = local_dt(day, start), local_dt(day, end)
     await check_room_free(db, room_id, [(starts, ends)], ignore_lesson=lesson.id)
+    await check_instructor_free(
+        db, lesson.instructor_id, [(starts, ends)], branch_id=cohort.branch_id,
+        ignore_lesson=lesson.id,
+    )  # fmt: skip
     lesson.source = "manual"  # a moved lesson is no longer the schedule's to rebuild
+    lesson.instructor_conflict = False  # checked like any other lesson now
     lesson.room_id, lesson.lesson_date, lesson.starts_at, lesson.ends_at = (
         room_id,
         day,
@@ -796,6 +828,7 @@ async def move_lesson(
         ends,
     )
     await db.flush()
+    await settle_conflicts(db, {lesson.instructor_id})
     await record(
         db,
         p.id,
@@ -815,6 +848,7 @@ async def cancel_lesson(lesson_id: uuid.UUID, p: Change, db: DB) -> dict[str, An
         raise DomainError(LESSON_CANCELLED)
     lesson.cancelled = True
     await db.flush()
+    await settle_conflicts(db, {lesson.instructor_id})
     await record(
         db,
         p.id,

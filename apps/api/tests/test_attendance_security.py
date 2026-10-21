@@ -62,7 +62,9 @@ async def test_instructor_cross_references_and_no_status_override(
     ins = await login_as("ins", "instructor", branch="Душанбе")
     me = (await ins.get("/api/v1/auth/me")).json()["id"]
     mine, my_lessons = await past_cohort(admin, name="A", instructor_id=me)
-    mine2, _ = await past_cohort(admin, name="C", instructor_id=me)
+    mine2, _ = await past_cohort(
+        admin, name="C", instructor_id=me, start_time="12:00", end_time="13:30"
+    )
     theirs, their_lessons = await past_cohort(admin, name="B")
     my_e, my2_e = await enroll(admin, mine, "Мой"), await enroll(admin, mine2, "Мой2")
     their_e = await enroll(admin, theirs, "Чужой")

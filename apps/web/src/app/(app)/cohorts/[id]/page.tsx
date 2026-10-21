@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Chip } from "@heroui/chip";
 
 
 import { StudentsTab } from "./StudentsTab";
@@ -147,6 +148,16 @@ export default function CohortPage() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold">{c.code}</h1>
             <CohortStatus status={c.status} />
+            {!!c.instructor_conflicts && (
+              <Chip
+                color="warning"
+                size="sm"
+                title={`Уроков, которые пересекаются с другим уроком инструктора: ${c.instructor_conflicts}. Перенесите или отмените их во вкладке «Расписание».`}
+                variant="flat"
+              >
+                Проверить: конфликт инструктора
+              </Chip>
+            )}
           </div>
           <p className="text-default-600">{c.course_name}</p>
         </div>

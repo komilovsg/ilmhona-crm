@@ -15,7 +15,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,6 +197,13 @@ class Importer:
         self.pending_lessons: list[Lesson] = []
         # live lessons per room (start, end, who): the room check runs in memory, not per cohort
         self.busy: dict[uuid.UUID, list[tuple[datetime, datetime, str]]] = defaultdict(list)
+        # live lessons per (instructor, day): a new lesson that overlaps one is marked
+        # «конфликт инструктора» (both sides) instead of failing the import; lessons already in
+        # the database to mark are kept by id until the next lesson insert
+        self.instr_busy: dict[
+            tuple[uuid.UUID | None, date], list[tuple[datetime, datetime, Lesson | uuid.UUID, str]]
+        ] = defaultdict(list)
+        self.conflict_ids: set[uuid.UUID] = set()
         self.existing_cohorts: dict[uuid.UUID, Cohort] = {}
 
     # ---- plumbing -------------------------------------------------------------------------
@@ -497,6 +504,17 @@ class Importer:
             )
         ).all():
             self.busy[room_id].append((starts, ends, code))
+        for lid, iid, day, starts, ends, code in (
+            await self.db.execute(
+                select(
+                    Lesson.id, Lesson.instructor_id, Lesson.lesson_date, Lesson.starts_at,
+                    Lesson.ends_at, Cohort.code,
+                )
+                .join(Cohort, Cohort.id == Lesson.cohort_id)
+                .where(~Lesson.cancelled, Lesson.instructor_id.is_not(None))
+            )
+        ).all():  # fmt: skip
+            self.instr_busy[(iid, day)].append((starts, ends, lid, code))
         if self.refs["cohort"]:
             self.existing_cohorts = {
                 c.id: c
@@ -518,8 +536,7 @@ class Importer:
             rows = sorted(rows, key=lambda r: -STATUS_RANK.get(p.text(r.get("status")), 0))
             await self._cohort(old_id, rows)
         await self._bulk(self.pending_cohorts)
-        await self._bulk(self.pending_lessons)
-        self.pending_lessons.clear()
+        await self._insert_lessons()
         if self.pending_cohorts:
             # the ORM objects of the new cohorts (server-made code, version) for the later steps
             made = {
@@ -698,6 +715,44 @@ class Importer:
     def _take(self, room_id: uuid.UUID, windows: list[tuple[datetime, datetime]], who: str) -> None:
         self.busy[room_id].extend((start, end, who) for start, end in windows)
 
+    def _instructor_take(self, ctx: CohortCtx, lessons: list[Lesson]) -> None:
+        """Give the lessons the cohort's instructor; one that overlaps another lesson of theirs is
+        marked (with the other one) and flagged for review, so the import does not fail on the
+        database's instructor × time constraint."""
+        iid = ctx.obj.instructor_id
+        if iid is None:
+            return
+        others: set[str] = set()
+        for le in lessons:
+            le.instructor_id = iid
+            day = self.instr_busy[(iid, le.lesson_date)]
+            for starts, ends, other, who in day:
+                if starts < le.ends_at and ends > le.starts_at:
+                    le.instructor_conflict = True
+                    if isinstance(other, Lesson):
+                        other.instructor_conflict = True
+                    else:
+                        self.conflict_ids.add(other)
+                    others.add(who)
+            day.append((le.starts_at, le.ends_at, le, ctx.old_id))
+        if others:
+            self.rep.flag(
+                "COHORTS", "конфликт инструктора: уроки в то же время, что у другого потока",
+                ctx.old_id, cohorts=", ".join(sorted(others)),
+            )  # fmt: skip
+
+    async def _insert_lessons(self) -> None:
+        if self.conflict_ids:
+            await self.db.execute(
+                update(Lesson)
+                .where(Lesson.id.in_(self.conflict_ids))
+                .values(instructor_conflict=True)
+                .execution_options(synchronize_session=False)
+            )
+            self.conflict_ids.clear()
+        await self._bulk(self.pending_lessons)
+        self.pending_lessons.clear()
+
     async def _generate_lessons(self, ctx: CohortCtx) -> None:
         cohort = ctx.obj
         days = lesson_dates(cohort.start_date, cohort.end_date, cohort.weekdays)
@@ -724,6 +779,7 @@ class Importer:
             for day, (s, e) in zip(days, windows, strict=True)
         ]
         self._take(room_id, windows, ctx.old_id)
+        self._instructor_take(ctx, lessons)
         self.pending_lessons.extend(lessons)
         self.rep.note("урок создан из расписания потока", len(lessons))
 
@@ -1211,6 +1267,7 @@ class Importer:
             starts_at=starts, ends_at=ends, source="manual",
             legacy_ref=p.make_ref("LESSONS", ctx.old_id, day.isoformat()),
         )  # fmt: skip
+        self._instructor_take(ctx, [lesson])
         self.pending_lessons.append(lesson)
         self.lessons[(cohort.id, day)] = lesson.id
         self.rep.note("ручной урок создан: в расписании нет урока на дату отметки")
@@ -1270,8 +1327,7 @@ class Importer:
                     "reason": reason,
                 }
             )
-        await self._bulk(self.pending_lessons)  # the manual lessons the marks point at
-        self.pending_lessons.clear()
+        await self._insert_lessons()  # the manual lessons the marks point at
         for i in range(0, len(values), BATCH):
             done = await self.db.execute(
                 pg_insert(Attendance).values(values[i : i + BATCH]).on_conflict_do_nothing()
