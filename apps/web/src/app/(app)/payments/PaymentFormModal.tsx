@@ -53,7 +53,7 @@ function OptionButton({
         <span className="min-w-0 truncate font-medium">{o.student_name}</span>
         <span className="shrink-0 text-xs font-medium text-brand-text">{o.cohort_code}</span>
       </span>
-      <span className="mt-0.5 block truncate text-xs text-default-500">
+      <span className="mt-0.5 block text-xs text-default-500">
         {o.course_name} · {formatPrice(o.price_month)}/мес · оплачено: {paidCountLabel(o.month_states ?? [], o.months)}
         {Number(o.debt) > 0 ? ` · долг ${formatPrice(o.debt)}` : ""}
       </span>
