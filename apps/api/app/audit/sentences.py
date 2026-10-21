@@ -46,6 +46,8 @@ def section_of(entity: str, action: str) -> str | None:
 
 # action -> (passive verb agreeing with the object, object): «Курбон: <verb> <object> <label>»
 ACTIONS: dict[str, tuple[str, str]] = {
+    "demo.seed": ("загружены", "демо-данные"),
+    "demo.wipe": ("удалены", "демо-данные"),
     "student.create": ("создан", "студент"),
     "student.update": ("изменён", "студент"),
     "student.delete": ("удалён", "студент"),
