@@ -38,6 +38,7 @@ from app.metrics.money import (
     cohort_months,
     cohort_payers,
     enrollment_money,
+    enrollment_money_rows,
     payment_joined,
     payment_totals,
 )
@@ -324,8 +325,24 @@ def _debtor_select(
         where.append(
             or_(Student.full_name.ilike(like), Student.phone.ilike(like), Cohort.code.ilike(like))
         )
+    # columns, not entities: a debtors list reads every enrollment of the school
     return (
-        select(Enrollment, Cohort, Student, Course.name, Branch.name)
+        select(
+            Enrollment.id,
+            Enrollment.enrolled_at,
+            Enrollment.status,
+            Cohort.price_month,
+            Cohort.start_date,
+            Cohort.end_date,
+            Cohort.id,
+            Cohort.code,
+            Student.id,
+            Student.full_name,
+            Student.phone,
+            Course.name,
+            Branch.name,
+        )
+        .select_from(Enrollment)
         .join(Cohort, Cohort.id == Enrollment.cohort_id)
         .join(Student, Student.id == Enrollment.student_id)
         .join(Course, Course.id == Cohort.course_id)
@@ -342,23 +359,23 @@ async def _debtors(
     cohort_id: uuid.UUID | None,
 ) -> list[dict[str, Any]]:
     rows = (await db.execute(_debtor_select(p, q, branch_id, cohort_id))).all()
-    money = await enrollment_money(db, [(e, c) for e, c, _, _, _ in rows])
+    money = await enrollment_money_rows(db, [r[:6] for r in rows])
     out = [
         {
-            "enrollment_id": e.id,
-            "student_id": s.id,
-            "student_name": s.full_name,
-            "phone": s.phone,
-            "cohort_id": c.id,
-            "cohort_code": c.code,
+            "enrollment_id": eid,
+            "student_id": sid,
+            "student_name": name,
+            "phone": phone,
+            "cohort_id": cid,
+            "cohort_code": code,
             "course_name": course,
             "branch_name": branch,
-            "price_month": c.price_month,
-            "months": cohort_months(c.start_date, c.end_date),
-            **money[e.id],
+            "price_month": price,
+            "months": cohort_months(start, end),
+            **money[eid],
         }
-        for e, c, s, course, branch in rows
-        if money[e.id]["debt"] > 0
+        for eid, _, _, price, start, end, cid, code, sid, name, phone, course, branch in rows
+        if money[eid]["debt"] > 0
     ]
     out.sort(key=lambda r: (-r["debt"], r["student_name"], str(r["enrollment_id"])))
     return out

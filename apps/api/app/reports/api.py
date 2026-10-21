@@ -17,7 +17,7 @@ from app.core.db import DB
 from app.core.paging import Page, PageSize
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.leads.scope import reader
-from app.metrics import unfilled_lessons
+from app.metrics import unfilled_top
 from app.metrics.reports import (
     Scope,
     by_course,
@@ -61,13 +61,13 @@ async def dashboard_overview(
     date_to: date | None = None,
 ) -> dict[str, Any]:
     scope = scope_of(p, branch_id)
-    unfilled = await unfilled_lessons(db, scope.cohort)
+    unfilled_count, unfilled = await unfilled_top(db, scope.cohort, WIDGET_ROWS)
     names = allows(p.level("leads"), "view")  # lead names and phones: the leads section's
     (numbers,) = hide_money([await overview(db, scope, date_from, date_to)], hidden_money(p))
     return {
         **numbers,
         "unfilled": {
-            "count": len(unfilled),
+            "count": unfilled_count,
             "items": [
                 {
                     "lesson_id": lesson.id,
@@ -78,7 +78,7 @@ async def dashboard_overview(
                     "marked": marked,
                     "total": total,
                 }
-                for lesson, cohort, course, _room, total, marked in unfilled[:WIDGET_ROWS]
+                for lesson, cohort, course, _room, total, marked in unfilled
             ],
         },
         "callbacks": {

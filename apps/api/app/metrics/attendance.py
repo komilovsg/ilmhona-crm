@@ -187,12 +187,8 @@ async def today_lessons(
     return [tuple(r) for r in rows.all()]
 
 
-async def unfilled_lessons(
-    db: AsyncSession, cohort_where: list[ColumnElement[bool]], *, now: datetime | None = None
-) -> list[tuple[Lesson, Cohort, str, str, int, int]]:
-    """#21: held lessons of the last 30 days where somebody is still unmarked, oldest first."""
-    now = now or _now()
-    rows = await db.execute(
+def _unfilled_query(cohort_where: list[ColumnElement[bool]], now: datetime) -> Any:
+    return (
         lesson_marks_query(
             [
                 *cohort_where,
@@ -204,4 +200,32 @@ async def unfilled_lessons(
         .having(func.count(Enrollment.id) > func.count(Attendance.lesson_id))
         .order_by(Lesson.starts_at, Cohort.code)
     )
+
+
+async def unfilled_lessons(
+    db: AsyncSession, cohort_where: list[ColumnElement[bool]], *, now: datetime | None = None
+) -> list[tuple[Lesson, Cohort, str, str, int, int]]:
+    """#21: held lessons of the last 30 days where somebody is still unmarked, oldest first."""
+    rows = await db.execute(_unfilled_query(cohort_where, now or _now()))
     return [tuple(r) for r in rows.all()]
+
+
+async def unfilled_top(
+    db: AsyncSession,
+    cohort_where: list[ColumnElement[bool]],
+    limit: int,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, list[tuple[Lesson, Cohort, str, str, int, int]]]:
+    """How many unfilled lessons there are, and the first `limit` of them: one query that
+    returns only those rows (the dashboard shows a count and five lines)."""
+    rows = (
+        await db.execute(
+            _unfilled_query(cohort_where, now or _now())
+            .add_columns(func.count().over().label("n"))
+            .limit(limit)
+        )
+    ).all()
+    if rows:
+        return int(rows[0][-1]), [tuple(r[:-1]) for r in rows]
+    return 0, []

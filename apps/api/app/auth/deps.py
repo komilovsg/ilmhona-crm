@@ -130,22 +130,29 @@ async def _principal(request: Request, db: DB) -> Principal:
         RefreshToken.user_id == AppUser.id,
         RefreshToken.revoked_at.is_(None),
     )
-    row = (
+    # one round trip: the user, the role and the role's rights (every request starts here)
+    rows = (
         await db.execute(
-            select(AppUser, Role)
+            select(AppUser, Role, RolePermission.section, RolePermission.level)
             .join(Role, Role.id == AppUser.role_id)
+            .outerjoin(RolePermission, RolePermission.role_id == Role.id)
             .where(AppUser.id == user_id, AppUser.is_active, live_session)
         )
-    ).first()
-    if row is None:
+    ).all()
+    if not rows:
         raise DomainError(NOT_AUTHENTICATED)
-    user, role = row
+    user, role = rows[0][0], rows[0][1]
     # A user who must change the temporary password reaches only the routes that say so.
     route = request.scope.get("route")
     pending_ok = bool(getattr(getattr(route, "endpoint", None), "allow_pending_password", False))
     if user.must_change_password and not pending_ok:
         raise DomainError(PASSWORD_CHANGE_REQUIRED)
-    return Principal(user, role, await permissions_of(db, role), session_id)
+    permissions = (
+        dict.fromkeys(SECTIONS, "change")
+        if role.code == SUPERADMIN_CODE
+        else {s: lvl for _, _, s, lvl in rows if s is not None}
+    )
+    return Principal(user, role, permissions, session_id)
 
 
 CurrentUser = Annotated[Principal, Depends(_principal)]

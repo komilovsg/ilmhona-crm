@@ -36,6 +36,7 @@ from app.models import (
     Lead,
     Lesson,
     Payment,
+    RefreshToken,
     Room,
     Student,
 )
@@ -355,6 +356,21 @@ async def main() -> None:
                 }
             )
         await db.execute(insert(AuditLog), audit)
+        # sessions rotate their refresh token every access-token lifetime and nothing purges them:
+        # a few months of 44 users leave tens of thousands of rows
+        tokens = [
+            {
+                "user_id": users[k % len(users)]["id"],
+                "family_id": uid(),
+                "token_hash": uuid.uuid4().bytes + uuid.uuid4().bytes,
+                "expires_at": datetime.now(UTC) + timedelta(days=30),
+                "used_at": datetime.now(UTC) if k % 3 else None,
+                "revoked_at": datetime.now(UTC) if k % 5 else None,
+            }
+            for k in range(40000)
+        ]
+        for i in range(0, len(tokens), 4000):
+            await db.execute(insert(RefreshToken), tokens[i : i + 4000])
         await db.commit()
         for t in (
             "student",
