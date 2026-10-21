@@ -36,10 +36,10 @@ from app.auth.errors import (
 from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import NOT_AUTHENTICATED, DomainError
-from app.core.proxy import client_ip
+from app.core.password_policy import MAX_LENGTH as PASSWORD_MAX_LENGTH
 from app.core.password_policy import policy, violations
+from app.core.proxy import client_ip
 from app.core.security import (
-    PASSWORD_MAX_LENGTH,
     hash_password,
     new_token,
     token_hash,

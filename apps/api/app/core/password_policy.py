@@ -1,5 +1,5 @@
 """The password rules, one source: enforced here, published by `GET /auth/password-policy`,
-read by the web (checklist, hints). A new rule is a new id here and in `apps/web/src/lib/password.ts`.
+read by the web (checklist, hints). A new rule: a new id here and in the web `lib/password.ts`.
 """
 
 import re

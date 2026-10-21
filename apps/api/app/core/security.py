@@ -6,7 +6,6 @@ import secrets
 import argon2
 from argon2.exceptions import InvalidHashError, VerificationError
 
-from app.core.password_policy import MAX_LENGTH as PASSWORD_MAX_LENGTH
 from app.core.password_policy import generate
 
 _hasher = argon2.PasswordHasher()
