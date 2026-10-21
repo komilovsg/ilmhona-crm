@@ -5,5 +5,5 @@
  */
 export function reportError(error: unknown): void {
   if (!process.env.NEXT_PUBLIC_SENTRY_DSN) return;
-  void import("@sentry/nextjs").then((Sentry) => Sentry.captureException(error)).catch(() => {});
+  void import("./sentry-browser").then((s) => s.captureException(error)).catch(() => {});
 }

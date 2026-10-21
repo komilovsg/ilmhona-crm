@@ -11,11 +11,18 @@ const SAFE_HEADERS = new Set(["accept", "accept-language", "content-length", "co
 // Event fields that are structure, not user text (ids and timestamps look like numbers).
 const STRUCTURAL = new Set([
   "event_id", "timestamp", "start_timestamp", "release", "environment", "platform", "level",
-  "type", "trace_id", "span_id", "parent_span_id", "sdk", "modules", "trace", "sample_rand",
+  "type", "trace_id", "span_id", "parent_span_id", "sdk", "modules", "sample_rand",
 ]);
 const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 // 9+ digits, optionally with + ( ) - . or spaces between them: a phone number in any format
 const PHONE = /(?<![\w.])\+?\d(?:[\s().-]{0,2}\d){8,}(?![\w])/g;
+// Names are Cyrillic (Russian, Tajik); code and log text are English: any Cyrillic word goes,
+// also percent-encoded in a URL (Cyrillic is U+0400-04FF = UTF-8 D0-D3 xx).
+const CYRILLIC = /[Ѐ-ӿ]+|(?:%D[0-3]%[89AB][0-9A-F])+/gi;
+// A query after a path or URL inside any text (span descriptions, trace data, messages).
+const URL_QUERY = /((?:https?:\/\/|\/)[^\s?#"'<>]*)\?[^\s#"'<>]*/g;
+// Span / trace attributes that hold a raw query string.
+const QUERY_KEYS = new Set(["http.query", "url.query", "http.fragment", "url.fragment"]);
 
 /** Sentry v11 `dataCollection` (replaces `sendDefaultPii`): everything personal switched off. */
 export const DATA_COLLECTION = {
@@ -34,14 +41,20 @@ export const DATA_COLLECTION = {
 type Json = Record<string, unknown>;
 
 export function scrubText(value: string): string {
-  return value.replace(EMAIL, FILTERED).replace(PHONE, FILTERED);
+  return value
+    .replace(URL_QUERY, "$1")
+    .replace(EMAIL, FILTERED)
+    .replace(PHONE, FILTERED)
+    .replace(CYRILLIC, FILTERED);
 }
 
 function scrub(value: unknown): unknown {
   if (typeof value === "string") return scrubText(value);
   if (Array.isArray(value)) return value.map(scrub);
   if (value && typeof value === "object") {
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, STRUCTURAL.has(k) ? v : scrub(v)]));
+    return Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, STRUCTURAL.has(k) ? v : QUERY_KEYS.has(k) ? FILTERED : scrub(v)]),
+    );
   }
   return value;
 }

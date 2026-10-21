@@ -104,3 +104,36 @@ def test_expected_errors_are_dropped() -> None:
 def test_disabled_without_dsn() -> None:
     assert init_sentry("") is False
     assert not get_client().is_active()
+
+
+def test_db_error_parameters_and_names_never_leave() -> None:
+    """A database error carries the bound row (SQLAlchemy `[parameters: …]`, asyncpg DETAIL):
+    names and amounts there were sent before; Cyrillic words (names) anywhere are scrubbed."""
+    sa = (
+        "(sqlalchemy.dialects.postgresql.asyncpg.CheckViolationError) new row for relation "
+        '"student" violates check constraint "ck_amount"\n'
+        "[SQL: INSERT INTO t VALUES ($1, $2, $3)]\n"
+        "[parameters: ('Rahimov Firuz', 'x', 1500.75)]\n"
+        "(Background on this error at: https://sqlalche.me/e/21/gkpj)"
+    )
+    values = [
+        ("CheckViolationError", "Failing row contains (Rahimov, 1500.75)."),
+        ("UniqueViolationError", "Key (login)=(rahimov.f) already exists."),
+        ("IntegrityError", sa),
+        ("KeyError", "'no tariff for Раҳимов Фирӯз / Иванова Мария'"),
+        ("ValidationError", "name\n  input_value='Rahimov F', input_type=str"),
+    ]
+    event = {"exception": {"values": [{"type": t, "value": v} for t, v in values]}}
+    out = before_send(event, {})  # type: ignore[arg-type]
+    assert out is not None
+    dump = json.dumps(out, ensure_ascii=False)
+    for leaked in ("Rahimov", "rahimov", "1500.75", "Раҳимов", "Фирӯз", "Иванова", "Мария"):
+        assert leaked not in dump, leaked
+    assert 'violates check constraint \\"ck_amount\\"' in dump  # the useful part stays
+    assert "Key (login)=" in dump
+
+
+def test_engine_hides_bound_parameters() -> None:
+    from app.core.db import engine
+
+    assert engine.sync_engine.hide_parameters is True

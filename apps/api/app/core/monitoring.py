@@ -44,10 +44,23 @@ _STRUCTURAL = frozenset(
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 # 9+ digits, optionally with + ( ) - . or spaces between them: a phone number in any format
 _PHONE = re.compile(r"(?<![\w.])\+?\d(?:[\s().-]{0,2}\d){8,}(?![\w])")
+# Names are Cyrillic (Russian, Tajik); code, SQL and log text are English: any Cyrillic word goes.
+_CYRILLIC = re.compile(r"[Ѐ-ӿ]+")
+# A database error repeats the row it failed on: SQLAlchemy `[parameters: …]`, asyncpg DETAIL
+# `Failing row contains (…)` / `Key (col)=(…)`, pydantic `input_value=…`. Values go, names stay.
+_ROW_DATA = (
+    (re.compile(r"\[parameters: [^\n]*"), f"[parameters: {FILTERED}]"),
+    (re.compile(r"(Failing row contains )[^\n]*"), rf"\1({FILTERED})"),
+    (re.compile(r"(Key \([^)\n]*\)=)\([^\n]*?\)(?=[ .]|$)", re.M), rf"\1({FILTERED})"),
+    (re.compile(r"input_value=('[^'\n]*'|\"[^\"\n]*\"|[^,\n\]]*)"), f"input_value={FILTERED}"),
+)
 
 
 def scrub_text(value: str) -> str:
-    return _PHONE.sub(FILTERED, _EMAIL.sub(FILTERED, value))
+    for pattern, repl in _ROW_DATA:
+        value = pattern.sub(repl, value)
+    value = _EMAIL.sub(FILTERED, value)
+    return _CYRILLIC.sub(FILTERED, _PHONE.sub(FILTERED, value))
 
 
 def _scrub(value: Any) -> Any:

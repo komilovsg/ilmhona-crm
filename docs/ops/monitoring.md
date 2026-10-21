@@ -40,6 +40,12 @@ sides have unit tests with fake personal data.
   path only.
 - Any string containing a phone number (9+ digits in any format) or an e-mail address is replaced
   with `[Filtered]` (exception messages, log messages, tags).
+- Names: every Cyrillic word (also percent-encoded in a URL) is `[Filtered]`; code, SQL and log
+  text are English, so this only hits personal data. Latin-spelled names are not detected.
+- Database errors: the engine runs with `hide_parameters=True`, and the scrubber also replaces
+  `[parameters: …]`, `Failing row contains (…)`, `Key (col)=(…)` and `input_value=…`.
+- Any `?query` inside a string (span descriptions, trace data) is cut; `http.query`-style
+  attributes are `[Filtered]`.
 - Stack-frame local variables, `server_name`, `extra`: removed.
 
 ## Browser tunnel `/monitoring`
@@ -48,8 +54,13 @@ The browser posts to our own origin so the strict CSP (`connect-src 'self'`) sta
 ad blockers do not drop events. The route (`src/app/monitoring/route.ts`) is public (an error can
 happen before login) and forwards an envelope only if its header names exactly our
 `NEXT_PUBLIC_SENTRY_DSN`; the target is rebuilt from that DSN and must be under `.sentry.io`.
-Limits: 200 KB per request, 30 requests/min per client address (per server instance), everything
-else gets 400/413/429.
+Limits: 200 KB per request (counted in bytes while streaming, also without a content-length), 30
+requests/min per client address (`x-vercel-forwarded-for`, per server instance), everything else
+gets 400/413/429. Only the envelope goes upstream: no cookie, auth or forwarding header. A global
+cap is not needed: the DSN is public in the bundle, so anyone can post to Sentry directly anyway;
+the tunnel adds no reach beyond our own project. The browser SDK is loaded through
+`src/lib/sentry-browser.ts` with named imports only, so Session Replay and the feedback widget are
+not in the bundle.
 
 ## Error boundaries
 
