@@ -54,3 +54,30 @@ confirmed 351 946.07) does NOT match: all 24 students have ids in the reserved d
 `de000000-...`, so this backup holds only the demo dataset. The real import has not reached
 the production database yet. The restore mechanics are proven; the real-data counts are still
 to be checked once the import is loaded and a new backup runs.
+
+## Run 2: real data (same day)
+
+Run 1 caught a gap: the newest backup predated the real import, so it held demo data only. A
+fresh backup was taken: `ilmhona-2026-10-21T0941Z.sql.gz.age` (293 546 bytes encrypted, 1 694 338
+bytes plain). Restored with the updated procedure in `deploy.md` (`DROP SCHEMA public`, load
+with `ON_ERROR_STOP=1`, grants): exit 0, load 0.4 s. `alembic_version` = `0012` (head). No demo
+students. No shrink against the import report; small growth only.
+
+| Table | Rows | Expected |
+|---|---|---|
+| app_user | 39 | |
+| student | 837 | 837 |
+| cohort | 85 | |
+| lesson | 1495 | |
+| enrollment | 881 | 881 |
+| attendance | 6024 | 5990 (+34) |
+| payment | 628 (624 confirmed, 4 pending) | 624 confirmed |
+| instructor_payout | 15 | |
+| lead | 44 | |
+| campaign | 22 | |
+| audit_log | 108 | |
+
+Confirmed sum 351 946.07 (expected 351 946.07); pending 2 750.00. Metrics as `ilm_app`, read-only:
+income 351 946.07, payroll 30 400.00, ads 5 856.59, profit 315 689.48; 85 cohorts (14 active);
+students: 117 active, 366 graduated, 79 dropped, 275 without enrollment.
+Container, decrypted dump and scratch dir removed.
