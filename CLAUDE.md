@@ -7,6 +7,7 @@ Patterns come from `~/Developer/my-hrm` — copy and simplify, don't reinvent. N
 ## Layout
 - `apps/api` — FastAPI, SQLAlchemy 2 async, Alembic, Postgres. Python 3.14, uv.
 - `apps/web` — Next.js 16 (App Router), React 19, HeroUI 2, Tailwind 4. Russian only, no i18n library.
+- Production: Vercel (web) -> Render (API, `render.yaml`) -> Neon; workflows deploy-api / keepalive / daily / backup. Read `docs/ops/deploy.md` before touching any of it.
 - `compose.yaml` — dev Postgres on :55433. API :8200, web :3200 (my-hrm owns 55432/8100/3100 — never touch them).
 
 ## Commands

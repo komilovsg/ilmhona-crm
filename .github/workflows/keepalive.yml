@@ -1,0 +1,23 @@
+# Keeps the free Render API awake in working hours (docs/ops/deploy.md): a request through
+# the Vercel URL every 10 minutes between 03:00 and 15:59 UTC = 08:00-20:59 Asia/Dushanbe.
+# Free Render sleeps after 15 idle minutes; outside these hours it sleeps and the first
+# visitor waits for the cold start.
+name: keepalive
+
+on:
+  schedule:
+    - cron: "*/10 3-15 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: health through the web proxy
+        env:
+          URL: ${{ vars.WEB_HEALTH_URL || 'https://ilmhona-crm.vercel.app/api/health' }}
+        # --retry covers a cold start: Render needs up to a minute to wake.
+        run: curl -fsS --max-time 90 --retry 2 --retry-delay 10 --retry-all-errors "$URL"
