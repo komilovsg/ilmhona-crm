@@ -459,6 +459,13 @@ def sentence(
             f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
         )
         return head + (f", причина: {reason}" if reason else "")
+    if a == "attendance.import":
+        _, marks = _pair(e.diff.get("marks"))
+        _, lessons = _pair(e.diff.get("lessons"))
+        _, over = _pair(e.diff.get("overwritten"))
+        tail = f", перезаписано: {over}" if over else ""
+        head = f"{who}: импорт посещаемости {lab}"
+        return f"{head} — {marks or 0} отметок, {lessons or 0} уроков добавлено{tail}"
     if a == "attendance.mark_all":
         code, _, day = (lab or "").partition(", ")
         _, n = _pair(e.diff.get("marked"))
