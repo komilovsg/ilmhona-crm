@@ -25,8 +25,20 @@ _MONTHS = {
 }
 
 
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f]")
+MAX_MONEY = Decimal("9999999999.99")  # numeric(12, 2), as the app's money fields
+MAX_COUNT = 100_000
+MAX_NAME = 200
+
+
 def text(value: object) -> str:
-    return "" if value is None else str(value).strip()
+    """Untrusted text of the old sheets: no NUL or other control characters (tab, newline stay)."""
+    return "" if value is None else _CONTROL.sub("", str(value)).strip()
+
+
+def clip(value: str | None, limit: int) -> str | None:
+    """The app's length limit for the column (old cells can be any length)."""
+    return value[:limit].strip() if value else value
 
 
 def parse_dt(value: object) -> datetime | None:
@@ -35,10 +47,10 @@ def parse_dt(value: object) -> datetime | None:
     if not m or m.group(1) not in _MONTHS:
         return None
     month, day, year, hh, mm, ss, sign, oh, om = m.groups()
-    offset = timezone(
-        (1 if sign == "+" else -1) * timedelta(hours=int(oh), minutes=int(om)),
-    )
     try:
+        offset = timezone(
+            (1 if sign == "+" else -1) * timedelta(hours=int(oh), minutes=int(om)),
+        )
         moment = datetime(
             int(year), _MONTHS[month], int(day), int(hh), int(mm), int(ss), tzinfo=offset
         )
@@ -77,24 +89,30 @@ def lesson_window_ok(start: time | None, end: time | None) -> bool:
     return 30 <= minutes <= 240
 
 
-def to_int(value: object) -> int | None:
-    raw = text(value).replace(",", ".")
+def _number(value: object) -> Decimal | None:
+    raw = text(value).replace(",", ".").replace(" ", "")
     try:
         number = Decimal(raw)
     except InvalidOperation:
         return None
-    return int(number) if number == number.to_integral_value() else None
+    return number if number.is_finite() else None  # NaN, sNaN, Infinity
+
+
+def to_int(value: object) -> int | None:
+    """A count / month / score: a whole number within ±100 000."""
+    number = _number(value)
+    if number is None or abs(number) > MAX_COUNT or number != number.to_integral_value():
+        return None
+    return int(number)
 
 
 def to_decimal(value: object) -> Decimal | None:
-    raw = text(value).replace(",", ".").replace(" ", "")
-    if not raw:
+    """Money as the app takes it: at most 2 decimals, below 10^10 (numeric(12, 2))."""
+    number = _number(value)
+    if number is None or abs(number) > MAX_MONEY:
         return None
-    try:
-        number = Decimal(raw)
-    except InvalidOperation:
-        return None
-    return number if number.is_finite() else None
+    exponent = number.normalize().as_tuple().exponent
+    return number if isinstance(exponent, int) and exponent >= -2 else None
 
 
 # ---- names, phones --------------------------------------------------------------------------
@@ -108,8 +126,9 @@ def norm_name(value: object) -> str:
 
 def name_of(value: object) -> tuple[str, bool]:
     """(clean name, needs review) with the hygiene of the leads (#15)."""
-    cleaned = clean_name(text(value))
-    return cleaned.name, cleaned.needs_review
+    cleaned = clean_name(text(value)[: MAX_NAME * 2])
+    name = clip(cleaned.name, MAX_NAME) or cleaned.name
+    return name, cleaned.needs_review or name != cleaned.name
 
 
 def phone_of(value: object) -> tuple[str | None, str]:
@@ -159,7 +178,7 @@ def slug(value: object) -> str:
         latin = re.sub(r"[^a-z0-9]", "", latin)
         if latin:
             parts.append(latin)
-    return ".".join(parts[:2])
+    return ".".join(parts[:2])[:60]
 
 
 # ---- grades ---------------------------------------------------------------------------------
