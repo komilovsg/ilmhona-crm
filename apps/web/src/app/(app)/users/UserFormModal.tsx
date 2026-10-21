@@ -16,6 +16,8 @@ import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
 
+const LOGIN_HINT = "3–40 символов: латинские буквы, цифры, . _ -";
+
 /** Create (no `user`) or edit a user. Creating returns the temporary password through `onCreated`. */
 export function UserFormModal({
   user,
@@ -39,8 +41,10 @@ export function UserFormModal({
   const [roleId, setRoleId] = useState<string | null>(user?.role_id ?? null);
   const [error, setError] = useState<string | null>(null);
   const bound = !!me?.branch;
+  const isSuper = me?.role.code === "superadmin";
 
   const values = {
+    login: login.trim(),
     full_name: fullName.trim(),
     phone: phone.trim() || null,
     email: email.trim() || null,
@@ -52,7 +56,7 @@ export function UserFormModal({
     void queryClient.invalidateQueries({ queryKey: ["roles"] });
   };
   const create = useMutation({
-    mutationFn: () => api<TempPassword>("/api/v1/users", { method: "POST", body: { ...values, login } }),
+    mutationFn: () => api<TempPassword>("/api/v1/users", { method: "POST", body: values }),
     onSuccess: (result) => {
       refreshLists();
       onCreated(result);
@@ -64,6 +68,7 @@ export function UserFormModal({
     record: user,
     values,
     toValues: (u) => ({
+      login: u.login,
       full_name: u.full_name,
       phone: u.phone,
       email: u.email,
@@ -71,6 +76,7 @@ export function UserFormModal({
       role_id: u.role_id as string | null,
     }),
     apply: (v) => {
+      setLogin(v.login);
       setFullName(v.full_name);
       setPhone(v.phone ?? "");
       setEmail(v.email ?? "");
@@ -78,7 +84,7 @@ export function UserFormModal({
       setRoleId(v.role_id);
     },
     request: (changed, version) => api<UserRow>(`/api/v1/users/${user?.id}`, { method: "PATCH", body: changed, version }),
-    labels: { full_name: "ФИО", phone: "Телефон", email: "Email", branch_id: "Филиал", role_id: "Роль" },
+    labels: { login: "Логин", full_name: "ФИО", phone: "Телефон", email: "Email", branch_id: "Филиал", role_id: "Роль" },
     show: {
       branch_id: (id: string | null) => branches.find((b) => b.id === id)?.name ?? "Все филиалы",
       role_id: (id: string | null) => roles.find((r) => r.id === id)?.name ?? "—",
@@ -90,7 +96,7 @@ export function UserFormModal({
     },
   });
 
-  const valid = fullName.trim() && roleId && (user || login.trim().length >= 3);
+  const valid = fullName.trim() && roleId && login.trim().length >= 3;
   const submit = useSubmit(() => (user ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -116,8 +122,8 @@ export function UserFormModal({
       >
         <Input
           autoComplete="off"
-          description={user ? undefined : "От 3 символов: буквы, цифры, . _ @ -"}
-          isDisabled={!!user}
+          description={user && !isSuper ? "Логин может изменить только суперадмин" : LOGIN_HINT}
+          isDisabled={!!user && !isSuper}
           isRequired
           label="Логин"
           value={login}

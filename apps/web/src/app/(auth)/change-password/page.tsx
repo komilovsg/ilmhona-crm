@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 
+import { NewPasswordFields, usePasswordRules } from "@/components/NewPasswordFields";
 import { PasswordField } from "@/components/PasswordField";
-import { ME_KEY } from "@/hooks/queries";
+import { ME_KEY, useMe } from "@/hooks/queries";
 import { api, messageOf } from "@/lib/api";
 import { homePath } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
@@ -21,7 +22,8 @@ export default function ChangePasswordPage() {
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const mismatch = repeat !== "" && repeat !== next;
+  const { data: me } = useMe();
+  const { rules, valid } = usePasswordRules(next, repeat, me?.login ?? "", current);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -29,13 +31,13 @@ export default function ChangePasswordPage() {
     setBusy(true);
     setError(null);
     try {
-      const me = await api<Me>("/api/v1/auth/change-password", {
+      const updated = await api<Me>("/api/v1/auth/change-password", {
         method: "POST",
         body: { current_password: current, new_password: next },
       });
 
-      queryClient.setQueryData(ME_KEY, me);
-      router.replace(homePath(me.permissions));
+      queryClient.setQueryData(ME_KEY, updated);
+      router.replace(homePath(updated.permissions));
     } catch (e) {
       setError(messageOf(e));
       setBusy(false);
@@ -52,7 +54,7 @@ export default function ChangePasswordPage() {
     <div className="rounded-2xl bg-content1 p-6 shadow-lg sm:p-8">
       <h1 className="mb-1 text-xl font-semibold">Смените пароль</h1>
       <p className="mb-5 text-sm text-default-500">
-        Вы вошли с временным паролем. Задайте свой: 8–72 символа, буква, цифра и спецсимвол.
+        Вы вошли с временным паролем. Задайте свой, он должен пройти все проверки ниже.
       </p>
       <form className="space-y-4" onSubmit={submit}>
         <PasswordField
@@ -61,15 +63,7 @@ export default function ChangePasswordPage() {
           value={current}
           onValueChange={setCurrent}
         />
-        <PasswordField autoComplete="new-password" label="Новый пароль" value={next} onValueChange={setNext} />
-        <PasswordField
-          autoComplete="new-password"
-          errorMessage="Пароли не совпадают"
-          isInvalid={mismatch}
-          label="Повторите новый пароль"
-          value={repeat}
-          onValueChange={setRepeat}
-        />
+        <NewPasswordFields next={next} repeat={repeat} rules={rules} onNext={setNext} onRepeat={setRepeat} />
         {error && (
           <p className="text-sm text-danger" role="alert">
             {error}
@@ -78,7 +72,7 @@ export default function ChangePasswordPage() {
         <LoadingButton
           fullWidth
           color="primary"
-          isDisabled={!current || !next || next !== repeat}
+          isDisabled={!current || !valid}
           isLoading={busy}
           type="submit"
         >
