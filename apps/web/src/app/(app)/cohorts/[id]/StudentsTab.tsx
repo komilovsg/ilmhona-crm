@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
-import { EnrollModal } from "./modals";
 
-import { PaymentFormModal } from "../../payments/PaymentFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -28,6 +27,9 @@ import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+
+const EnrollModal = dynamic(() => import("./modals").then((m) => m.EnrollModal));
+const PaymentFormModal = dynamic(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
   const overlayMotion = useOverlayMotion();

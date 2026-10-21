@@ -125,6 +125,7 @@ from app.metrics.attendance import (  # noqa: E402
     passed,
     today_lessons,
     unfilled_lessons,
+    unfilled_top,
 )
 
 __all__ = [
@@ -144,4 +145,5 @@ __all__ = [
     "student_statuses",
     "today_lessons",
     "unfilled_lessons",
+    "unfilled_top",
 ]

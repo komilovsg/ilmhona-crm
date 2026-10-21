@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     env: str = "development"  # development | test | production
     database_url: str = "postgresql+asyncpg://ilm@localhost:55433/ilmhona"
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    db_pool_recycle: int = 240  # seconds; under Neon's idle suspend
     jwt_secret: str = DEV_JWT_SECRET
     access_ttl_minutes: int = 15
     refresh_ttl_days: int = 30

@@ -4,6 +4,7 @@ import { useDeferredValue, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { SheetHandle } from "@/components/SheetHandle";
 import { Input } from "@heroui/input";
 import Link from "next/link";
 
@@ -283,6 +284,7 @@ export default function AuditPage() {
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields filters={filters} set={set} sections={sections} />

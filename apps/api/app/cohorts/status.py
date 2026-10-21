@@ -6,7 +6,9 @@ call `sync_status`; when a cohort becomes завершён its активный 
 (total ≥ 70) or завершил.
 """
 
+import uuid
 from datetime import date
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -57,41 +59,59 @@ async def sync_status(
 
 
 async def _close_enrollments(db: AsyncSession, cohort: Cohort, actor_id: object) -> None:
+    await close_enrollments(db, [cohort], actor_id)
+
+
+async def close_enrollments(db: AsyncSession, cohorts: list[Cohort], actor_id: object) -> None:
     """#11 + grades: an active enrollment closes as выпускник when its total is at least 70,
-    otherwise as завершил. A manager may still correct a status by hand afterwards."""
-    active = (
+    otherwise as завершил. A manager may still correct a status by hand afterwards. Any number of
+    cohorts at once: two queries in all (the import closes ~100 cohorts in one go)."""
+    ids = [c.id for c in cohorts]
+    active: dict[object, list[Enrollment]] = {}
+    for e in (
         (
             await db.execute(
-                select(Enrollment).where(
-                    Enrollment.cohort_id == cohort.id, Enrollment.status == ACTIVE
-                )
+                select(Enrollment).where(Enrollment.cohort_id.in_(ids), Enrollment.status == ACTIVE)
             )
         )
         .scalars()
         .all()
-    )
+    ):
+        active.setdefault(e.cohort_id, []).append(e)
     if not active:
         return
-    results = await enrollment_results(db, cohort.id, enrollment_ids=[e.id for e in active])
-    graduates = 0
-    for enrollment in active:
-        graduated = results[enrollment.id]["passed"]
-        enrollment.status = GRADUATE if graduated else COMPLETED
-        graduates += graduated
-    await db.flush()
-    await record(
-        db,
-        actor_id,  # type: ignore[arg-type]
-        "cohort.close_enrollments",
-        "cohort",
-        cohort.id,
-        {"enrollments_completed": [0, len(active)], "graduates": [0, graduates]},
-        branch_id=cohort.branch_id,
+    results = await enrollment_results(
+        db, None, enrollment_ids=[e.id for rows in active.values() for e in rows]
     )
+    closed: list[tuple[Cohort, int, int]] = []
+    for cohort in cohorts:
+        graduates = 0
+        for enrollment in active.get(cohort.id, []):
+            graduated = results[enrollment.id]["passed"]
+            enrollment.status = GRADUATE if graduated else COMPLETED
+            graduates += graduated
+        if cohort.id in active:
+            closed.append((cohort, len(active[cohort.id]), graduates))
+    await db.flush()
+    for cohort, count, graduates in closed:
+        await record(
+            db,
+            actor_id,  # type: ignore[arg-type]
+            "cohort.close_enrollments",
+            "cohort",
+            cohort.id,
+            {"enrollments_completed": [0, count], "graduates": [0, graduates]},
+            branch_id=cohort.branch_id,
+            label=cohort.code,
+        )
 
 
 async def reevaluate(
-    db: AsyncSession, enrollment: Enrollment, cohort: Cohort, actor_id: object
+    db: AsyncSession,
+    enrollment: Enrollment,
+    cohort: Cohort,
+    actor_id: object,
+    results: dict[uuid.UUID, dict[str, Any]] | None = None,
 ) -> bool:
     """A grade changed on a finished cohort: the closed enrollment follows the new total
     (выпускник at ≥ 70, else завершил), unless a manager set the status by hand
@@ -102,9 +122,9 @@ async def reevaluate(
         or enrollment.status not in (GRADUATE, COMPLETED)
     ):
         return False
-    result = (await enrollment_results(db, cohort.id, enrollment_ids=[enrollment.id]))[
-        enrollment.id
-    ]
+    if results is None:  # the import passes the results of all its enrollments at once
+        results = await enrollment_results(db, cohort.id, enrollment_ids=[enrollment.id])
+    result = results[enrollment.id]
     new = GRADUATE if result["passed"] else COMPLETED
     if new == enrollment.status or (enrollment.certificate_no and new != GRADUATE):
         return False

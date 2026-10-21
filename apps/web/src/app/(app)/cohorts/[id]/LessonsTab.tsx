@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import clsx from "clsx";
 
-import { LessonFormModal } from "./modals";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -20,6 +20,8 @@ import { dayTitle, fullDate, todayIso } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, LessonRow } from "@/lib/types";
+
+const LessonFormModal = dynamic(() => import("./modals").then((m) => m.LessonFormModal));
 
 export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange: boolean }) {
   const refresh = useRefreshEducation();

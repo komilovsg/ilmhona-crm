@@ -3,12 +3,17 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
+import { takeEarlyMe } from "@/lib/early-me";
 import type { Branch, Me, ResetRequestRow, RoleRow, SectionInfo } from "@/lib/types";
 
 export const ME_KEY = ["me"] as const;
 
 export function useMe() {
-  return useQuery({ queryKey: ME_KEY, queryFn: () => api<Me>("/api/v1/auth/me"), staleTime: 60_000 });
+  return useQuery({
+    queryKey: ME_KEY,
+    queryFn: async () => (((await takeEarlyMe()) as Me | null) ?? api<Me>("/api/v1/auth/me")),
+    staleTime: 60_000,
+  });
 }
 
 export function useBranches() {

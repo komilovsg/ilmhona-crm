@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Input } from "@heroui/input";
 
-import { CampaignFormModal } from "./CampaignFormModal";
 import { LeadsChart } from "./LeadsChart";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -25,6 +25,8 @@ import { formatPrice, fullDate } from "@/lib/education";
 import { CAMPAIGN_STATUSES, campaignTone, moneyOrDash, PLATFORMS } from "@/lib/sales";
 import type { CampaignList, CampaignRow } from "@/lib/sales-types";
 import { notify, notifyError } from "@/lib/toast";
+
+const CampaignFormModal = dynamic(() => import("./CampaignFormModal").then((m) => m.CampaignFormModal));
 
 type Filters = { q: string; status: string | null; platform: string | null; branch: string | null; from: string; to: string };
 const NO_FILTERS: Filters = { q: "", status: null, platform: null, branch: null, from: "", to: "" };

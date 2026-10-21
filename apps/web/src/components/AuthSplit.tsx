@@ -28,7 +28,7 @@ export function AuthSplit({ children }: { children: ReactNode }) {
     <div className="min-h-dvh md:grid md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <aside className="relative flex h-44 flex-col justify-end overflow-hidden px-6 pb-9 md:h-auto md:min-h-dvh md:justify-between md:p-14" style={{ background: GLOW }}>
         <div className="hidden md:block" />
-        <div className="rise">
+        <div className="rise-slide">
           <Wordmark className="text-4xl md:text-6xl" />
           <p className="mt-2 max-w-xs text-sm text-[#C9D6E0] md:mt-4 md:text-lg">
             Учёт студентов, потоков и оплат в одном месте.

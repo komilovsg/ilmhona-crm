@@ -3,15 +3,14 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/system";
-import { ToastProvider } from "@heroui/toast";
 import { MotionConfig } from "framer-motion";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 
-import { useIsPhone, useReducedMotion } from "@/lib/client-store";
+import { useReducedMotion } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
-import { toastMotion, toastMotionReduced } from "@/lib/motion";
 
 function HeroUI({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -23,19 +22,8 @@ function HeroUI({ children }: { children: ReactNode }) {
   );
 }
 
-/** Desktop: top centre. Phone: bottom, above the tab bar, so a toast never covers a dialog's title. */
-function Toasts() {
-  const phone = useIsPhone();
-  const reduced = useReducedMotion();
-
-  return (
-    <ToastProvider
-      placement={phone ? "bottom-center" : "top-center"}
-      toastOffset={phone ? 76 : 12}
-      toastProps={{ motionProps: reduced ? toastMotionReduced : toastMotion }}
-    />
-  );
-}
+// Toasts need nothing at first paint: the stack arrives in its own chunk.
+const Toaster = dynamic(() => import("@/components/Toaster").then((m) => m.Toaster), { ssr: false });
 
 export function Providers({ children }: { children: ReactNode }) {
   const reduced = useReducedMotion();
@@ -47,6 +35,8 @@ export function Providers({ children }: { children: ReactNode }) {
           queries: {
             // Back on the tab: every list and open record is read again (#25). Old data stays on
             // screen while it loads; a form holding an older version meets the 409 dialog.
+            // Navigating back and forth within a few seconds reuses what is on screen instead of re-asking.
+            staleTime: 15_000,
             refetchOnWindowFocus: "always",
             refetchOnReconnect: "always",
             // A 4xx is not cured by repeating: show the answer at once.
@@ -63,7 +53,7 @@ export function Providers({ children }: { children: ReactNode }) {
       <MotionConfig reducedMotion={reduced ? "always" : "never"}>
         <HeroUI>
           <ThemeProvider>
-            <Toasts />
+            <Toaster />
             <ServerWakeup />
             {children}
           </ThemeProvider>

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/drawer";
+import { SheetHandle } from "./SheetHandle";
 import { Tooltip } from "@heroui/tooltip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
@@ -217,7 +218,7 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
     <>
       <nav
         aria-label="Основное меню"
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-divider bg-content1 pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-divider bg-content1 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden"
       >
         {main.map((item) => (
           <Link key={item.href} className={tab(isActive(pathname, item.href))} href={item.href}>
@@ -240,6 +241,7 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onClose={close} />
               <DrawerHeader>Ещё</DrawerHeader>
               <DrawerBody className="gap-1 pb-8">
                 {[...more, { section: "", href: "/profile", label: "Профиль", icon: "profile" }].map((item) => (
@@ -289,8 +291,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div aria-busy="true" className="sb-shell min-h-dvh">
         <TopProgress />
         <aside className="sb-aside fixed inset-y-0 left-0 hidden bg-sidebar md:block" />
-        <header className="sticky top-0 z-20 h-[57px] border-b border-divider bg-content1" />
-        <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
+        <header className="sticky top-0 z-20 h-[calc(57px+env(safe-area-inset-top))] border-b border-divider bg-content1" />
+        <main className="mx-auto max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
           <span className="sr-only" role="status">
             Загрузка…
           </span>
@@ -311,7 +313,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="sb-shell min-h-dvh">
       <TopProgress />
       <Sidebar badges={badges} items={items} pathname={pathname} />
-      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 px-4 py-2 md:px-8">
+      <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-divider bg-content1 pb-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.5rem+env(safe-area-inset-top))] md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))]">
         <div className="rounded-md bg-sidebar px-3 py-2 md:hidden">
           <Logo tagline={false} className="[&>div]:text-xl" />
         </div>
@@ -325,7 +327,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
+      <main className="mx-auto max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
         {canOpen(me.permissions, pathname, me.role.code) ? (
           <div key={pathname} className="page-in">
             {children}

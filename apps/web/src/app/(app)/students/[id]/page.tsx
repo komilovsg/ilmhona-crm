@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { StudentFormModal } from "../StudentFormModal";
 import { StudentEmployment } from "./StudentEmployment";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -25,6 +25,8 @@ import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { EnrollmentPayments } from "@/lib/money-types";
 import type { StudentDetail } from "@/lib/types";
+
+const StudentFormModal = dynamic(() => import("../StudentFormModal").then((m) => m.StudentFormModal));
 
 /** The months of one enrollment: оплачен / частично: A из B / не оплачен. */
 function EnrollmentMonths({ enrollmentId }: { enrollmentId: string }) {

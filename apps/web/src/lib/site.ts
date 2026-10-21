@@ -35,6 +35,8 @@ export const siteMetadata: Metadata = {
 export const siteViewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // the page runs under the notch / home bar; fixed edges pad themselves with env(safe-area-inset-*)
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#FFFFFF" },
     { media: "(prefers-color-scheme: dark)", color: "#0F151B" },

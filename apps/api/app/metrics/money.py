@@ -84,11 +84,6 @@ def expected_months(enrolled_on: date, start: date, end: date, on: date) -> int:
     return max(0, last - first + 1)
 
 
-def expected_amount(price: Decimal, enrolled_at: datetime, cohort: Cohort, on: date) -> Decimal:
-    local = enrolled_at.astimezone(TZ).date()
-    return price * expected_months(local, cohort.start_date, cohort.end_date, on)
-
-
 def debt_of(expected: Decimal, paid: Decimal, status: str) -> Decimal:
     return ZERO if status == EXPELLED else max(expected - paid, ZERO)
 
@@ -126,12 +121,28 @@ async def payment_totals(db: AsyncSession, where: Sequence[ColumnElement[bool]])
     }
 
 
+# (enrollment id, enrolled_at, status, cohort price_month, cohort start, cohort end)
+MoneyRow = tuple[uuid.UUID, datetime, str, Decimal, date, date]
+
+
 async def enrollment_money(
     db: AsyncSession, rows: Sequence[tuple[Enrollment, Cohort]], on: date | None = None
 ) -> dict[uuid.UUID, dict[str, Any]]:
     """paid, paid months, expected and debt per enrollment (every given enrollment is present)."""
+    return await enrollment_money_rows(
+        db,
+        [(e.id, e.enrolled_at, e.status, c.price_month, c.start_date, c.end_date) for e, c in rows],
+        on,
+    )
+
+
+async def enrollment_money_rows(
+    db: AsyncSession, rows: Sequence[MoneyRow], on: date | None = None
+) -> dict[uuid.UUID, dict[str, Any]]:
+    """Same as `enrollment_money` from plain columns: lists of hundreds of enrollments (debtors)
+    skip building the ORM objects."""
     on = on or today()
-    ids = [e.id for e, _ in rows]
+    ids = [r[0] for r in rows]
     paid: dict[uuid.UUID, tuple[Decimal, list[int]]] = {}
     if ids:
         result = await db.execute(
@@ -147,25 +158,24 @@ async def enrollment_money(
     pending = await month_sums(db, ids, status=PENDING)
     entered = await month_sums(db, ids)
     out: dict[uuid.UUID, dict[str, Any]] = {}
-    for e, cohort in rows:
-        total, months = paid.get(e.id, (ZERO, []))
-        expected = expected_amount(cohort.price_month, e.enrolled_at, cohort, on)
+    for eid, enrolled_at, status, price, start, end in rows:
+        total, months = paid.get(eid, (ZERO, []))
+        local = enrolled_at.astimezone(TZ).date()
+        expected = price * expected_months(local, start, end, on)
         states = [
-            month_info(
-                m, entered[e.id].get(m, ZERO), pending[e.id].get(m, ZERO), cohort.price_month
-            )
-            for m in range(1, cohort_months(cohort.start_date, cohort.end_date) + 1)
+            month_info(m, entered[eid].get(m, ZERO), pending[eid].get(m, ZERO), price)
+            for m in range(1, cohort_months(start, end) + 1)
         ]
-        owed = owed_month_numbers(e.enrolled_at, cohort, on)
-        out[e.id] = {
+        owed = owed_month_numbers(enrolled_at, start, end, on)
+        out[eid] = {
             "paid": total,
             "paid_months": months,
             "expected": expected,
-            "debt": debt_of(expected, total, e.status),
+            "debt": debt_of(expected, total, status),
             "month_states": states,
             # months started so far that are not covered yet, with what is left of each
             "due_months": []
-            if e.status == EXPELLED
+            if status == EXPELLED
             else [
                 {"month_no": st["month_no"], "remaining": st["remaining"]}
                 for st in states
@@ -197,12 +207,12 @@ def month_info(month_no: int, entered: Decimal, pending: Decimal, price: Decimal
     }
 
 
-def owed_month_numbers(enrolled_at: datetime, cohort: Cohort, on: date) -> range:
-    """`month_no`s the student has started so far (the months `expected_amount` counts)."""
-    start = month_index(cohort.start_date)
-    first = max(month_index(enrolled_at.astimezone(TZ).date()), start)
-    last = min(month_index(on), month_index(cohort.end_date))
-    return range(first - start + 1, last - start + 2)
+def owed_month_numbers(enrolled_at: datetime, start: date, end: date, on: date) -> range:
+    """`month_no`s the student has started so far (the months `expected_months` counts)."""
+    first_index = month_index(start)
+    first = max(month_index(enrolled_at.astimezone(TZ).date()), first_index)
+    last = min(month_index(on), month_index(end))
+    return range(first - first_index + 1, last - first_index + 2)
 
 
 async def month_sums(
@@ -273,20 +283,44 @@ async def cohort_income(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict[u
 # ---- profit ------------------------------------------------------------------------------
 
 
+def _income_stmt(cohort_where: Sequence[ColumnElement[bool]], *extra: ColumnElement[bool]) -> Any:
+    return (
+        select(func.coalesce(func.sum(Payment.amount), 0))
+        .select_from(Payment)
+        .join(Enrollment, Enrollment.id == Payment.enrollment_id)
+        .join(Cohort, Cohort.id == Enrollment.cohort_id)
+        .where(Payment.status == CONFIRMED, *cohort_where, *extra)
+    )
+
+
+def _payroll_stmt(cohort_where: Sequence[ColumnElement[bool]], *extra: ColumnElement[bool]) -> Any:
+    return (
+        select(func.coalesce(func.sum(InstructorPayout.amount), 0))
+        .select_from(InstructorPayout)
+        .join(Cohort, Cohort.id == InstructorPayout.cohort_id)
+        .where(*cohort_where, *extra)
+    )
+
+
+def _ads_stmt(
+    campaign_where: Sequence[ColumnElement[bool]],
+    since: date | None = None,
+    until: date | None = None,
+) -> Any:
+    where = list(campaign_where)
+    if since:
+        where.append(Campaign.start_date >= since)
+    if until:
+        where.append(Campaign.start_date <= until)
+    return select(func.coalesce(func.sum(Campaign.budget), 0)).select_from(Campaign).where(*where)
+
+
 async def income_total(
     db: AsyncSession,
     cohort_where: Sequence[ColumnElement[bool]],
     *extra: ColumnElement[bool],
 ) -> Decimal:
-    total = (
-        await db.execute(
-            select(func.coalesce(func.sum(Payment.amount), 0))
-            .join(Enrollment, Enrollment.id == Payment.enrollment_id)
-            .join(Cohort, Cohort.id == Enrollment.cohort_id)
-            .where(Payment.status == CONFIRMED, *cohort_where, *extra)
-        )
-    ).scalar_one()
-    return money(total)
+    return money((await db.execute(_income_stmt(cohort_where, *extra))).scalar_one())
 
 
 async def payroll_total(
@@ -295,14 +329,7 @@ async def payroll_total(
     *extra: ColumnElement[bool],
 ) -> Decimal:
     """Расходы ЗП (#9): the payouts actually made."""
-    total = (
-        await db.execute(
-            select(func.coalesce(func.sum(InstructorPayout.amount), 0))
-            .join(Cohort, Cohort.id == InstructorPayout.cohort_id)
-            .where(*cohort_where, *extra)
-        )
-    ).scalar_one()
-    return money(total)
+    return money((await db.execute(_payroll_stmt(cohort_where, *extra))).scalar_one())
 
 
 async def ads_total(
@@ -312,15 +339,7 @@ async def ads_total(
     until: date | None = None,
 ) -> Decimal:
     """Реклама: the budgets of the campaigns that started in the period (all, with no period)."""
-    where = list(campaign_where)
-    if since:
-        where.append(Campaign.start_date >= since)
-    if until:
-        where.append(Campaign.start_date <= until)
-    total = (
-        await db.execute(select(func.coalesce(func.sum(Campaign.budget), 0)).where(*where))
-    ).scalar_one()
-    return money(total)
+    return money((await db.execute(_ads_stmt(campaign_where, since, until))).scalar_one())
 
 
 async def finance(
@@ -338,9 +357,17 @@ async def finance(
     if until:
         paid.append(Payment.paid_at <= until)
         payouts.append(InstructorPayout.paid_at <= until)
-    income = await income_total(db, cohort_where, *paid)
-    payroll = await payroll_total(db, cohort_where, *payouts)
-    ads = await ads_total(db, campaign_where, since, until)
+    # the three sums in one round trip
+    row = (
+        await db.execute(
+            select(
+                _income_stmt(cohort_where, *paid).scalar_subquery(),
+                _payroll_stmt(cohort_where, *payouts).scalar_subquery(),
+                _ads_stmt(campaign_where, since, until).scalar_subquery(),
+            )
+        )
+    ).one()
+    income, payroll, ads = (money(v) for v in row)
     return {"income": income, "payroll": payroll, "ads": ads, "profit": income - ads - payroll}
 
 
@@ -505,6 +532,7 @@ __all__ = [
     "cohort_periods",
     "debt_of",
     "enrollment_money",
+    "enrollment_money_rows",
     "expected_months",
     "finance",
     "income_total",
