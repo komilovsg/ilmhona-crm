@@ -7,8 +7,8 @@ import httpx
 
 from app.cohorts.status import today
 from tests.conftest import SignedIn, make_role, sql
-from tests.edu import C, make_cohort, make_course, make_room
-from tests.journal_fixture import Student, journal_xlsx
+from tests.edu import C, make_cohort, make_course
+from tests.journal_fixture import journal_xlsx
 from tests.test_attendance import enroll, mark, past_cohort
 
 
