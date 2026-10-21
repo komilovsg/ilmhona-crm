@@ -8,10 +8,20 @@ import { Icon } from "./Icon";
 /** Password input with a show/hide button. */
 export function PasswordField(props: Omit<InputProps, "type" | "endContent">) {
   const [shown, setShown] = useState(false);
+  const [caps, setCaps] = useState(false);
 
   return (
     <Input
       {...props}
+      description={caps ? "Включён Caps Lock" : props.description}
+      onBlur={(e) => {
+        setCaps(false);
+        props.onBlur?.(e);
+      }}
+      onKeyUp={(e) => {
+        setCaps(e.getModifierState("CapsLock"));
+        props.onKeyUp?.(e);
+      }}
       endContent={
         <button
           aria-label={shown ? "Скрыть пароль" : "Показать пароль"}

@@ -1,6 +1,6 @@
 import httpx
 
-from tests.conftest import make_role, make_user, role_id, sql
+from tests.conftest import PASSWORD, make_role, make_user, role_id, sql
 
 R = "/api/v1/roles"
 U = "/api/v1/users"
@@ -148,3 +148,46 @@ async def test_concurrent_role_saves_never_answer_500(admin: httpx.AsyncClient) 
     rs = await asyncio.gather(*(admin.put(f"/api/v1/roles/{rid}", json=body) for _ in range(6)))
     assert {r.status_code for r in rs} <= {200, 409}
     assert 200 in {r.status_code for r in rs}
+
+
+async def test_only_superadmin_changes_a_login(
+    admin: httpx.AsyncClient,
+    login_as,  # type: ignore[no-untyped-def]
+) -> None:
+    await make_user("anna", "instructor")
+    uid = (await sql("SELECT id FROM app_user WHERE login = 'anna'"))[0][0]
+    me = (await admin.get("/api/v1/auth/me")).json()
+    r = await admin.patch(f"{U}/{uid}", json={"login": "Anna.K"})
+    assert (r.status_code, r.json()["login"]) == (200, "Anna.K")
+    r = await admin.patch(f"{U}/{me['id']}", json={"login": "boss"})
+    assert r.status_code == 200
+    # the new logins sign in, the old ones do not
+    c = await login_as("m1", "manager")
+    await c.post("/api/v1/auth/logout")
+    ok = await c.post("/api/v1/auth/login", json={"login": "anna.k", "password": PASSWORD})
+    assert ok.status_code == 200
+    ok = await c.post("/api/v1/auth/login", json={"login": "boss", "password": PASSWORD})
+    assert ok.status_code == 200
+    old = await c.post("/api/v1/auth/login", json={"login": "root", "password": PASSWORD})
+    assert old.status_code == 401
+    # duplicate (other case) and bad formats
+    r = await admin.patch(f"{U}/{uid}", json={"login": "BOSS"})
+    assert (r.status_code, r.json()["code"]) == (409, "login_taken")
+    for bad in ("ab", "a b", "имя1", "x" * 41):
+        assert (await admin.patch(f"{U}/{uid}", json={"login": bad})).status_code == 422
+    items = (await admin.get("/api/v1/audit", params={"entity_id": str(uid)})).json()["items"]
+    assert any(
+        "изменён пользователь" in i["text"] and "логин anna → Anna.K" in i["text"] for i in items
+    )
+
+
+async def test_login_change_needs_superadmin_even_with_users_change(
+    login_as,  # type: ignore[no-untyped-def]
+) -> None:
+    await make_user("victim", await make_role("Пустая", {}))
+    uid = (await sql("SELECT id FROM app_user WHERE login = 'victim'"))[0][0]
+    rid = await make_role("Кадры", {"users": "change"})
+    c = await login_as("hr", rid)
+    r = await c.patch(f"{U}/{uid}", json={"login": "renamed"})
+    assert (r.status_code, r.json()["code"]) == (403, "forbidden")
+    assert (await sql("SELECT login FROM app_user WHERE id = :i", i=uid))[0][0] == "victim"

@@ -20,7 +20,7 @@ from app.auth.api import revoke_sessions
 from app.auth.deps import Principal, permissions_of, require, require_csrf_header
 from app.core.config import settings
 from app.core.db import DB
-from app.core.errors import NOT_FOUND, DomainError
+from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
@@ -47,6 +47,12 @@ LoginText = Annotated[
     str,
     StringConstraints(strip_whitespace=True, min_length=3, max_length=64, pattern=r"^[\w.@-]+$"),
 ]
+NewLogin = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, min_length=3, max_length=40, pattern=r"^[A-Za-z0-9._-]+$"
+    ),
+]
 Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
 
 
@@ -64,8 +70,10 @@ class UserCreate(Strict):
 
 
 class UserUpdate(Strict):
-    """Only the fields present in the body change (`phone: null` clears the phone)."""
+    """Only the fields present in the body change (`phone: null` clears the phone).
+    `login` is for superadmins only."""
 
+    login: NewLogin | None = None
     full_name: Text | None = None
     phone: Phone | None = None
     email: Text | None = None
@@ -264,7 +272,7 @@ async def export_users(
 @router.post("", status_code=201)
 async def create_user(body: UserCreate, p: Change, db: DB) -> dict[str, Any]:
     role = await _assignable_role(db, p, body.role_id)
-    password = temp_password()
+    password = temp_password(body.login)
     u = AppUser(
         login=body.login,
         full_name=body.full_name,
@@ -298,6 +306,10 @@ async def update_user(
     await check_version(db, u, version, "app_user", lambda: _out(db, u))
     before = _snapshot(u)
     sent = body.model_fields_set
+    if "login" in sent and body.login:
+        if not p.is_superadmin:
+            raise DomainError(FORBIDDEN)
+        u.login = body.login
     if "full_name" in sent and body.full_name:
         u.full_name = body.full_name
     if "phone" in sent:
@@ -330,7 +342,7 @@ async def activate_user(user_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]
     """Activate the account or reset its password: a new temporary password (7 days), shown once."""
     u = await _load(db, p, user_id, touch=True)
     was_active = u.is_active
-    password = temp_password()
+    password = temp_password(u.login)
     u.is_active = True
     u.password_hash = hash_password(password)
     u.must_change_password = True
