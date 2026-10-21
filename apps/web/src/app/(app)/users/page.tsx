@@ -19,7 +19,9 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton } from "@/components/Skeletons";
 import { TempPasswordModal } from "@/components/TempPasswordModal";
-import { useBranches, useMe, useRoles } from "@/hooks/queries";
+import { SessionsList } from "@/components/SessionsList";
+import { AppModal } from "@/components/AppModal";
+import { RESET_REQUESTS_KEY, useBranches, useMe, useResetRequests, useRoles } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { formatDateTime, telHref } from "@/lib/format";
 import { can } from "@/lib/permissions";
@@ -29,6 +31,46 @@ import type { Paged, TempPassword, UserRow } from "@/lib/types";
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };
 type Action = { kind: "activate" | "deactivate" | "delete"; user: UserRow };
+
+function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) => void }) {
+  const queryClient = useQueryClient();
+  const { data } = useResetRequests(true);
+  const reject = useMutation({
+    mutationFn: (id: string) => api(`/api/v1/users/reset-requests/${id}/reject`, { method: "POST" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: RESET_REQUESTS_KEY });
+      notify("Запрос отклонён");
+    },
+    onError: notifyError,
+  });
+  const items = data?.items ?? [];
+
+  if (items.length === 0) return null;
+
+  return (
+    <section aria-label="Запросы на сброс" className="mb-5 rounded-2xl border border-warning/40 bg-content1 p-4">
+      <h2 className="mb-2 font-semibold">Запросы на сброс пароля · {items.length}</h2>
+      <ul className="divide-y divide-divider">
+        {items.map((r) => (
+          <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5">
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium">{r.full_name}</div>
+              <div className="text-xs text-default-500">
+                {r.login} · {r.role_name} · {formatDateTime(r.created_at)}
+              </div>
+            </div>
+            <Button color="primary" size="sm" onPress={() => onIssue(r.user_id, r.login)}>
+              Выдать временный пароль
+            </Button>
+            <Button isLoading={reject.isPending && reject.variables === r.id} size="sm" variant="flat" onPress={() => reject.mutate(r.id)}>
+              Отклонить
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function StatusChip({ user }: { user: UserRow }) {
   if (!user.is_active) return <Chip size="sm">Заблокирован</Chip>;
@@ -46,7 +88,17 @@ function StatusChip({ user }: { user: UserRow }) {
   );
 }
 
-function RowMenu({ user, onEdit, onAction }: { user: UserRow; onEdit: () => void; onAction: (a: Action["kind"]) => void }) {
+function RowMenu({
+  user,
+  onEdit,
+  onAction,
+  onSessions,
+}: {
+  user: UserRow;
+  onEdit: () => void;
+  onAction: (a: Action["kind"]) => void;
+  onSessions?: () => void;
+}) {
   return (
     <Dropdown placement="bottom-end">
       <DropdownTrigger>
@@ -57,7 +109,9 @@ function RowMenu({ user, onEdit, onAction }: { user: UserRow; onEdit: () => void
       <DropdownMenu
         aria-label="Действия"
         disabledKeys={user.is_active ? [] : ["deactivate"]}
-        onAction={(key) => (key === "edit" ? onEdit() : onAction(key as Action["kind"]))}
+        onAction={(key) =>
+          key === "edit" ? onEdit() : key === "sessions" ? onSessions?.() : onAction(key as Action["kind"])
+        }
       >
         <DropdownItem key="edit" startContent={<Icon name="edit" size={16} />}>
           Изменить
@@ -65,6 +119,11 @@ function RowMenu({ user, onEdit, onAction }: { user: UserRow; onEdit: () => void
         <DropdownItem key="activate" startContent={<Icon name="key" size={16} />}>
           {user.is_active && !user.must_change_password ? "Сбросить пароль" : "Активировать / сбросить пароль"}
         </DropdownItem>
+        {onSessions ? (
+          <DropdownItem key="sessions" startContent={<Icon name="system" size={16} />}>
+            Устройства и сеансы
+          </DropdownItem>
+        ) : null}
         <DropdownItem key="deactivate" startContent={<Icon name="ban" size={16} />}>
           Заблокировать
         </DropdownItem>
@@ -125,6 +184,7 @@ export default function UsersPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | "new" | null>(null);
   const [action, setAction] = useState<Action | null>(null);
+  const [sessionsOf, setSessionsOf] = useState<UserRow | null>(null);
   const [temp, setTemp] = useState<{ login: string; password: string; expiresAt: string | null | undefined } | null>(null);
 
   const list = useQuery({
@@ -172,7 +232,14 @@ export default function UsersPage() {
   const users = list.data?.items ?? [];
   const activeFilters = [filters.branch, filters.role, filters.status].filter(Boolean).length;
   const menu = (u: UserRow) =>
-    canChange && <RowMenu user={u} onAction={(kind) => setAction({ kind, user: u })} onEdit={() => setEditing(u)} />;
+    canChange && (
+      <RowMenu
+        user={u}
+        onAction={(kind) => setAction({ kind, user: u })}
+        onEdit={() => setEditing(u)}
+        onSessions={me?.role.code === "superadmin" ? () => setSessionsOf(u) : undefined}
+      />
+    );
 
   return (
     <>
@@ -197,6 +264,20 @@ export default function UsersPage() {
         }
         title="Пользователи"
       />
+
+      {canChange && (
+        <ResetRequests
+          onIssue={(id, login) =>
+            void api<TempPassword>(`/api/v1/users/${id}/reset-password`, { method: "POST" })
+              .then((r) => {
+                void queryClient.invalidateQueries({ queryKey: ["users"] });
+                void queryClient.invalidateQueries({ queryKey: RESET_REQUESTS_KEY });
+                setTemp({ login, password: r.temp_password, expiresAt: r.expires_at });
+              })
+              .catch(notifyError)
+          }
+        />
+      )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
@@ -335,6 +416,11 @@ export default function UsersPage() {
           onClose={() => setEditing(null)}
           onCreated={(r) => setTemp({ login: r.user.login, password: r.temp_password, expiresAt: r.user.temp_password_expires_at })}
         />
+      )}
+      {sessionsOf && (
+        <AppModal isOpen size="md" title={`Устройства: ${sessionsOf.full_name}`} onClose={() => setSessionsOf(null)}>
+          <SessionsList base={`/api/v1/users/${sessionsOf.id}`} />
+        </AppModal>
       )}
       {temp && <TempPasswordModal {...temp} onClose={() => setTemp(null)} />}
       {action && (

@@ -6,6 +6,8 @@ from fastapi import FastAPI
 from app.attendance.api import router as attendance_router
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
+from app.auth.reset import router as reset_router
+from app.auth.sessions import router as sessions_router
 from app.branches.api import router as branches_router
 from app.campaigns.api import router as campaigns_router
 from app.cohorts.api import router as cohorts_router
@@ -44,6 +46,8 @@ if settings.proxy_secrets:
     app.add_middleware(ProxySecretRequired, secrets=settings.proxy_secrets)
 for router in (
     auth_router,
+    reset_router,
+    sessions_router,
     users_router,
     roles_router,
     audit_router,

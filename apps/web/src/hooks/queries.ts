@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "@/lib/api";
-import type { Branch, Me, RoleRow, SectionInfo } from "@/lib/types";
+import type { Branch, Me, ResetRequestRow, RoleRow, SectionInfo } from "@/lib/types";
 
 export const ME_KEY = ["me"] as const;
 
@@ -28,5 +28,17 @@ export function useSections() {
     queryKey: ["sections"],
     queryFn: () => api<SectionInfo[]>("/api/v1/roles/sections"),
     staleTime: Infinity,
+  });
+}
+
+export const RESET_REQUESTS_KEY = ["reset-requests"] as const;
+
+/** Open «forgot password» requests: only asked for by users who may act on them. */
+export function useResetRequests(enabled: boolean) {
+  return useQuery({
+    queryKey: RESET_REQUESTS_KEY,
+    queryFn: () => api<{ items: ResetRequestRow[]; total: number }>("/api/v1/users/reset-requests"),
+    enabled,
+    refetchInterval: 60_000,
   });
 }

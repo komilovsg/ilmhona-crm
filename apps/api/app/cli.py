@@ -94,6 +94,9 @@ async def purge_login_attempts() -> int:
                 text(f"DELETE FROM {table} WHERE updated_at < now() - interval '1 day'")
             )
             removed += int(result.rowcount or 0)  # type: ignore[attr-defined]
+        await db.execute(
+            text("DELETE FROM password_reset_request WHERE created_at < now() - interval '30 days'")
+        )
         await db.commit()
     return removed
 

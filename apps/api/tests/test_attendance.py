@@ -3,6 +3,7 @@
 
 import asyncio
 import uuid
+from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
@@ -381,9 +382,21 @@ async def test_attendance_rights_view_does_not_write_and_branch_scope(
 # ---- #21 ---------------------------------------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("now", "started"),
+    [("00:30", False), ("07:59", False), ("08:00", True), ("08:06", True), ("23:30", True)],
+)
 async def test_bug_21_today_and_unfilled_for_the_instructor(
-    admin: httpx.AsyncClient, login_as: SignedIn
+    admin: httpx.AsyncClient,
+    login_as: SignedIn,
+    clock: Callable[[str], None],
+    now: str,
+    started: bool,
 ) -> None:
+    """«Held» means started: today's 08:00 lesson is «not filled» once it has begun and one
+    student is unmarked, never before. The clock is frozen, so the answer cannot depend on
+    the hour the suite runs at."""
+    clock(now)
     ins = await login_as("ins", "instructor", branch="Душанбе")
     me = (await ins.get("/api/v1/auth/me")).json()["id"]
     cohort, lessons = await past_cohort(admin, instructor_id=me)
@@ -401,14 +414,17 @@ async def test_bug_21_today_and_unfilled_for_the_instructor(
     await mark(admin, today_id, a)
 
     data = (await ins.get("/api/v1/me/today")).json()
+    assert data["date"] == t.isoformat()
     assert [(x["lesson_id"], x["marked"], x["total"]) for x in data["today"]] == [(today_id, 1, 2)]
-    # nine past lessons, none marked: all in «не заполнено» (the cohort is still ahead of its end)
-    assert {x["lesson_id"] for x in data["unfilled"]} == set(lessons)
+    # nine past lessons, none marked: all in «не заполнено» (the cohort is still ahead of its end);
+    # today's lesson joins them only after it has started
+    expected = set(lessons) | ({today_id} if started else set())
+    assert {x["lesson_id"] for x in data["unfilled"]} == expected
     assert {x["cohort_code"] for x in data["unfilled"]} == {cohort["code"]}  # only the own cohort
     for lesson in lessons:
         await admin.post(f"{L}/{lesson}/attendance/all-present")
     data = (await ins.get("/api/v1/me/today")).json()
-    assert data["unfilled"] == []
+    assert [x["lesson_id"] for x in data["unfilled"]] == ([today_id] if started else [])
 
     # one student of one lesson left unmarked brings the lesson back
     await sql(
@@ -416,7 +432,8 @@ async def test_bug_21_today_and_unfilled_for_the_instructor(
     )
     data = (await ins.get("/api/v1/me/today")).json()
     assert [(x["lesson_id"], x["marked"], x["total"]) for x in data["unfilled"]] == [
-        (lessons[3], 1, 2)
+        (lessons[3], 1, 2),
+        *([(today_id, 1, 2)] if started else []),
     ]
 
 

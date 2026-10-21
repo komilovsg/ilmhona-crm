@@ -72,6 +72,7 @@ class Principal:
     user: AppUser
     role: Role
     permissions: dict[str, str]  # section -> level; absent = none
+    session_id: UUID | None = None  # the refresh-token family this request signed in with
 
     @property
     def id(self) -> UUID:
@@ -144,7 +145,7 @@ async def _principal(request: Request, db: DB) -> Principal:
     pending_ok = bool(getattr(getattr(route, "endpoint", None), "allow_pending_password", False))
     if user.must_change_password and not pending_ok:
         raise DomainError(PASSWORD_CHANGE_REQUIRED)
-    return Principal(user, role, await permissions_of(db, role))
+    return Principal(user, role, await permissions_of(db, role), session_id)
 
 
 CurrentUser = Annotated[Principal, Depends(_principal)]
