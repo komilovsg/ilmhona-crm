@@ -50,7 +50,18 @@ def upgrade() -> None:
     )
 
 
+    # owner decision: the seeded manager role marks attendance and grades by default
+    op.execute(
+        "UPDATE role_permission SET level = 'change' WHERE section = 'attendance' "
+        "AND role_id = (SELECT id FROM role WHERE code = 'manager')"
+    )
+
+
 def downgrade() -> None:
+    op.execute(
+        "UPDATE role_permission SET level = 'view' WHERE section = 'attendance' "
+        "AND role_id = (SELECT id FROM role WHERE code = 'manager')"
+    )
     op.execute("DROP INDEX enrollment_certificate_no_key")
     op.execute(
         "ALTER TABLE enrollment DROP COLUMN certificate_no, DROP COLUMN certificate_issued_at, "

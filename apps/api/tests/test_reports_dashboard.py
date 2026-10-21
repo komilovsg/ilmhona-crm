@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 
 from tests.conftest import SignedIn, branch_id, make_role
-from tests.money import I, P, PO
-from tests.reports import D, G, ML, world
+from tests.money import PO, I, P
+from tests.reports import ML, D, G, world
 from tests.sales import CA, L
 
 S = "/api/v1/students"
