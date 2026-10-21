@@ -3,8 +3,8 @@
 import type { ReactNode } from "react";
 import { Modal, ModalBody, ModalContent, ModalFooter, ModalHeader } from "@heroui/modal";
 
-import { useIsPhone } from "@/lib/client-store";
-import { modalMotion } from "@/lib/motion";
+import { useIsPhone, useReducedMotion } from "@/lib/client-store";
+import { modalMotion, modalMotionReduced } from "@/lib/motion";
 
 /**
  * The one modal of the app. Closes on Esc and on a click outside (bug #16: the old system's
@@ -26,13 +26,14 @@ export function AppModal({
   size?: "md" | "lg" | "2xl";
 }) {
   const phone = useIsPhone();
+  const reduced = useReducedMotion();
 
   return (
     <Modal
       isOpen={isOpen}
       isDismissable
       isKeyboardDismissDisabled={false}
-      motionProps={modalMotion}
+      motionProps={reduced ? modalMotionReduced : modalMotion}
       scrollBehavior="inside"
       size={phone ? "full" : size}
       onOpenChange={(open) => {

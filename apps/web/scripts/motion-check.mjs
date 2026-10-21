@@ -48,6 +48,51 @@ for (const [label, ctxOptions] of [
   }
   await context.close();
 }
+// Overlays under reduced motion (needs a login: CRM_LOGIN / CRM_PASSWORD): open a modal and fire a toast,
+// sample the transform of the dialog and of the toast (and its wrapper) every frame; none may move or scale.
+if (process.env.CRM_LOGIN && process.env.CRM_PASSWORD) {
+  const context = await browser.newContext({ reducedMotion: "reduce", viewport: { width: 1440, height: 900 } });
+  const login = await context.request.post(`${BASE}/api/v1/auth/login`, {
+    headers: { "X-Requested-With": "ilm" },
+    data: { login: process.env.CRM_LOGIN, password: process.env.CRM_PASSWORD },
+  });
+
+  if (!login.ok()) throw new Error(`login failed: ${login.status()}`);
+  const page = await context.newPage();
+
+  await page.route("**/export*", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+  await page.goto(`${BASE}/students`, { waitUntil: "networkidle" });
+  await page.evaluate(() => {
+    window.__frames = { dialog: new Set(), toast: new Set(), seen: { dialog: 0, toast: 0 } };
+    const moving = (t) => t !== "none" && t !== "matrix(1, 0, 0, 1, 0, 0)";
+    const tick = () => {
+      for (const el of document.querySelectorAll('[role="dialog"]')) {
+        window.__frames.seen.dialog++;
+        if (moving(getComputedStyle(el).transform)) window.__frames.dialog.add(getComputedStyle(el).transform);
+      }
+      for (const el of document.querySelectorAll("[data-toast]")) {
+        window.__frames.seen.toast++;
+        for (const n of [el, el.closest("li")]) if (n && moving(getComputedStyle(n).transform)) window.__frames.toast.add(getComputedStyle(n).transform);
+      }
+      requestAnimationFrame(tick);
+    };
+
+    tick();
+  });
+  await page.getByRole("button", { name: /Студент/ }).first().click(); // «+ Студент»: the form modal
+  await page.waitForTimeout(700);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(400);
+  await page.getByRole("button", { name: /Excel/ }).first().click(); // the failing export fires an error toast
+  await page.waitForTimeout(900);
+  const f = await page.evaluate(() => ({ dialog: [...window.__frames.dialog], toast: [...window.__frames.toast], seen: window.__frames.seen }));
+
+  console.log(`overlays (reduced)       dialog frames ${f.seen.dialog}, moving: ${f.dialog.length}; toast frames ${f.seen.toast}, moving: ${f.toast.length}`);
+  if (!f.seen.dialog || !f.seen.toast) bad.push("overlay did not open (modal or toast not seen)");
+  if (f.dialog.length) bad.push(`modal moves/scales under reduced motion: ${f.dialog.slice(0, 3)}`);
+  if (f.toast.length) bad.push(`toast moves/scales under reduced motion: ${f.toast.slice(0, 3)}`);
+  await context.close();
+}
 await browser.close();
 
 if (bad.length) {

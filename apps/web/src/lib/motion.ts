@@ -42,5 +42,19 @@ export const modalMotion = {
   },
 } as const;
 
+/** Modal under reduced motion: opacity only, no scale and no slide. */
+export const modalMotionReduced = {
+  variants: {
+    enter: { scale: 1, y: 0, opacity: 1, transition: { duration: 0.12 } },
+    exit: { scale: 1, y: 0, opacity: 0, transition: { duration: 0.1 } },
+  },
+} as const;
+
 /** HeroUI toast: a short spring instead of the 300 ms ease. */
 export const toastMotion = { transition: { type: "spring", duration: 0.28, bounce: 0.12 } } as const;
+
+/** Toast under reduced motion: fades in place (the default slides 40 px down). */
+export const toastMotionReduced = {
+  initial: { opacity: 0, scale: 1, y: 0 },
+  transition: { duration: 0.12 },
+} as const;

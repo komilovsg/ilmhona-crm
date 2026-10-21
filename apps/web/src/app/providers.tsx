@@ -11,7 +11,7 @@ import { useIsPhone, useReducedMotion } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
-import { toastMotion } from "@/lib/motion";
+import { toastMotion, toastMotionReduced } from "@/lib/motion";
 
 function HeroUI({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -26,12 +26,13 @@ function HeroUI({ children }: { children: ReactNode }) {
 /** Desktop: top centre. Phone: bottom, above the tab bar, so a toast never covers a dialog's title. */
 function Toasts() {
   const phone = useIsPhone();
+  const reduced = useReducedMotion();
 
   return (
     <ToastProvider
       placement={phone ? "bottom-center" : "top-center"}
       toastOffset={phone ? 76 : 12}
-      toastProps={{ motionProps: toastMotion }}
+      toastProps={{ motionProps: reduced ? toastMotionReduced : toastMotion }}
     />
   );
 }

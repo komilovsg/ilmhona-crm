@@ -186,6 +186,23 @@ html[data-sidebar="collapsed"] .sb-label {
   main :is(tbody > tr, [data-rows] > li):nth-child(n + 10) { animation-delay: 216ms; }
 }
 
+/* Safety net for every HeroUI overlay (modal, drawer, popover, dropdown, select, tooltip, toast): under
+   reduced motion nothing scales or slides, whatever motionProps they were given. Inline framer transforms
+   lose against !important. */
+@media (prefers-reduced-motion: reduce) {
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="tooltip"],
+  [role="menu"],
+  [role="listbox"],
+  [data-toast],
+  [data-slot="wrapper"] > section,
+  li[data-placement] {
+    transform: none !important;
+    scale: none !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .fade-in {
     animation: fade-in 120ms linear backwards;
