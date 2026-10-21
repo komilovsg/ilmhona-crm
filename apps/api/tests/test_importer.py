@@ -64,15 +64,15 @@ async def test_dry_run_writes_nothing_and_reports(snapshot: dict[str, Any]) -> N
     report = await do_import(snapshot, apply=False)
     assert await counts() == before
     assert report.mode == "dry-run"
-    assert report.imported["STUDENTS"] == 8 and report.imported["ENROLLMENTS"] == 10
+    assert report.imported["STUDENTS"] == 9 and report.imported["ENROLLMENTS"] == 10
     assert report.recon, "the reconciliation is part of the dry-run"
 
 
 async def test_apply_imports_in_one_go_and_reapply_adds_nothing(snapshot: dict[str, Any]) -> None:
     first = await do_import(snapshot, apply=True)
     after_first = await counts()
-    assert after_first["student"] == 8 and after_first["enrollment"] == 10
-    assert first.imported["STUDENTS"] == 8 and first.existing["STUDENTS"] == 0
+    assert after_first["student"] == 9 and after_first["enrollment"] == 10
+    assert first.imported["STUDENTS"] == 9 and first.existing["STUDENTS"] == 0
     again = await do_import(snapshot, apply=True)
     after_second = await counts()
     # only the audit trail grows: every imported table is untouched
@@ -80,7 +80,7 @@ async def test_apply_imports_in_one_go_and_reapply_adds_nothing(snapshot: dict[s
         t: n for t, n in after_first.items() if t != "audit_log"
     }
     assert after_second["audit_log"] == after_first["audit_log"] + 1
-    assert again.imported["STUDENTS"] == 0 and again.existing["STUDENTS"] == 8
+    assert again.imported["STUDENTS"] == 0 and again.existing["STUDENTS"] == 9
     assert again.imported["PAYMENTS"] == 0 and again.imported["COHORTS"] == 0
     assert again.imported["ATTENDANCE"] == 0 and again.existing["ATTENDANCE"] == 7  # the PK
 
@@ -90,11 +90,11 @@ async def test_apply_writes_an_audit_entry_dry_run_does_not(snapshot: dict[str, 
     assert (await sql("SELECT count(*) FROM audit_log WHERE action = 'import.apply'"))[0][0] == 0
     await do_import(snapshot, apply=True)
     action, diff = await one("SELECT action, diff FROM audit_log WHERE action = 'import.apply'")
-    assert action == "import.apply" and diff["student"] == [0, 8]
+    assert action == "import.apply" and diff["student"] == [0, 9]
     text = sentence(
         Entry(actor=None, action="import.apply", entity="import", label=None, diff=diff)
     )
-    assert "перенос из старой системы" in text and "студентов 8" in text
+    assert "перенос из старой системы" in text and "студентов 9" in text
 
 
 async def test_error_midway_rolls_everything_back(
@@ -313,13 +313,14 @@ async def test_students_merge_by_phone_or_name_and_an_id_is_not_a_person(
     names = sorted(r[0] for r in await sql("SELECT full_name FROM student"))
     assert names == sorted(
         ["Тест Студентов", "Ali Fakerov", "Мура Выдуманная", "Нора Вымышленная",
-         "Рустам Несуществующий", "Зарина Придуманная", "Фейк Эмодзи", "Без Идентификатора"]
+         "Рустам Несуществующий", "Зарина Придуманная", "Фейк Эмодзи", "Без Идентификатора", "Совсем Другой"]
     )  # fmt: skip
-    # S-001, the repeated S-001 row and S-002 (same phone, written differently): one person
-    assert report.merged["STUDENTS"] == 4  # repeated S-001, S-002 and S-010 (phone), S-004 (name)
+    # S-001, the repeated S-001 row and S-002 (same phone, name reordered): one person; S-010 has the same phone and
+    # another name: a separate student, flagged
+    assert report.merged["STUDENTS"] == 3  # repeated S-001, S-002 (phone), S-004 (name)
     reasons = " ".join(r.reason for r in report.review if r.sheet == "STUDENTS")
     assert "проверить слияние: то же ФИО без телефона" in reasons
-    assert "проверить слияние: один телефон, совсем разные ФИО" in reasons
+    assert "общий телефон — проверить" in reasons
     assert "заполнить телефон" in reasons and "телефон не распознан" in reasons
     # S-005 was two different people: both transferred, each with their own enrollment
     assert (
@@ -570,7 +571,7 @@ async def test_report_has_counts_and_ids_only_and_review_has_the_data(
         "Ali Fakerov",
     ):
         assert private not in md, private
-    assert "| STUDENTS | 13 | 8 |" in md  # read / imported
+    assert "| STUDENTS | 13 | 9 |" in md  # read / imported
     assert "Сверка с интерфейсом старой системы" in md and "783 / 931 / 965" in md
     assert "390 / 400 / 451" in md
     wb = load_workbook(xlsx_path)
@@ -583,7 +584,7 @@ async def test_report_has_counts_and_ids_only_and_review_has_the_data(
 async def test_reconciliation_numbers_come_from_the_metrics(snapshot: dict[str, Any]) -> None:
     report = await do_import(snapshot, apply=False)
     recon = {r.label: r for r in report.recon}
-    assert recon["Студентов (всего)"].new == "8"
+    assert recon["Студентов (всего)"].new == "9"
     assert recon["Выпускников"].new == "2"
     assert recon["Сумма подтверждённых оплат, TJS"].new == "3350.00"
 
@@ -594,7 +595,7 @@ async def test_cli_dry_run_and_apply(snapshot: dict[str, Any], tmp_path: Path) -
     assert await counts() == before
     assert files(tmp_path, "report-*.md") == 1 and files(tmp_path, "review-*.xlsx") == 1
     assert await importer_main([str(FIXTURE), "--apply", "--out-dir", str(tmp_path)]) == 0
-    assert (await sql("SELECT count(*) FROM student"))[0][0] == 8
+    assert (await sql("SELECT count(*) FROM student"))[0][0] == 9
     with pytest.raises(SystemExit):
         await importer_main([str(FIXTURE), "--out-dir", str(tmp_path)])  # a mode is required
 
@@ -620,3 +621,78 @@ async def test_payment_without_enrollment_restores_it_and_the_money_balances(
     assert by["= перенесено (расчёт)"][1] == "3350.00"
     assert by["разница (должна быть 0)"][1] == "0.00"
     assert by["− слито: точные повторы строки (все поля, вкл. ID)"] == ("1", "600.00")
+
+
+# ---- one phone: the same person or siblings ----------------------------------------------------
+
+
+def _student(sid: str, name: str, phone: str) -> dict[str, Any]:
+    return {
+        "student_id": sid, "full_name": name, "phone": phone, "city": "Душанбе",
+        "registration_date": "Tue Jan 20 2026 12:00:00 GMT+0500 (Таджикистан)", "status": "Активный",
+    }  # fmt: skip
+
+
+async def test_shared_phone_siblings_stay_apart_and_spellings_of_one_person_merge(
+    snapshot: dict[str, Any],
+) -> None:
+    base = await do_import(snapshot, apply=False)
+    snapshot["STUDENTS"] += [
+        _student("S-101", "Ali Karimov", "937770001"),
+        _student("S-102", "Алӣ Каримов", "937770001"),  # Latin = Cyrillic
+        _student("S-103", "Каримов Али", "937770001"),  # word order
+        _student("S-104", "Ali Karimof", "937770001"),  # one letter off
+        _student("S-105", "Aziza Karimov", "937770001"),  # sister: same phone, same surname
+        _student("S-106", "Зафар Рахимов", "937770002"),
+        _student("S-107", "Зарина Султонова", "937770002"),
+    ]
+    for sid, name, eid, pid, amount in (
+        ("S-105", "Aziza Karimov", "E-901", "P-901", "200"),
+        ("S-106", "Зафар Рахимов", "E-902", "P-902", "300"),
+        ("S-107", "Зарина Султонова", "E-903", "P-903", "400"),
+    ):
+        snapshot["ENROLLMENTS"].append(
+            {"enrollment_id": eid, "student_id": sid, "student_name": name, "cohort_id": "G-001",
+             "enrollment_date": "Fri Jan 30 2026 12:00:00 GMT+0500 (Таджикистан)", "status": "Активный"}
+        )  # fmt: skip
+        snapshot["PAYMENTS"].append(
+            {"payment_id": pid, "enrollment_id": eid, "student_id": sid, "student_name": name,
+             "cohort_id": "G-001", "payment_type": "Помесячно", "month_number": "1",
+             "amount": amount, "payment_method": "Наличные", "verified": "Да",
+             "payment_date": "Mon Feb 02 2026 12:00:00 GMT+0500 (Таджикистан)"}
+        )  # fmt: skip
+        snapshot["ATTENDANCE"].append(
+            {"attendance_id": f"AT-{eid}", "enrollment_id": eid, "student_id": sid,
+             "student_name": name, "cohort_id": "G-001", "lesson_date":
+             "Mon Feb 02 2026 12:00:00 GMT+0500 (Таджикистан)", "lesson_number": "1",
+             "status": "Присутствовал"}
+        )  # fmt: skip
+    report = await do_import(snapshot, apply=True)
+    # Ali (4 spellings) + Aziza + Zafar + Zarina = 4 new students; 3 spellings merged into Ali
+    assert report.imported["STUDENTS"] == base.imported["STUDENTS"] + 4
+    assert report.merged["STUDENTS"] == base.merged["STUDENTS"] + 3
+    reasons = dict(await sql("SELECT full_name, review_reason FROM student"))
+    assert reasons["Ali Karimov"] == reasons["Aziza Karimov"] == "общий телефон — проверить"
+    assert reasons["Зафар Рахимов"] == reasons["Зарина Султонова"] == "общий телефон — проверить"
+    for name in ("Ali Karimov", "Aziza Karimov", "Зафар Рахимов", "Зарина Султонова"):
+        assert await one("SELECT count(*) FROM student WHERE full_name = :n", n=name) == 1
+    assert await one("SELECT count(*) FROM student WHERE phone = '+992937770001'") == 2
+    # each child has exactly their own enrollment, payment and attendance
+    for name, amount in (("Aziza Karimov", 200), ("Зафар Рахимов", 300), ("Зарина Султонова", 400)):
+        assert await one(
+            "SELECT count(*), sum(p.amount) FROM enrollment e JOIN student s ON s.id = e.student_id "
+            "JOIN payment p ON p.enrollment_id = e.id WHERE s.full_name = :n",
+            n=name,
+        ) == (1, Decimal(amount))
+        assert (
+            await one(
+                "SELECT count(*) FROM attendance a JOIN enrollment e ON e.id = a.enrollment_id "
+                "JOIN student s ON s.id = e.student_id WHERE s.full_name = :n",
+                n=name,
+            )
+            == 1
+        )
+    (_, lines), *_ = report.ledgers
+    by = {label: amount for label, _n, amount in lines}
+    assert by["разница (должна быть 0)"] == "0.00"
+    assert by["= перенесено (расчёт)"] == "4250.00"  # 3350 + 200 + 300 + 400

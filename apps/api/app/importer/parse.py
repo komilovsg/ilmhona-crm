@@ -170,6 +170,42 @@ def translit_key(value: object) -> str:
     return " ".join(sorted(words))
 
 
+def _typo(a: str, b: str) -> bool:
+    """Two words of 4+ letters that differ by one letter (substitution, insert or delete)."""
+    if min(len(a), len(b)) < 4 or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    short, long_ = sorted((a, b), key=len)
+    return any(long_[:i] + long_[i + 1 :] == short for i in range(len(long_)))
+
+
+def same_person(a: object, b: object) -> bool:
+    """Same student under two spellings? Words are compared in the coarse Latin form (so Latin =
+    Cyrillic) and in any order. Rule: at least one word is exactly equal, and
+    2 * matched / (words_a + words_b) >= 0.8, where a word of 4+ letters also matches a word that
+    differs by one letter. «Ali Karimov» = «Каримов Али» = «Ali Karimof»; siblings «Ali Karimov» and
+    «Aziza Karimov» (0.5) and different first names are not the same person."""
+    wa, wb = translit_key(a).split(), translit_key(b).split()
+    if not wa or not wb:
+        return False
+    total_words = len(wa) + len(wb)
+    left, rest, exact = list(wb), [], 0
+    for w in wa:  # exact words first, so a typo never steals an exact partner
+        if w in left:
+            left.remove(w)
+            exact += 1
+        else:
+            rest.append(w)
+    typo = 0
+    for w in rest:
+        hit = next((x for x in left if _typo(w, x)), None)
+        if hit is not None:
+            left.remove(hit)
+            typo += 1
+    return exact >= 1 and 2 * (exact + typo) / total_words >= 0.8
+
+
 def slug(value: object) -> str:
     """A login from a name: `Ali Karimov` / `Али Каримов` -> `ali.karimov`."""
     parts = []

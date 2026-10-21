@@ -350,7 +350,7 @@ async def test_apply_in_production_needs_the_database_name_typed(
     assert await cli.main([*args, "--confirm-db", "ilmhona-wrong"]) == 2
     assert (await sql("SELECT count(*) FROM student"))[0][0] == before
     assert await cli.main([*args, "--confirm-db", db_name]) == 0
-    assert (await sql("SELECT count(*) FROM student"))[0][0] == 8
+    assert (await sql("SELECT count(*) FROM student"))[0][0] == 9
     # a dry-run never needs it
     assert await cli.main([str(FIXTURE), "--dry-run", "--out-dir", str(tmp_path)]) == 0
 
