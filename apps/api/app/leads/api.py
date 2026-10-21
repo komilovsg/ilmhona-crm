@@ -514,6 +514,9 @@ async def convert_lead(
     ).scalar_one_or_none()
     if lead is None:
         raise DomainError(NOT_FOUND)
+    # converting creates or links a student and shows who it is: a students write
+    if not allows(p.level("students"), "change"):
+        raise DomainError(FORBIDDEN, section="students", level="change")
     cohort: Cohort | None = None
     if body.cohort_id is not None:
         if not allows(p.level("cohorts"), "change"):
@@ -617,7 +620,8 @@ async def _enroll(
 
 async def _read_body(request: Request) -> bytes:
     """The raw CSV, capped while it streams in (the limit holds even without Content-Length)."""
-    if int(request.headers.get("content-length") or 0) > importer.MAX_BYTES:
+    declared = request.headers.get("content-length") or ""
+    if declared.isdigit() and int(declared) > importer.MAX_BYTES:
         raise DomainError(IMPORT_TOO_LARGE, limit=importer.MAX_BYTES)
     data = bytearray()
     async for chunk in request.stream():
