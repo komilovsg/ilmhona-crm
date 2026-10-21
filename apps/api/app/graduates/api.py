@@ -74,10 +74,9 @@ async def graduates_by_students(
         employed=employed, certificate=certificate, q=q,
     )  # fmt: skip
     total = await graduate_count(db, where)
-    rows = await graduate_rows(db, where, MAX_ROWS)
-    start = (page - 1) * page_size
+    rows = await graduate_rows(db, where, page_size, (page - 1) * page_size)
     return {
-        "items": hide_money(rows[start : start + page_size], hidden_money(p)),
+        "items": hide_money(rows, hidden_money(p)),
         "total": total,
         "page": page,
         "page_size": page_size,

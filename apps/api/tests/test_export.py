@@ -26,7 +26,8 @@ def sheet(r: httpx.Response) -> list[tuple[Any, ...]]:
 
 async def _audit_exports(entity: str) -> list[Any]:
     return await sql(
-        "SELECT user_id, diff FROM audit_log WHERE action = 'export' AND entity = :e", e=entity
+        "SELECT user_id, diff FROM audit_log WHERE action = 'export' AND entity = :e ORDER BY id",
+        e=entity,
     )
 
 

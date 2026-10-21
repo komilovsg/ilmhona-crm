@@ -101,6 +101,18 @@ workflow waits (up to 20 min) until the version equals the commit. Free Render s
 minutes without traffic; `keepalive` keeps it awake 08:00-20:59 Asia/Dushanbe, outside that the
 first visitor waits for a cold start (about a minute).
 
+## Connections, compression, image
+
+- uvicorn runs with `--timeout-keep-alive ${KEEPALIVE_TIMEOUT:-120}`: its default (5 s) is shorter
+  than the idle time the Vercel proxy and Render's balancer keep a connection, and a request sent
+  as the server closes it fails with `ECONNRESET`. Keep it above every client's idle timeout.
+- Pool (`DB_POOL_SIZE` 5, `DB_MAX_OVERFLOW` 5, `DB_POOL_RECYCLE` 240 s): connections are recycled
+  before Neon's idle suspend and pinged on checkout; 10 connections stay far below Neon's cap.
+- JSON responses over 1 KB are gzipped (`GZipMiddleware`); xlsx files never are.
+- The image is two-stage (`python:3.14-slim`, finished virtualenv + `app/` only, ~345 MB); uv,
+  tests, tools and migrations are not in it. Measuring: `apps/api/tools` (`seed_load`, `bench`,
+  `explain`, `make_snapshot`, `time_import`, `delay_proxy`) work on a local database only.
+
 ## Daily job
 
 `python -m app.cli daily`: cohort statuses from their dates, enrollments of finished cohorts

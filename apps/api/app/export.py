@@ -18,9 +18,7 @@ from io import BytesIO
 from typing import Any, Literal
 
 from fastapi import Response
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import record
@@ -86,24 +84,40 @@ def _shown_len(value: Any) -> int:
 
 
 def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    assert ws is not None
-    ws.title = title[:31]
-    ws.append([c.header for c in columns])
-    for cell in ws[1]:
-        cell.font = Font(bold=True)
+    # imported here: openpyxl is slow to import and only exports need it (cold start)
+    from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    # write-only mode streams the rows (several times faster than building a cell tree), so the
+    # column widths are measured first and set before the first row is written
+    table = [[_cell(c.value(row), c.kind) for c in columns] for row in rows]
     widths = [len(c.header) for c in columns]
-    for row in rows:
-        cells = [_cell(c.value(row), c.kind) for c in columns]
-        ws.append([v for v, _ in cells])
-        for i, (value, fmt) in enumerate(cells):
+    for cells in table:
+        for i, (value, _) in enumerate(cells):
             widths[i] = max(widths[i], _shown_len(value))
-            if fmt:
-                ws.cell(row=ws.max_row, column=i + 1).number_format = fmt
+    wb = Workbook(write_only=True)
+    ws = wb.create_sheet(title[:31])
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = min(max(w + 2, 8), 60)
     ws.freeze_panes = "A2"
+    head = []
+    for c in columns:
+        cell = WriteOnlyCell(ws, value=c.header)
+        cell.font = Font(bold=True)
+        head.append(cell)
+    ws.append(head)
+    for cells in table:
+        out: list[Any] = []
+        for value, fmt in cells:
+            if fmt and value is not None:
+                styled = WriteOnlyCell(ws, value=value)
+                styled.number_format = fmt
+                out.append(styled)
+            else:
+                out.append(value)
+        ws.append(out)
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()
@@ -128,7 +142,8 @@ async def xlsx_response[T](
 ) -> Response:
     """Build the file and write the audit entry (same transaction as the request)."""
     check_cap(rows)
-    data = build_xlsx(title, columns, rows)
+    # CPU-bound: off the event loop, so one big export does not stall every other request
+    data = await run_in_threadpool(build_xlsx, title, columns, rows)
     await record(
         db,
         p.id,
