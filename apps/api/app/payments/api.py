@@ -583,15 +583,21 @@ def partial_note(left: Decimal) -> str:
 
 
 async def _enrollment(
-    db: AsyncSession, p: Principal, enrollment_id: uuid.UUID, *, for_update: bool = False
+    db: AsyncSession,
+    p: Principal,
+    enrollment_id: uuid.UUID,
+    *,
+    for_update: bool = False,
+    key_share: bool = False,
 ) -> tuple[Enrollment, Cohort]:
+    """Lock order everywhere: the enrollment row first, then its payments / holds."""
     query = (
         select(Enrollment, Cohort)
         .join(Cohort, Cohort.id == Enrollment.cohort_id)
         .where(Enrollment.id == enrollment_id)
     )
-    if for_update:
-        query = query.with_for_update(of=Enrollment)
+    if for_update or key_share:
+        query = query.with_for_update(of=Enrollment, key_share=key_share)
     found = (await db.execute(query)).first()
     if found is None:
         raise DomainError(NOT_FOUND)
@@ -727,15 +733,20 @@ async def month_status(
 @router.post("/month/hold")
 async def hold_month(body: HoldIn, p: Change, db: DB) -> dict[str, Any]:
     """Take (or refresh) the hold of the month when it is free, expired or already ours; a user
-    holds one month of an enrollment at a time. `acquired` false = someone else holds it."""
-    enrollment, cohort = await _enrollment(db, p, body.enrollment_id)
+    holds one month at a time, of any enrollment (one open form: nobody can grey out the forms
+    of a whole branch). `acquired` false = someone else holds it."""
+    # key share first: waits for a create of this enrollment (it locks the enrollment, then
+    # drops the creator's hold) instead of deadlocking with it
+    enrollment, cohort = await _enrollment(db, p, body.enrollment_id, key_share=True)
     _check_month_no(cohort, body.month_no)
     now = clock.now()
     await db.execute(
         delete(PaymentHold).where(
-            PaymentHold.enrollment_id == enrollment.id,
             PaymentHold.user_id == p.id,
-            PaymentHold.month_no != body.month_no,
+            or_(
+                PaymentHold.enrollment_id != enrollment.id,
+                PaymentHold.month_no != body.month_no,
+            ),
         )
     )
     stmt = pg_insert(PaymentHold).values(
@@ -859,6 +870,10 @@ async def update_payment(
 ) -> dict[str, Any]:
     row = await _row(db, p, payment_id)
     pay: Payment = row[0]
+    sent = body.model_fields_set
+    if sent & {"month_no", "amount"}:
+        # the enrollment before the payment (check_version locks it): the order of a create
+        await _enrollment(db, p, pay.enrollment_id, for_update=True)
     await check_version(
         db,
         pay,
@@ -870,14 +885,12 @@ async def update_payment(
     if pay.status == CONFIRMED:
         raise DomainError(PAYMENT_CONFIRMED)
     before = _snapshot(pay)
-    sent = body.model_fields_set
     month_no = body.month_no if "month_no" in sent and body.month_no is not None else pay.month_no
     amount = body.amount if "amount" in sent and body.amount is not None else pay.amount
     if "month_no" in sent:
         _check_month_no(row[2], month_no)
     # the same rule as a create; lowering the amount within the same month is always fine
     if month_no != pay.month_no or amount > pay.amount:
-        await _enrollment(db, p, pay.enrollment_id, for_update=True)
         await _check_month(db, pay.enrollment_id, row[2], month_no, amount, exclude=pay.id)
     pay.month_no = month_no
     for field in ("amount", "method", "paid_at"):
