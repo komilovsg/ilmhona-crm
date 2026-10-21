@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { ILM_MARK_PATH } from "@/components/brand/IlmMark";
-import { ERROR_COPY, errorCode } from "@/lib/error-copy";
+import { ERROR_COPY, supportCode } from "@/lib/error-copy";
 
 const copy = ERROR_COPY.fatal;
 
@@ -28,7 +28,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   useEffect(() => {
     console.error(error);
   }, [error]);
-  const code = errorCode(error);
+  const code = supportCode(error);
 
   return (
     <html lang="ru">
@@ -48,7 +48,6 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
               {copy.retry}
             </button>
             {/* a plain link on purpose: a full reload leaves the broken tree */}
-            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a className="btn" href="/">
               {copy.home}
             </a>

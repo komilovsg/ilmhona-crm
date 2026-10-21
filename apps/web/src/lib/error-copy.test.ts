@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ERROR_COPY, errorCode } from "./error-copy.ts";
+import { ERROR_COPY, errorCode, supportCode } from "./error-copy.ts";
 
 const CYRILLIC = /[А-Яа-яЁё]/;
 
@@ -32,4 +32,13 @@ test("the support code is the digest only, never the message", () => {
   assert.equal(errorCode({ digest: " " }), null);
   assert.equal(errorCode(new Error("secret stack detail")), null);
   assert.equal(errorCode(null), null);
+});
+
+test("a browser error gets a short stable code that does not contain its message", () => {
+  const a = supportCode(new TypeError("Cannot read properties of null"));
+  assert.match(a, /^E-[0-9A-F]{6}$/);
+  assert.equal(a, supportCode(new TypeError("Cannot read properties of null")));
+  assert.notEqual(a, supportCode(new TypeError("another failure")));
+  assert.equal(supportCode({ digest: "98765" }), "98765");
+  assert.match(supportCode(undefined), /^E-/);
 });

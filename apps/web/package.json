@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\"",
     "cls": "node scripts/cls.mjs",
+    "errors": "node scripts/errors-check.mjs",
     "motion": "node scripts/motion-check.mjs"
   },
   "dependencies": {
