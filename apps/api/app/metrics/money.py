@@ -157,6 +157,33 @@ async def enrollment_money(
     return out
 
 
+async def month_sums(
+    db: AsyncSession, enrollment_ids: Sequence[uuid.UUID], *, exclude: uuid.UUID | None = None
+) -> dict[uuid.UUID, dict[int, Decimal]]:
+    """What is entered per enrollment and month: pending + confirmed (a month is «taken» as soon
+    as a payment for it exists, confirmed or not). `exclude` leaves one payment out (an edit)."""
+    if not enrollment_ids:
+        return {}
+    where: list[ColumnElement[bool]] = [Payment.enrollment_id.in_(enrollment_ids)]
+    if exclude is not None:
+        where.append(Payment.id != exclude)
+    rows = await db.execute(
+        select(Payment.enrollment_id, Payment.month_no, func.sum(Payment.amount))
+        .where(*where)
+        .group_by(Payment.enrollment_id, Payment.month_no)
+    )
+    out: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in enrollment_ids}
+    for eid, month_no, total in rows.all():
+        out[eid][month_no] = money(total)
+    return out
+
+
+def month_full(entered: Decimal, price: Decimal) -> bool:
+    """A month is full when what is entered for it reaches the price. A cohort without a price
+    (0, an imported one waiting for review) has no cap: nothing is ever full."""
+    return price > 0 and entered >= price
+
+
 async def cohort_payers(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
     """«Оплатили» per cohort (#5): enrolled students with a confirmed payment."""
     if not cohort_ids:
@@ -427,6 +454,8 @@ __all__ = [
     "finance",
     "income_total",
     "instructor_stats",
+    "month_full",
+    "month_sums",
     "payment_totals",
     "payroll_total",
     "salary_rows",

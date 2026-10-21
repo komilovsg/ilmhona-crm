@@ -17,13 +17,14 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, delete, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
+from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
@@ -35,15 +36,30 @@ from app.metrics.money import (
     CONFIRMED,
     EXPELLED,
     PENDING,
+    ZERO,
     cohort_months,
     cohort_payers,
     enrollment_money,
+    month_full,
+    month_sums,
     payment_joined,
     payment_totals,
 )
-from app.models import AppUser, Branch, Cohort, Course, Enrollment, Payment, Student
+from app.models import (
+    AppUser,
+    AuditLog,
+    Branch,
+    Cohort,
+    Course,
+    Enrollment,
+    Payment,
+    PaymentHold,
+    Student,
+)
 from app.payments.errors import (
     IDEMPOTENCY_KEY_REUSED,
+    MONTH_ALREADY_PAID,
+    MONTH_OVERPAID,
     PAYMENT_CONFIRMED,
     PAYMENT_MONTH_INVALID,
 )
@@ -477,10 +493,12 @@ async def enrollment_options(
         )
     ).all()
     money = await enrollment_money(db, [(e, c) for e, c, _, _ in rows])
+    entered = await month_sums(db, [e.id for e, _, _, _ in rows])
     out: list[dict[str, Any]] = []
     for e, c, s, course in rows:
         months = cohort_months(c.start_date, c.end_date)
         paid = set(money[e.id]["paid_months"])
+        full = [m for m, total in sorted(entered[e.id].items()) if month_full(total, c.price_month)]
         out.append(
             {
                 "enrollment_id": e.id,
@@ -492,34 +510,237 @@ async def enrollment_options(
                 "price_month": c.price_month,
                 "months": months,
                 "next_month": next((m for m in range(1, months + 1) if m not in paid), months),
+                # months with pending + confirmed payments reaching the price: no more payments
+                "full_months": full,
                 **money[e.id],
             }
         )
     return out
 
 
+# ---- the month rule and the hold -----------------------------------------------------------
+#
+# A month is full when its pending + confirmed payments reach the cohort's price (`month_full`).
+# A payment that would take the month over the price is a 409: `month_already_paid` when it is
+# full already, `month_overpaid` when only a part is left. Both carry what is entered and by whom,
+# so the second person sees who paid. The enrollment row is locked (SELECT … FOR UPDATE) in every
+# create / edit, so two people saving the same month at once take turns and the second one sees
+# the first one's payment.
+#
+# The hold (`payment_hold`) only tells the others «X is entering a payment for this month» while
+# X's form is open; it expires by itself (HOLD_TTL) and never decides anything on the server.
+
+HOLD_TTL = timedelta(seconds=120)
+
+
+async def _enrollment(
+    db: AsyncSession, p: Principal, enrollment_id: uuid.UUID, *, for_update: bool = False
+) -> tuple[Enrollment, Cohort]:
+    query = (
+        select(Enrollment, Cohort)
+        .join(Cohort, Cohort.id == Enrollment.cohort_id)
+        .where(Enrollment.id == enrollment_id)
+    )
+    if for_update:
+        query = query.with_for_update(of=Enrollment)
+    found = (await db.execute(query)).first()
+    if found is None:
+        raise DomainError(NOT_FOUND)
+    check_cohort_visible(p, found[1])
+    return found[0], found[1]
+
+
+def _check_month_no(cohort: Cohort, month_no: int) -> None:
+    months = cohort_months(cohort.start_date, cohort.end_date)
+    if month_no > months:
+        raise DomainError(PAYMENT_MONTH_INVALID, months=months)
+
+
+async def _month_payments(
+    db: AsyncSession, enrollment_id: uuid.UUID, month_no: int, exclude: uuid.UUID | None = None
+) -> list[dict[str, Any]]:
+    """The payments entered for a month, oldest first, with who entered them (the audit entry of
+    the create; an imported payment has none)."""
+    where = [Payment.enrollment_id == enrollment_id, Payment.month_no == month_no]
+    if exclude is not None:
+        where.append(Payment.id != exclude)
+    pays = (
+        (await db.execute(select(Payment).where(*where).order_by(Payment.created_at, Payment.id)))
+        .scalars()
+        .all()
+    )
+    by: dict[str, str | None] = {}
+    if pays:
+        rows = await db.execute(
+            select(AuditLog.entity_id, AppUser.full_name)
+            .outerjoin(AppUser, AppUser.id == AuditLog.user_id)
+            .where(
+                AuditLog.entity == "payment",
+                AuditLog.action == "payment.create",
+                AuditLog.entity_id.in_([str(x.id) for x in pays]),
+            )
+        )
+        by = {str(i): name for i, name in rows.all()}
+    return [
+        {
+            "id": x.id,
+            "amount": str(x.amount),
+            "status": x.status,
+            "created_by": by.get(str(x.id)),
+            "created_at": x.created_at,
+        }
+        for x in pays
+    ]
+
+
+async def _month_state(
+    db: AsyncSession,
+    enrollment_id: uuid.UUID,
+    cohort: Cohort,
+    month_no: int,
+    exclude: uuid.UUID | None = None,
+) -> dict[str, Any]:
+    entered = (await month_sums(db, [enrollment_id], exclude=exclude))[enrollment_id]
+    paid = entered.get(month_no, ZERO)
+    price = cohort.price_month
+    return {
+        "month_no": month_no,
+        "price": str(price),
+        "paid": str(paid),
+        "remaining": str(max(price - paid, ZERO)),
+        "full": month_full(paid, price),
+        "payments": await _month_payments(db, enrollment_id, month_no, exclude),
+    }
+
+
+async def _check_month(
+    db: AsyncSession,
+    enrollment_id: uuid.UUID,
+    cohort: Cohort,
+    month_no: int,
+    amount: Decimal,
+    exclude: uuid.UUID | None = None,
+) -> None:
+    """Call with the enrollment row locked."""
+    if cohort.price_month <= 0:  # no price set: nothing to cap (see `month_full`)
+        return
+    entered = (await month_sums(db, [enrollment_id], exclude=exclude))[enrollment_id]
+    paid = entered.get(month_no, ZERO)
+    if paid + amount <= cohort.price_month:
+        return
+    state = await _month_state(db, enrollment_id, cohort, month_no, exclude)
+    raise DomainError(MONTH_ALREADY_PAID if state["full"] else MONTH_OVERPAID, **state)
+
+
+class HoldIn(Strict):
+    enrollment_id: uuid.UUID
+    month_no: Annotated[int, Field(ge=1, le=36)]
+
+
+MonthNo = Annotated[int, Query(ge=1, le=36)]
+
+
+async def _status(
+    db: AsyncSession, p: Principal, enrollment: Enrollment, cohort: Cohort, month_no: int
+) -> dict[str, Any]:
+    hold = (
+        await db.execute(
+            select(PaymentHold, AppUser.full_name)
+            .join(AppUser, AppUser.id == PaymentHold.user_id)
+            .where(
+                PaymentHold.enrollment_id == enrollment.id,
+                PaymentHold.month_no == month_no,
+                PaymentHold.expires_at > clock.now(),
+            )
+        )
+    ).first()
+    other = hold is not None and hold[0].user_id != p.id
+    return {
+        "enrollment_id": enrollment.id,
+        **await _month_state(db, enrollment.id, cohort, month_no),
+        "held_by": {"id": hold[0].user_id, "name": hold[1]} if hold and other else None,
+        "until": hold[0].expires_at if hold and other else None,
+        "mine": hold is not None and not other,
+    }
+
+
+@router.get("/month")
+async def month_status(
+    p: View, db: DB, enrollment_id: uuid.UUID, month_no: MonthNo
+) -> dict[str, Any]:
+    """What is entered for the month, by whom, and who is entering a payment for it right now."""
+    enrollment, cohort = await _enrollment(db, p, enrollment_id)
+    _check_month_no(cohort, month_no)
+    return await _status(db, p, enrollment, cohort, month_no)
+
+
+@router.post("/month/hold")
+async def hold_month(body: HoldIn, p: Change, db: DB) -> dict[str, Any]:
+    """Take (or refresh) the hold of the month when it is free, expired or already ours; a user
+    holds one month of an enrollment at a time. `acquired` false = someone else holds it."""
+    enrollment, cohort = await _enrollment(db, p, body.enrollment_id)
+    _check_month_no(cohort, body.month_no)
+    now = clock.now()
+    await db.execute(
+        delete(PaymentHold).where(
+            PaymentHold.enrollment_id == enrollment.id,
+            PaymentHold.user_id == p.id,
+            PaymentHold.month_no != body.month_no,
+        )
+    )
+    stmt = pg_insert(PaymentHold).values(
+        enrollment_id=enrollment.id,
+        month_no=body.month_no,
+        user_id=p.id,
+        expires_at=now + HOLD_TTL,
+    )
+    got = (
+        await db.execute(
+            stmt.on_conflict_do_update(
+                index_elements=[PaymentHold.enrollment_id, PaymentHold.month_no],
+                set_={"user_id": stmt.excluded.user_id, "expires_at": stmt.excluded.expires_at},
+                where=or_(PaymentHold.user_id == p.id, PaymentHold.expires_at <= now),
+            ).returning(PaymentHold.user_id)
+        )
+    ).scalar_one_or_none()
+    return {
+        **await _status(db, p, enrollment, cohort, body.month_no),
+        "acquired": got is not None,
+    }
+
+
+@router.delete("/month/hold", status_code=204)
+async def release_month(p: Change, db: DB, enrollment_id: uuid.UUID, month_no: MonthNo) -> None:
+    """Drop our own hold (the form closed or saved); someone else's hold stays."""
+    await _enrollment(db, p, enrollment_id)
+    await db.execute(
+        delete(PaymentHold).where(
+            PaymentHold.enrollment_id == enrollment_id,
+            PaymentHold.month_no == month_no,
+            PaymentHold.user_id == p.id,
+        )
+    )
+
+
 # ---- write -------------------------------------------------------------------------------
+
+
+async def _by_key(db: AsyncSession, key: uuid.UUID) -> uuid.UUID | None:
+    return (
+        await db.execute(select(Payment.id).where(Payment.idempotency_key == key))
+    ).scalar_one_or_none()
 
 
 @router.post("", status_code=201)
 async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB) -> dict[str, Any]:
-    existing = (
-        await db.execute(select(Payment.id).where(Payment.idempotency_key == body.idempotency_key))
-    ).scalar_one_or_none()
+    existing = await _by_key(db, body.idempotency_key)
     if existing is None:
-        found = (
-            await db.execute(
-                select(Enrollment, Cohort)
-                .join(Cohort, Cohort.id == Enrollment.cohort_id)
-                .where(Enrollment.id == body.enrollment_id)
-            )
-        ).first()
-        if found is None:
-            raise DomainError(NOT_FOUND)
-        check_cohort_visible(p, found[1])
-        months = cohort_months(found[1].start_date, found[1].end_date)
-        if body.month_no > months:
-            raise DomainError(PAYMENT_MONTH_INVALID, months=months)
+        _, cohort = await _enrollment(db, p, body.enrollment_id, for_update=True)
+        _check_month_no(cohort, body.month_no)
+        # a retry of the same create that waited on the lock finds the stored payment now
+        existing = await _by_key(db, body.idempotency_key)
+    if existing is None:
+        await _check_month(db, body.enrollment_id, cohort, body.month_no, body.amount)
         new_id = (
             await db.execute(
                 pg_insert(Payment)
@@ -537,6 +758,13 @@ async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB)
             )
         ).scalar_one_or_none()
         if new_id is not None:
+            await db.execute(
+                delete(PaymentHold).where(
+                    PaymentHold.enrollment_id == body.enrollment_id,
+                    PaymentHold.month_no == body.month_no,
+                    PaymentHold.user_id == p.id,
+                )
+            )
             row = await _row(db, p, new_id)
             await record(
                 db,
@@ -549,11 +777,8 @@ async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB)
                 label=_label(row[1], row[2], row[0]),
             )
             return _out(*row)
-        existing = (
-            await db.execute(
-                select(Payment.id).where(Payment.idempotency_key == body.idempotency_key)
-            )
-        ).scalar_one()
+        existing = await _by_key(db, body.idempotency_key)
+        assert existing is not None
     # a retry: the same key must mean the same payment
     row = await _row(db, p, existing)
     pay: Payment = row[0]
@@ -592,11 +817,15 @@ async def update_payment(
         raise DomainError(PAYMENT_CONFIRMED)
     before = _snapshot(pay)
     sent = body.model_fields_set
-    if "month_no" in sent and body.month_no is not None:
-        months = cohort_months(row[2].start_date, row[2].end_date)
-        if body.month_no > months:
-            raise DomainError(PAYMENT_MONTH_INVALID, months=months)
-        pay.month_no = body.month_no
+    month_no = body.month_no if "month_no" in sent and body.month_no is not None else pay.month_no
+    amount = body.amount if "amount" in sent and body.amount is not None else pay.amount
+    if "month_no" in sent:
+        _check_month_no(row[2], month_no)
+    # the same rule as a create; lowering the amount within the same month is always fine
+    if month_no != pay.month_no or amount > pay.amount:
+        await _enrollment(db, p, pay.enrollment_id, for_update=True)
+        await _check_month(db, pay.enrollment_id, row[2], month_no, amount, exclude=pay.id)
+    pay.month_no = month_no
     for field in ("amount", "method", "paid_at"):
         if field in sent and getattr(body, field) is not None:
             setattr(pay, field, getattr(body, field))

@@ -210,7 +210,8 @@ async def test_debt_math_mid_course_enrollment_and_partial_payments(
     await pay(admin, full, month=2, amount=300, confirm=True)  # partial month 2
     await pay(admin, full, month=2, amount=200, confirm=True)  # the rest, a second payment
     await pay(admin, full, month=3, amount=500)  # pending: does not count
-    await pay(admin, mid, month=1, amount=700, confirm=True)
+    await pay(admin, mid, month=1, amount=500, confirm=True)
+    await pay(admin, mid, month=2, amount=200, confirm=True)
     m = await cohort_money(admin, cohort)
     a, b = money_of(m, full), money_of(m, mid)
     assert (a["expected"], a["paid"], a["debt"], a["paid_months"]) == (
@@ -221,7 +222,8 @@ async def test_debt_math_mid_course_enrollment_and_partial_payments(
     )
     assert (b["expected"], b["paid"], b["debt"]) == ("1000.00", "700.00", "300.00")
     # overpaying never makes a negative debt
-    await pay(admin, mid, month=2, amount=900, confirm=True)
+    await pay(admin, mid, month=2, amount=300, confirm=True)
+    await pay(admin, mid, month=3, amount=500, confirm=True)
     assert money_of(await cohort_money(admin, cohort), mid)["debt"] == "0.00"
 
 
@@ -310,7 +312,7 @@ async def test_payments_list_filters_totals_and_export_match(admin: httpx.AsyncC
 async def test_options_for_the_payment_form(admin: httpx.AsyncClient) -> None:
     cohort = await running_cohort(admin, price=450)
     e = await enroll(admin, cohort, "Алиев")
-    await pay(admin, e, month=1, confirm=True)
+    await pay(admin, e, month=1, amount=450, confirm=True)
     r = await admin.get(f"{P}/options", params={"q": "Алиев"})
     (opt,) = r.json()
     assert (opt["enrollment_id"], opt["price_month"], opt["next_month"], opt["months"]) == (
@@ -326,7 +328,7 @@ async def test_options_for_the_payment_form(admin: httpx.AsyncClient) -> None:
 async def test_confirmed_payment_is_frozen_and_pending_can_change(
     admin: httpx.AsyncClient,
 ) -> None:
-    cohort = await running_cohort(admin)
+    cohort = await running_cohort(admin, price=600)
     e = await enroll(admin, cohort)
     p = await pay(admin, e, amount=500)
     r = await admin.patch(f"{P}/{p['id']}", json={"amount": "550", "note": "поправка"})
@@ -349,7 +351,7 @@ async def test_confirmed_payment_is_frozen_and_pending_can_change(
 async def test_version_conflict_on_payment_edit(
     login_as: SignedIn, admin: httpx.AsyncClient
 ) -> None:
-    cohort = await running_cohort(admin)
+    cohort = await running_cohort(admin, price=600)
     e = await enroll(admin, cohort)
     p = await pay(admin, e)
     other = await login_as("anna", await manager_role())
