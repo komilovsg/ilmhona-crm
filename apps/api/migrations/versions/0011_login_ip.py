@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0010"
-down_revision = "0009"
+revision = "0011"
+down_revision = "0010_review"
 
 
 def upgrade() -> None:

@@ -49,7 +49,7 @@ ALTER DEFAULT PRIVILEGES FOR ROLE neondb_owner IN SCHEMA public
   GRANT USAGE, SELECT ON SEQUENCES TO ilm_app;
 ```
 
-Migration 0010 (re)applies the table grants, the append-only `audit_log` and the read-only
+Migration 0011 (re)applies the table grants, the append-only `audit_log` and the read-only
 `alembic_version` whenever the role exists, so a fresh `alembic upgrade head` rebuilds them.
 
 Use the **direct** (non-pooled) Neon host. SQLAlchemy URLs are

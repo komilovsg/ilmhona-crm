@@ -4,6 +4,8 @@ import { apiRequestHeaders } from "./lib/forward";
 
 const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login"]);
+// Link-preview and install assets: reachable without a session (static, no data).
+const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-icon"];
 
 /**
  * Optimistic check by cookie presence only; the API decides whether the session is valid
@@ -16,6 +18,8 @@ export function proxy(request: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return NextResponse.next({ request: { headers: apiRequestHeaders(request.headers) } });
   }
+
+  if (PUBLIC_ASSETS.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
   const signedIn = request.cookies.has(ACCESS_COOKIE);
 

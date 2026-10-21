@@ -1,2 +1,10 @@
+# Private app: nothing is indexed (noindex on every page). Link-preview bots may fetch the
+# login page and the preview assets only.
 User-Agent: *
+Allow: /login
+Allow: /opengraph-image
+Allow: /twitter-image
+Allow: /icon
+Allow: /apple-icon
+Allow: /manifest.webmanifest
 Disallow: /
