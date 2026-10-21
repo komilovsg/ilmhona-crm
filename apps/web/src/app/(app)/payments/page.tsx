@@ -188,7 +188,7 @@ function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rows.map((p) => (
           <li key={p.id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-start justify-between gap-2">
@@ -267,7 +267,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rows.map((d) => (
           <li key={d.enrollment_id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-start justify-between gap-2">

@@ -166,7 +166,7 @@ function Grid({
       </div>
 
       {/* phone: the list of lessons; a tap opens the mark screen (one lesson per screen, #23) */}
-      <ul className="space-y-2 md:hidden">
+      <ul data-rows className="space-y-2 md:hidden">
         {lessons.map((l) => {
           const p = progress[l.id] ?? { marked: 0, total: 0 };
           const state = markState(p.marked, p.total);

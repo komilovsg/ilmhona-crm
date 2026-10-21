@@ -100,7 +100,7 @@ export function ScheduleList({ rows, actions, showInstructor = true }: { rows: S
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rows.map((r) => (
           <li key={`${r.cohort_id}-${r.period}`} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-start justify-between gap-2">
@@ -178,7 +178,7 @@ export function PayoutsList({ rows, showInstructor = true }: { rows: PayoutRow[]
           </tbody>
         </table>
       </div>
-      <ul className="space-y-3 md:hidden">
+      <ul data-rows className="space-y-3 md:hidden">
         {rows.map((p) => (
           <li key={p.id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-start justify-between gap-2">

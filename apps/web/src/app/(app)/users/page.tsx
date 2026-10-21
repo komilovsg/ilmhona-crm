@@ -277,7 +277,7 @@ export default function UsersPage() {
             </table>
           </div>
 
-          <ul className="space-y-3 md:hidden">
+          <ul data-rows className="space-y-3 md:hidden">
             {users.map((u) => (
               <li key={u.id} className="rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">

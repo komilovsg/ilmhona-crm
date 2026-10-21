@@ -67,7 +67,7 @@ export function QueryState<T>({
 
   if (isPending && !isError)
     return (
-      <div aria-busy="true" role="status">
+      <div key="loading" aria-busy="true" role="status">
         <span className="sr-only">Загрузка…</span>
         <Late>{skeleton}</Late>
       </div>
@@ -79,10 +79,15 @@ export function QueryState<T>({
     return <ErrorState retrying={isFetching} text={errorText} onRetry={() => void refetch()} />;
   }
 
-  if (isEmpty?.(data) && empty) return <div aria-busy={isFetching}>{empty}</div>;
+  if (isEmpty?.(data) && empty) return (
+      <div key="empty" aria-busy={isFetching} className="fade-in">
+        {empty}
+      </div>
+    );
 
+  // keyed + fade-in: the skeleton gives way to the content with a short cross-fade (mount only, a refetch does not replay it)
   return (
-    <div aria-busy={isFetching}>
+    <div key="ready" aria-busy={isFetching} className="fade-in">
       {isError && (
         <p className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-warning/10 px-4 py-2 text-sm" role="alert">
           Не удалось обновить данные.

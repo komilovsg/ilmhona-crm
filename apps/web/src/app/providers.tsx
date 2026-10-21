@@ -4,12 +4,14 @@ import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HeroUIProvider } from "@heroui/system";
 import { ToastProvider } from "@heroui/toast";
+import { MotionConfig } from "framer-motion";
 import { useRouter } from "next/navigation";
 
 import { useIsPhone } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
+import { toastMotion } from "@/lib/motion";
 
 function HeroUI({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -25,7 +27,13 @@ function HeroUI({ children }: { children: ReactNode }) {
 function Toasts() {
   const phone = useIsPhone();
 
-  return <ToastProvider placement={phone ? "bottom-center" : "top-center"} toastOffset={phone ? 76 : 12} />;
+  return (
+    <ToastProvider
+      placement={phone ? "bottom-center" : "top-center"}
+      toastOffset={phone ? 76 : 12}
+      toastProps={{ motionProps: toastMotion }}
+    />
+  );
 }
 
 export function Providers({ children }: { children: ReactNode }) {
@@ -48,13 +56,17 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <HeroUI>
-        <ThemeProvider>
-          <Toasts />
-          <ServerWakeup />
-          {children}
-        </ThemeProvider>
-      </HeroUI>
+      {/* reducedMotion="user": under prefers-reduced-motion every transform / layout animation (ours and
+          HeroUI's) is dropped and only opacity changes stay */}
+      <MotionConfig reducedMotion="user">
+        <HeroUI>
+          <ThemeProvider>
+            <Toasts />
+            <ServerWakeup />
+            {children}
+          </ThemeProvider>
+        </HeroUI>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }
