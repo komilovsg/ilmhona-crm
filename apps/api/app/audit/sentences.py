@@ -29,6 +29,8 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "users": ("app_user", "role"),
     "payments": ("payment",),
     "instructors": ("instructor_payout",),
+    "leads": ("lead",),
+    "marketing": ("campaign",),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -78,6 +80,12 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "payout.create": ("отмечена", "выплата"),
     "payout.update": ("изменена", "выплата"),
     "payout.delete": ("удалена", "выплата"),
+    "lead.create": ("создан", "лид"),
+    "lead.update": ("изменён", "лид"),
+    "lead.delete": ("удалён", "лид"),
+    "campaign.create": ("создана", "кампания"),
+    "campaign.update": ("изменена", "кампания"),
+    "campaign.delete": ("удалена", "кампания"),
 }
 # creations that also read their values: «создана оплата … — сумма 500 TJS, способ alif»
 WITH_VALUES = {"payment.create", "payout.create"}
@@ -98,6 +106,8 @@ TABLES: dict[str, str] = {
     "salary": "график выплат",
     "instructor_payout": "выплаты",
     "instructor": "инструкторы",
+    "lead": "лиды",
+    "campaign": "кампании",
 }
 FILTERS = {
     "q": "поиск",
@@ -117,7 +127,14 @@ FILTERS = {
     "month": "месяц",
     "instructor_id": "инструктор",
 }
-MONEY = {"default_price_month", "price_month", "amount", "default_rate", "instructor_rate"}
+MONEY = {
+    "default_price_month",
+    "price_month",
+    "amount",
+    "default_rate",
+    "instructor_rate",
+    "budget",
+}
 
 FIELDS: dict[str, str] = {
     "login": "логин",
@@ -160,8 +177,17 @@ FIELDS: dict[str, str] = {
     "note": "заметка",
     "default_rate": "ставка по умолчанию",
     "instructor_rate": "ставка инструктора",
+    "source": "источник",
+    "campaign_id": "кампания",
+    "call_status": "статус звонка",
+    "next_contact_at": "перезвонить",
+    "refusal_reason": "причина отказа",
+    "comment": "комментарий",
+    "needs_review": "нужна проверка",
+    "budget": "бюджет",
+    "platform": "платформа",
 }
-REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id"}
+REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
 VALUES = {
     "male": "мужской",
@@ -344,6 +370,16 @@ def sentence(
         _, grads = _pair(e.diff.get("graduates"))
         tail = f", из них выпускников: {grads}" if grads else ""
         return f"{who}: поток {lab} закончился, зачислений завершено: {n}{tail}"
+    if a == "lead.convert":
+        student = _pair(e.diff.get("student"))[1]
+        _, new = _pair(e.diff.get("student_new"))
+        how = "создан новый студент" if new else "найден студент по телефону"
+        return f"{who}: лид {lab} записан — {how} {student}"
+    if a == "lead.import":
+        _, n = _pair(e.diff.get("created"))
+        _, review = _pair(e.diff.get("needs_review"))
+        tail = f", из них на проверку: {review}" if review else ""
+        return f"{who}: импортировано лидов из CSV: {n}{tail}"
     if a == "grade.update":
         student, cohort = _pieces(lab)
         return _with_changes(

@@ -271,3 +271,39 @@ class InstructorPayout(Versioned, Base):
     method: Mapped[str] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Campaign(Versioned, Base):
+    __tablename__ = "campaign"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    name: Mapped[str] = mapped_column(Text)
+    course_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
+    platform: Mapped[str] = mapped_column(Text)
+    start_date: Mapped[date] = mapped_column(Date)
+    end_date: Mapped[date | None] = mapped_column(Date)
+    budget: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
+    status: Mapped[str] = mapped_column(Text, server_default=text("'запланирована'"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Lead(Versioned, Base):
+    __tablename__ = "lead"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    full_name: Mapped[str] = mapped_column(Text)
+    # the name as it arrived (ad forms): `full_name` is the cleaned one (#15)
+    raw_name: Mapped[str | None] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    phone_raw: Mapped[str | None] = mapped_column(Text)
+    course_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    source: Mapped[str] = mapped_column(Text, server_default=text("'другое'"))
+    campaign_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("campaign.id"))
+    branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
+    call_status: Mapped[str] = mapped_column(Text, server_default=text("'не звонили'"))
+    next_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(Text, server_default=text("'новый'"))
+    refusal_reason: Mapped[str | None] = mapped_column(Text)
+    comment: Mapped[str | None] = mapped_column(Text)
+    needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    converted_student_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("student.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

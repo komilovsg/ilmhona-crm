@@ -13,7 +13,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -121,6 +121,21 @@ async def _integrity(request: Request, exc: Exception) -> Response:
     return _problem(request, error)
 
 
+# Postgres text cannot hold NUL (22021) and rejects malformed values (22P02): bad input, not a 500
+_BAD_INPUT_SQLSTATES = {"22021", "22P02"}
+
+
+async def _dbapi(request: Request, exc: Exception) -> Response:
+    assert isinstance(exc, DBAPIError)
+    orig = exc.orig
+    state = getattr(orig, "sqlstate", None) or getattr(
+        getattr(orig, "__cause__", None), "sqlstate", None
+    )
+    if state in _BAD_INPUT_SQLSTATES:
+        return _problem(request, VALIDATION_FAILED)
+    return await _unhandled(request, exc)
+
+
 async def _unhandled(request: Request, exc: Exception) -> Response:
     log.error(
         "unhandled %s on %s %s", type(exc).__name__, request.method, request.url.path, exc_info=exc
@@ -133,4 +148,5 @@ def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(StarletteHTTPException, _http)
     app.add_exception_handler(RequestValidationError, _validation)
     app.add_exception_handler(IntegrityError, _integrity)
+    app.add_exception_handler(DBAPIError, _dbapi)
     app.add_exception_handler(Exception, _unhandled)

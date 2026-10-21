@@ -2,13 +2,26 @@
 change, so both commit or fail together. No secrets (hashes, passwords) in a diff."""
 
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AppUser, AuditLog, Cohort, Course, Enrollment, Lesson, Role, Room, Student
+from app.models import (
+    AppUser,
+    AuditLog,
+    Campaign,
+    Cohort,
+    Course,
+    Enrollment,
+    Lead,
+    Lesson,
+    Role,
+    Room,
+    Student,
+)
 
 # diff field that holds the name of a row, per entity: the fallback when the row is gone (delete)
 _NAME_FIELD = {
@@ -18,6 +31,8 @@ _NAME_FIELD = {
     "course": "name",
     "app_user": "full_name",
     "role": "name",
+    "lead": "full_name",
+    "campaign": "name",
 }
 # entity -> (id column, name column)
 _NAME_COLUMN = {
@@ -27,6 +42,8 @@ _NAME_COLUMN = {
     "course": (Course.id, Course.name),
     "app_user": (AppUser.id, AppUser.full_name),
     "role": (Role.id, Role.name),
+    "lead": (Lead.id, Lead.full_name),
+    "campaign": (Campaign.id, Campaign.name),
 }
 
 
@@ -77,7 +94,7 @@ async def _label(
 
 
 def _plain(value: Any) -> Any:
-    if isinstance(value, UUID):
+    if isinstance(value, UUID | Decimal):
         return str(value)
     if isinstance(value, datetime | date):
         return value.isoformat()

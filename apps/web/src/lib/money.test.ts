@@ -39,7 +39,8 @@ test("paid months read as «1, 2 из 4»", () => {
 test("amounts: 500.00 and 500 are the same, bad input is not an amount", () => {
   assert.equal(amountText("500.00"), "500");
   assert.equal(amountText(450.5), "450.5");
-  assert.equal(amountText("1 000"), "");
+  assert.equal(amountText("1 000"), "1000");
+  assert.equal(amountText("abc"), "");
   assert.equal(validAmount("450,50"), true);
   assert.equal(validAmount("0"), false);
   assert.equal(validAmount("-1"), false);
@@ -62,4 +63,13 @@ test("tones and method labels", () => {
   assert.equal(salaryTone("к выплате"), "danger");
   assert.equal(methodLabel("alif"), "Alif");
   assert.equal(methodLabel("наличные"), "Наличные");
+});
+
+test("one money parser: comma, spaces and dot all work", () => {
+  for (const [typed, api] of [["1500,5", "1500.5"], ["1500,50", "1500.5"], ["1 500", "1500"], ["1 500,50", "1500.5"], ["1\u00a0500.50", "1500.5"]]) {
+    assert.equal(amountText(typed), api, typed);
+    assert.ok(validAmount(typed) && validRate(typed), typed);
+  }
+  assert.ok(!validAmount("0") && validRate("0"));
+  for (const bad of ["", "abc", "1,5,5", "-5", "1500,555"]) assert.ok(!validRate(bad), bad);
 });
