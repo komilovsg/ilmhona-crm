@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any, Self
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
@@ -23,6 +23,7 @@ from app.cohorts import status as st
 from app.cohorts.schedule import check_room_free, generate_lessons, local_dt
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
+from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
@@ -41,8 +42,21 @@ from app.education.scope import (
     writer,
 )
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
+from app.graduates.errors import CERTIFICATE_ISSUED
 from app.metrics import cohort_enrolled, cohort_fill, has_marks
-from app.models import AppUser, Branch, Cohort, Course, Enrollment, Lesson, Role, Room, Student
+from app.models import (
+    AppUser,
+    Attendance,
+    Branch,
+    Cohort,
+    Course,
+    Enrollment,
+    Grade,
+    Lesson,
+    Role,
+    Room,
+    Student,
+)
 from app.permissions import allows
 
 router = APIRouter(prefix="/api/v1", tags=["cohorts"], dependencies=[Depends(require_csrf_header)])
@@ -334,8 +348,8 @@ async def list_cohorts(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 24,
+    page: Page = 1,
+    page_size: PageSize = 24,
 ) -> dict[str, Any]:
     where = _cohort_where(p, status, branch_id, q)
     total = (
@@ -813,6 +827,8 @@ def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
         "student_name": s.full_name,
         "phone": s.phone,
         "status": e.status,
+        "status_manual": e.status_manual,
+        "certificate_no": e.certificate_no,
         "enrolled_at": e.enrolled_at,
     }
 
@@ -941,8 +957,11 @@ async def set_enrollment_status(
     )
     if body.status == "активный" and cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)  # #11: a finished cohort has no active students
+    if enrollment.certificate_no and body.status != st.GRADUATE:
+        raise DomainError(CERTIFICATE_ISSUED)
     before = enrollment.status
     enrollment.status = body.status
+    enrollment.status_manual = True  # a grade change no longer re-evaluates it
     await db.flush()
     await record(
         db,
@@ -959,6 +978,26 @@ async def set_enrollment_status(
 @router.delete("/enrollments/{enrollment_id}", status_code=204)
 async def remove_enrollment(enrollment_id: uuid.UUID, p: Change, db: DB) -> None:
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
+    # payments block the delete (RESTRICT -> 409); marks and the grade go with it: say so
+    marks = (
+        await db.execute(
+            select(func.count())
+            .select_from(Attendance)
+            .where(Attendance.enrollment_id == enrollment_id)
+        )
+    ).scalar_one()
+    graded = (
+        await db.execute(
+            select(func.count()).select_from(Grade).where(Grade.enrollment_id == enrollment_id)
+        )
+    ).scalar_one()
+    lost: dict[str, Any] = {}
+    if marks:
+        lost["lost_marks"] = [marks, None]
+    if graded:
+        lost["lost_grade"] = [True, None]
+    if enrollment.certificate_no:
+        lost["lost_certificate"] = [enrollment.certificate_no, None]
     await db.delete(enrollment)
     await db.flush()
     await record(
@@ -967,6 +1006,6 @@ async def remove_enrollment(enrollment_id: uuid.UUID, p: Change, db: DB) -> None
         "enrollment.delete",
         "enrollment",
         enrollment_id,
-        {"cohort": [cohort.code, None], "student": [student.full_name, None]},
+        {"cohort": [cohort.code, None], "student": [student.full_name, None], **lost},
         branch_id=cohort.branch_id,
     )

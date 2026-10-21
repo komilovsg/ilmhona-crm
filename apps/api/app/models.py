@@ -205,6 +205,11 @@ class Enrollment(Versioned, Base):
     student_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("student.id"))
     status: Mapped[str] = mapped_column(Text, server_default=text("'активный'"))
     enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    # set when a manager sets the status by hand: grade changes no longer re-evaluate it
+    status_manual: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # CERT-YYYY-NNNN, only for a graduate (certificate_no_seq)
+    certificate_no: Mapped[str | None] = mapped_column(Text)
+    certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Attendance(Base):
@@ -306,4 +311,20 @@ class Lead(Versioned, Base):
     comment: Mapped[str | None] = mapped_column(Text)
     needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     converted_student_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("student.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Employment(Versioned, Base):
+    """The only place employment lives (#13): graduates, the master list and the employment list
+    all read it from here."""
+
+    __tablename__ = "employment"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    student_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("student.id", ondelete="CASCADE"))
+    enrollment_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="SET NULL")
+    )
+    organization: Mapped[str] = mapped_column(Text)
+    position: Mapped[str | None] = mapped_column(Text)
+    employed_at: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

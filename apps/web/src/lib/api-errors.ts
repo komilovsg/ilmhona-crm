@@ -68,6 +68,9 @@ export const apiErrors: Record<string, string> = {
   import_unreadable: "Не удалось прочитать файл. Нужен CSV.",
   import_no_rows: "В файле нет строк для импорта.",
   import_mapping_invalid: "Выберите колонку с именем или с телефоном.",
+  not_graduate: "Сертификат и трудоустройство — только у выпускника.",
+  certificate_issued: "Сертификат уже выдан: статус «выпускник» не меняется.",
+  employment_enrollment_mismatch: "Это зачисление другого студента.",
 };
 
 // Raised by the browser side only (no response from the API).

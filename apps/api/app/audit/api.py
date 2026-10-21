@@ -3,6 +3,10 @@
 A branch-bound user sees their branch's entries only. Filters: period, section, branch, user,
 action, text. Each entry carries a `link` (entity type + id) when the entity still exists and
 the reader may open it.
+
+Money is shown only with the section that shows it elsewhere: payments and payouts are not
+listed at all, rates and budgets are cut out of the diffs (and the text search) without
+`instructors` / `marketing` view.
 """
 
 import json
@@ -12,6 +16,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import ColumnElement, Text, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import array
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.sentences import (
@@ -27,6 +32,7 @@ from app.audit.sentences import (
 )
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
+from app.core.paging import Page, PageSize
 from app.education.scope import cohort_filters, student_filters
 from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import (
@@ -55,6 +61,23 @@ LINK_SECTION = {
     "app_user": "users",
     "role": "users",
 }
+
+
+# money in the log: whole entities and single diff fields, each behind its section's view
+MONEY_ENTITIES = {"payment": "payments", "instructor_payout": "instructors"}
+MONEY_FIELDS = {
+    "instructor_rate": "instructors",
+    "default_rate": "instructors",
+    "budget": "marketing",
+}
+
+
+def _hidden_fields(p: Principal) -> list[str]:
+    return [f for f, s in MONEY_FIELDS.items() if not allows(p.level(s), "view")]
+
+
+def _visible(diff: dict[str, Any], hidden: list[str]) -> dict[str, Any]:
+    return {k: v for k, v in diff.items() if k not in hidden} if hidden else diff
 
 
 # lessons and enrollments have no page of their own: they open their cohort
@@ -198,6 +221,10 @@ def _audit_where(
     where: list[ColumnElement[bool]] = []
     if p.branch_id is not None:
         where.append(AuditLog.branch_id == p.branch_id)
+    for money_entity, money_section in MONEY_ENTITIES.items():
+        if not allows(p.level(money_section), "view"):
+            where.append(AuditLog.entity != money_entity)
+    hidden = _hidden_fields(p)
     if branch_id:
         where.append(AuditLog.branch_id == branch_id)
     if user_id:
@@ -222,7 +249,10 @@ def _audit_where(
                 AuditLog.entity_id.ilike(like),
                 AppUser.full_name.ilike(like),
                 AppUser.login.ilike(like),
-                cast(AuditLog.diff, Text).ilike(like),
+                cast(
+                    AuditLog.diff.op("-")(array(hidden, type_=Text)) if hidden else AuditLog.diff,
+                    Text,
+                ).ilike(like),
             )
         )
     return where
@@ -238,17 +268,22 @@ def _audit_select(where: list[ColumnElement[bool]]) -> Any:
     )
 
 
-AUDIT_COLUMNS: list[Col[Any]] = [
-    Col("Время", lambda r: r[0].at, "datetime"),
-    Col("Кто", lambda r: r[1] or "Система"),
-    Col("Логин", lambda r: r[2]),
-    Col("Филиал", lambda r: r[3]),
-    Col("Действие", lambda r: " ".join(ACTIONS.get(r[0].action, (r[0].action,)))),
-    Col("Событие", lambda r: r[0].label),
-    Col("Объект", lambda r: TABLES.get(r[0].entity, r[0].entity)),
-    Col("ID объекта", lambda r: r[0].entity_id),
-    Col("Данные", lambda r: json.dumps(r[0].diff, ensure_ascii=False) if r[0].diff else None),
-]
+def _audit_columns(hidden: list[str]) -> list[Col[Any]]:
+    def data(r: Any) -> str | None:
+        diff = _visible(r[0].diff, hidden)
+        return json.dumps(diff, ensure_ascii=False) if diff else None
+
+    return [
+        Col("Время", lambda r: r[0].at, "datetime"),
+        Col("Кто", lambda r: r[1] or "Система"),
+        Col("Логин", lambda r: r[2]),
+        Col("Филиал", lambda r: r[3]),
+        Col("Действие", lambda r: " ".join(ACTIONS.get(r[0].action, (r[0].action,)))),
+        Col("Событие", lambda r: r[0].label),
+        Col("Объект", lambda r: TABLES.get(r[0].entity, r[0].entity)),
+        Col("ID объекта", lambda r: r[0].entity_id),
+        Col("Данные", data),
+    ]
 
 
 @router.get("/export")
@@ -275,7 +310,7 @@ async def export_audit(
         entity="audit_log",
         slug="zhurnal",
         title="Журнал",
-        columns=AUDIT_COLUMNS,
+        columns=_audit_columns(_hidden_fields(p)),
         rows=rows,
         filters={
             "user_id": user_id,
@@ -304,8 +339,8 @@ async def list_audit(
     q: Annotated[str | None, Query(max_length=100)] = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = _audit_where(
         p, user_id, section, branch_id, entity, entity_id, action, q, date_from, date_to
@@ -315,9 +350,11 @@ async def list_audit(
     rows = (
         await db.execute(_audit_select(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
+    hidden = _hidden_fields(p)
+    diffs = {a.id: _visible(a.diff, hidden) for a, *_ in rows}
     refs: set[uuid.UUID] = set()
     for a, *_ in rows:
-        refs |= _refs(a.entity, a.entity_id, a.diff)
+        refs |= _refs(a.entity, a.entity_id, diffs[a.id])
     names = await _names(db, refs)
     sections = {**SECTIONS, "auth": AUTH_LABEL}
     links = await _links(db, p, [a for a, *_ in rows])
@@ -336,9 +373,11 @@ async def list_audit(
                 "section": section_of(a.entity, a.action),
                 "entity": a.entity,
                 "entity_id": a.entity_id,
-                "text": sentence(Entry(name, a.action, a.entity, a.label, a.diff), names, sections),
+                "text": sentence(
+                    Entry(name, a.action, a.entity, a.label, diffs[a.id]), names, sections
+                ),
                 "link": links[a.id],
-                "diff": a.diff,
+                "diff": diffs[a.id],
             }
             for a, name, login, branch in rows
         ],

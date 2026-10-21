@@ -36,7 +36,7 @@ MANAGER_DEFAULT: dict[str, Level] = {
     "leads": "change",
     "students": "change",
     "cohorts": "change",
-    "attendance": "view",
+    "attendance": "change",
     "payments": "change",
     "rooms": "change",
     "graduates": "view",

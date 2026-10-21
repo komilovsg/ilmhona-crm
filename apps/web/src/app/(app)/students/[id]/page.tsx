@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { StudentFormModal } from "../StudentFormModal";
+import { StudentEmployment } from "./StudentEmployment";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { Icon } from "@/components/Icon";
@@ -163,6 +164,11 @@ export default function StudentPage() {
           </ul>
         </>
       )}
+
+      <StudentEmployment
+        graduateEnrollmentId={s.enrollments.find((e) => e.status === "выпускник")?.id ?? null}
+        student={{ id: s.id, name: s.full_name }}
+      />
 
       {editing && <StudentFormModal student={s} onClose={() => setEditing(false)} />}
       {deleting && (

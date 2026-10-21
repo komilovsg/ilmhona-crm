@@ -87,3 +87,35 @@ async def _close_enrollments(db: AsyncSession, cohort: Cohort, actor_id: object)
         {"enrollments_completed": [0, len(active)], "graduates": [0, graduates]},
         branch_id=cohort.branch_id,
     )
+
+
+async def reevaluate(
+    db: AsyncSession, enrollment: Enrollment, cohort: Cohort, actor_id: object
+) -> bool:
+    """A grade changed on a finished cohort: the closed enrollment follows the new total
+    (выпускник at ≥ 70, else завершил), unless a manager set the status by hand
+    (`status_manual`) or a certificate was already issued. True when the status changed."""
+    if (
+        cohort.status != DONE
+        or enrollment.status_manual
+        or enrollment.status not in (GRADUATE, COMPLETED)
+    ):
+        return False
+    result = (await enrollment_results(db, cohort.id, enrollment_ids=[enrollment.id]))[
+        enrollment.id
+    ]
+    new = GRADUATE if result["passed"] else COMPLETED
+    if new == enrollment.status or (enrollment.certificate_no and new != GRADUATE):
+        return False
+    before, enrollment.status = enrollment.status, new
+    await db.flush()
+    await record(
+        db,
+        actor_id,  # type: ignore[arg-type]
+        "enrollment.update",
+        "enrollment",
+        enrollment.id,
+        {"status": [before, new], "reason": [None, "пересчёт по оценкам"]},
+        branch_id=cohort.branch_id,
+    )
+    return True

@@ -23,6 +23,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
 from app.education.scope import check_cohort_visible, cohort_filters, is_instructor, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -313,8 +314,8 @@ async def list_payouts(
     cohort_id: uuid.UUID | None = None,
     branch_id: uuid.UUID | None = None,
     month: MonthOnly = None,
-    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+    page: Page = 1,
+    page_size: PageSize = 25,
 ) -> dict[str, Any]:
     where = _payout_where(p, instructor_id, cohort_id, branch_id, month)
     rows = (

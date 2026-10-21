@@ -55,6 +55,7 @@ async def clean(migrated_database: None) -> None:
     """Every test starts with the seeded branches and system roles only."""
     async with sessionmaker() as db:
         for sql in (
+            "DELETE FROM employment",
             "DELETE FROM lead",
             "DELETE FROM campaign",
             "DELETE FROM instructor_payout",
@@ -94,6 +95,7 @@ TABLES = {
     "instructors": "app_user",
     "leads": "lead",
     "campaigns": "campaign",
+    "employment": "employment",
 }
 
 
