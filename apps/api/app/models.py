@@ -126,6 +126,19 @@ class LoginAttempt(Base):
     login: Mapped[str] = mapped_column(CITEXT, primary_key=True)
     failures: Mapped[int] = mapped_column(Integer, server_default=text("0"))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class LoginIpAttempt(Base):
+    """Failed logins per (login, client address): five bad tries from one address lock only
+    that address for that login. LoginAttempt keeps a higher ceiling for the login itself."""
+
+    __tablename__ = "login_ip_attempt"
+    login: Mapped[str] = mapped_column(CITEXT, primary_key=True)
+    ip: Mapped[str] = mapped_column(Text, primary_key=True)
+    failures: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
 class Room(Versioned, Base):

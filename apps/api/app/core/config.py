@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     refresh_ttl_days: int = 30
     cookie_secure: bool = False
     temp_password_days: int = 7
-    max_failed_logins: int = 5
+    max_failed_logins: int = 5  # per (login, client address)
+    max_failed_logins_global: int = 30  # per login, from any address together
     lockout_minutes: int = 15
+    # The commit this build runs: Render sets it; /api/health reports it so the deploy workflow
+    # can wait until the new commit serves.
+    render_git_commit: str = ""
     # Shared secret the web proxy sends in X-Proxy-Secret (app/core/proxy.py). Comma-separated:
     # two values are accepted while it is rotated. Empty = no check (local development).
     proxy_shared_secret: str = ""

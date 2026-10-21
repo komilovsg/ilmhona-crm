@@ -9,6 +9,7 @@ either way: nothing downstream ever sees the secret.
 
 import hmac
 from collections.abc import Sequence
+from ipaddress import ip_address
 
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
@@ -47,3 +48,17 @@ class ProxySecretRequired:
             await _problem(Request(scope), PROXY_REQUIRED)(scope, receive, send)
             return
         await self.app(scope, receive, send)
+
+
+def client_ip(request: Request) -> str:
+    """The caller's address for the login lockout, or "" when there is none.
+
+    uvicorn (--proxy-headers, FORWARDED_ALLOW_IPS=* on Render) puts the first X-Forwarded-For
+    entry into `request.client`; Vercel overwrites that header with the address it saw. This is
+    safe only together with PROXY_SHARED_SECRET (every request without it is refused before it
+    gets here); without a secret (local development, tests) it is the direct peer."""
+    host = request.client.host if request.client else ""
+    try:
+        return str(ip_address(host))
+    except ValueError:
+        return ""

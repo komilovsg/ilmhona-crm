@@ -61,6 +61,7 @@ async def test_lockout_after_repeated_failures(client: httpx.AsyncClient) -> Non
     assert r.json()["code"] == "too_many_attempts"
     # after the window it works again
     await sql("UPDATE login_attempt SET locked_until = now() - interval '1 minute'")
+    await sql("UPDATE login_ip_attempt SET locked_until = now() - interval '1 minute'")
     await sign_in(client, "anna")
 
 
