@@ -52,6 +52,8 @@ router = APIRouter(
     prefix="/api/v1/auth", tags=["auth"], dependencies=[Depends(require_csrf_header)]
 )
 
+IDLE_TTL = timedelta(hours=12)  # a session without «remember me» ends after this much idle time
+USER_AGENT_MAX = 400
 REUSE_GRACE = timedelta(seconds=10)  # two tabs refreshing at once are not a theft
 
 Login = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
@@ -65,6 +67,7 @@ class Strict(BaseModel):
 class LoginIn(Strict):
     login: Login
     password: Password
+    remember: bool = False
 
 
 class ChangePasswordIn(Strict):
@@ -105,7 +108,7 @@ async def _branch_name(db: AsyncSession, branch_id: uuid.UUID | None) -> str | N
     return (await db.execute(select(Branch.name).where(Branch.id == branch_id))).scalar_one()
 
 
-def _set_cookie(response: Response, name: str, value: str, max_age: int, path: str) -> None:
+def _set_cookie(response: Response, name: str, value: str, max_age: int | None, path: str) -> None:
     response.set_cookie(
         name,
         value,
@@ -122,23 +125,39 @@ def clear_cookies(response: Response) -> None:
     response.delete_cookie(REFRESH_COOKIE, path="/api/v1/auth")
 
 
+def agent_of(request: Request) -> str | None:
+    return (request.headers.get("user-agent") or "")[:USER_AGENT_MAX] or None
+
+
 async def issue_session(
-    db: AsyncSession, response: Response, user_id: uuid.UUID, family_id: uuid.UUID | None = None
+    db: AsyncSession,
+    response: Response,
+    user_id: uuid.UUID,
+    family_id: uuid.UUID | None = None,
+    *,
+    user_agent: str | None = None,
+    remember: bool = True,
 ) -> None:
+    """A new refresh token in the family. «Remember me»: 30 days and persistent cookies;
+    otherwise session cookies (no Max-Age) and the family lives 12 h past its last use."""
     token = new_token()
     family_id = family_id or uuid.uuid4()
+    ttl = timedelta(days=settings.refresh_ttl_days) if remember else IDLE_TTL
     db.add(
         RefreshToken(
             user_id=user_id,
             family_id=family_id,
             token_hash=token_hash(token),
-            expires_at=datetime.now(UTC) + timedelta(days=settings.refresh_ttl_days),
+            expires_at=datetime.now(UTC) + ttl,
+            user_agent=user_agent,
+            remember=remember,
         )
     )
     await db.flush()
     access = make_access_token(user_id, family_id)
-    _set_cookie(response, ACCESS_COOKIE, access, settings.refresh_ttl_days * 86400, "/")
-    _set_cookie(response, REFRESH_COOKIE, token, settings.refresh_ttl_days * 86400, "/api/v1/auth")
+    max_age = int(ttl.total_seconds()) if remember else None
+    _set_cookie(response, ACCESS_COOKIE, access, max_age, "/")
+    _set_cookie(response, REFRESH_COOKIE, token, max_age, "/api/v1/auth")
 
 
 async def revoke_sessions(db: AsyncSession, user_id: uuid.UUID) -> None:
@@ -220,7 +239,7 @@ async def login(body: LoginIn, request: Request, response: Response, db: DB) -> 
         text("DELETE FROM login_ip_attempt WHERE login = :l AND ip = :ip"),
         {"l": body.login, "ip": ip},
     )
-    await issue_session(db, response, user.id)
+    await issue_session(db, response, user.id, user_agent=agent_of(request), remember=body.remember)
     await record(db, user.id, "auth.login", "app_user", user.id, branch_id=user.branch_id)
     role = (await db.execute(select(Role).where(Role.id == user.role_id))).scalar_one()
     p = Principal(user, role, await permissions_of(db, role))
@@ -277,7 +296,9 @@ async def refresh(request: Request, response: Response, db: DB) -> None:
     )
     if claimed.first() is None:
         raise DomainError(NOT_AUTHENTICATED)
-    await issue_session(db, response, user.id, row.family_id)
+    await issue_session(
+        db, response, user.id, row.family_id, user_agent=row.user_agent, remember=row.remember
+    )
 
 
 def _temp_password_expired(user: AppUser, now: datetime) -> bool:
@@ -344,7 +365,21 @@ async def change_password(
     u.must_change_password = False
     u.temp_password_expires_at = None
     u.updated_at = datetime.now(UTC)
+    kept = (
+        await db.execute(
+            select(RefreshToken.user_agent, RefreshToken.remember)
+            .where(RefreshToken.family_id == p.session_id)
+            .order_by(RefreshToken.created_at.desc())
+            .limit(1)
+        )
+    ).first()
     await revoke_sessions(db, u.id)  # every other device signs in again
-    await issue_session(db, response, u.id)
+    await issue_session(
+        db,
+        response,
+        u.id,
+        user_agent=kept[0] if kept else agent_of(request),
+        remember=kept[1] if kept else True,
+    )
     await record(db, u.id, "auth.change_password", "app_user", u.id, branch_id=u.branch_id)
     return me_out(p, await _branch_name(db, u.branch_id))

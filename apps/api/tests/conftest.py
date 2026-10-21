@@ -72,6 +72,7 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM refresh_token",
             "DELETE FROM login_attempt",
             "DELETE FROM login_ip_attempt",
+            "DELETE FROM password_reset_request",
             "DELETE FROM app_user",
             "DELETE FROM role WHERE code IS NULL",
         ):

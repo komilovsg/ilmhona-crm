@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +25,7 @@ from app.core.paging import Page, PageSize
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
 from app.export import MAX_ROWS, Col, xlsx_response
-from app.models import AppUser, Branch, Role
+from app.models import AppUser, Branch, PasswordResetRequest, Role
 from app.permissions import SUPERADMIN_CODE
 from app.users.errors import (
     BRANCH_FORBIDDEN,
@@ -285,6 +285,55 @@ async def create_user(body: UserCreate, p: Change, db: DB) -> dict[str, Any]:
     return {"user": await _out(db, u), "temp_password": password}
 
 
+async def _open_requests(db: AsyncSession, p: Principal) -> list[dict[str, Any]]:
+    """Open «forgot password» requests of users this actor may reset: their branch, and no
+    role above their own (the same rule as the reset itself)."""
+    rows = (
+        await db.execute(
+            select(PasswordResetRequest, AppUser, Role)
+            .join(AppUser, AppUser.id == PasswordResetRequest.user_id)
+            .join(Role, Role.id == AppUser.role_id)
+            .where(PasswordResetRequest.status == "новый")
+            .order_by(PasswordResetRequest.created_at)
+        )
+    ).all()
+    out: list[dict[str, Any]] = []
+    for req, u, role in rows:
+        if not p.in_scope(u.branch_id):
+            continue
+        if not p.is_superadmin and (
+            role.code == SUPERADMIN_CODE or not p.covers(await _role_perms(db, role))
+        ):
+            continue
+        out.append(
+            {
+                "id": req.id,
+                "user_id": u.id,
+                "login": u.login,
+                "full_name": u.full_name,
+                "role_name": role.name,
+                "created_at": req.created_at,
+            }
+        )
+    return out
+
+
+@router.get("/reset-requests")
+async def list_reset_requests(p: Change, db: DB) -> dict[str, Any]:
+    items = await _open_requests(db, p)
+    return {"items": items, "total": len(items)}
+
+
+@router.post("/reset-requests/{request_id}/reject", status_code=204)
+async def reject_reset_request(request_id: uuid.UUID, p: Change, db: DB) -> None:
+    req = await db.get(PasswordResetRequest, request_id)
+    if req is None or req.status != "новый" or req.user_id is None:
+        raise DomainError(NOT_FOUND)
+    u = await _load(db, p, req.user_id, touch=True)
+    req.status, req.handled_by, req.handled_at = "отклонён", p.id, datetime.now(UTC)
+    await record(db, p.id, "user.reset_rejected", "app_user", u.id, branch_id=u.branch_id)
+
+
 @router.get("/{user_id}")
 async def get_user(user_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
     return await _out(db, await _load(db, p, user_id, touch=False))
@@ -337,6 +386,11 @@ async def activate_user(user_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]
     u.temp_password_expires_at = datetime.now(UTC) + timedelta(days=settings.temp_password_days)
     u.updated_at = datetime.now(UTC)
     await revoke_sessions(db, u.id)
+    await db.execute(  # the open «forgot password» requests of this user are answered
+        update(PasswordResetRequest)
+        .where(PasswordResetRequest.user_id == u.id, PasswordResetRequest.status == "новый")
+        .values(status="выполнен", handled_by=p.id, handled_at=datetime.now(UTC))
+    )
     await record(
         db,
         p.id,

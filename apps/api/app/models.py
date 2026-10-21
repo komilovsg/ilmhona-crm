@@ -124,6 +124,31 @@ class RefreshToken(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    # the device (User-Agent at sign-in, kept through rotations), when this token was issued and
+    # whether the user ticked «remember me» (false: the session lives 12 h idle, cookie ends with
+    # the browser)
+    user_agent: Mapped[str | None] = mapped_column(Text)
+    last_used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    remember: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+
+
+class PasswordResetRequest(Base):
+    """«Забыли пароль?»: a request for the administrator. Unknown logins are stored too (user_id
+    null) so the answer and the work done are the same either way; the list shows known ones."""
+
+    __tablename__ = "password_reset_request"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    login: Mapped[str] = mapped_column(CITEXT)
+    user_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    ip: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'новый'"))
+    handled_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class LoginAttempt(Base):
