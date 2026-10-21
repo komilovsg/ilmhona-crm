@@ -417,6 +417,67 @@ if (LOGIN && PASSWORD) {
       await context.close();
     }
 
+    // -- row menus: the «…» popover closes before a (lazy) modal opens and leaves nothing behind
+    for (const vp of [DESKTOP, PHONE]) {
+      for (const path of ["/leads", "/users", "/rooms"]) {
+        const context = await loggedIn(mode, vp);
+        const page = await goto(context, mode, path);
+        const trigger = page.locator('main button[aria-label^="Действия"]:visible').first();
+
+        if (!(await trigger.count())) {
+          if (path === "/leads") bad.push(`${tag}: no row menu found on ${path}, the check proves nothing`);
+          await context.close();
+          continue;
+        }
+        await trigger.click();
+        await page.getByRole("menuitem").first().waitFor();
+        // the modal chunk arrives late (a slow network): the menu must not wait for it to close
+        await page.route("**/_next/static/**", async (route) => {
+          await new Promise((r) => setTimeout(r, 700));
+          await route.continue();
+        });
+        await (path === "/leads" && vp === DESKTOP ? page.getByRole("menuitem", { name: "Изменить" }) : page.getByRole("menuitem")).first().click({ force: true });
+        await page.waitForTimeout(2600);
+        const menus = await count(page, '[role="menu"]');
+        const dialogs = await count(page, '[role="dialog"]');
+
+        expect(menus === 0, `${tag}: row menu left open on ${path} ${vp.width}px (${menus})`);
+        expect(dialogs <= 1, `${tag}: stale dialog on ${path} ${vp.width}px (${dialogs})`);
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(700);
+        expect((await count(page, '[role="menu"]')) === 0 && (await count(page, '[role="dialog"]')) === 0, `${tag}: leftovers after closing on ${path} ${vp.width}px`);
+        await context.close();
+      }
+    }
+
+    // -- a touch tap on the thin backdrop strip above a near-full-height sheet closes it (asks when dirty)
+    {
+      const context = await loggedIn(mode, { width: 390, height: 440 });
+      const page = await goto(context, mode, "/students");
+      const dlg = '[role="dialog"]';
+
+      await page.getByRole("button", { name: /Студент/ }).first().click();
+      await page.locator(dlg).first().waitFor();
+      await page.waitForTimeout(800);
+      const r = await rectOf(page, dlg);
+
+      expect(r.y > 0 && r.y < 24, `${tag}: sheet is not near full height here (${r.y})`);
+      await page.touchscreen.tap(195, r.y / 2);
+      await page.waitForTimeout(700);
+      expect((await count(page, dlg)) === 0, `${tag}: touch on the backdrop strip did not close the sheet`);
+      expect(new URL(page.url()).pathname === "/students", `${tag}: the backdrop tap went through to the page (${page.url()})`);
+      await page.goto(`${BASE}/students`, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: /Студент/ }).first().click();
+      await page.locator(dlg).first().waitFor();
+      await page.waitForTimeout(800);
+      await page.getByLabel(/ФИО/).first().click();
+      await page.keyboard.type("Тест");
+      await page.touchscreen.tap(195, r.y / 2);
+      await page.waitForTimeout(500);
+      expect(await page.getByText("Закрыть без сохранения?").isVisible(), `${tag}: touch on the backdrop strip of a dirty form did not ask`);
+      await context.close();
+    }
+
     // -- desktop: centred modal, guard on Esc and backdrop
     {
       const context = await loggedIn(mode, DESKTOP);

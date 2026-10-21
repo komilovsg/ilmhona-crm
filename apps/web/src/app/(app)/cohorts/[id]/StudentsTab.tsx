@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
+import { useMenu } from "@/components/useMenu";
 
 
 
@@ -33,8 +34,10 @@ const PaymentFormModal = dynamic(() => import("../../payments/PaymentFormModal")
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
   const overlayMotion = useOverlayMotion();
+  const menu = useMenu(onPick);
+
   return (
-    <Dropdown motionProps={overlayMotion} placement="bottom-end">
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" variant="flat">
           {row.status}
@@ -43,7 +46,7 @@ function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: stri
       <DropdownMenu
         aria-label="Статус зачисления"
         disabledKeys={[row.status]}
-        onAction={(key) => onPick(String(key))}
+        onAction={menu.onAction}
       >
         {ENROLLMENT_STATUSES.map((s) => (
           <DropdownItem key={s}>{s}</DropdownItem>

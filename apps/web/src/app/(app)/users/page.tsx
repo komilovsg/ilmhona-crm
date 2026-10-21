@@ -6,6 +6,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { useMenu } from "@/components/useMenu";
 import { SheetHandle } from "@/components/SheetHandle";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { Input } from "@heroui/input";
@@ -104,8 +105,10 @@ function RowMenu({
   onSessions?: () => void;
 }) {
   const overlayMotion = useOverlayMotion();
+  const menu = useMenu((key) => (key === "edit" ? onEdit() : key === "sessions" ? onSessions?.() : onAction(key as Action["kind"])));
+
   return (
-    <Dropdown motionProps={overlayMotion} placement="bottom-end">
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={`Действия: ${user.full_name}`} size="sm" variant="light">
           <Icon name="more" />
@@ -114,9 +117,7 @@ function RowMenu({
       <DropdownMenu
         aria-label="Действия"
         disabledKeys={user.is_active ? [] : ["deactivate"]}
-        onAction={(key) =>
-          key === "edit" ? onEdit() : key === "sessions" ? onSessions?.() : onAction(key as Action["kind"])
-        }
+        onAction={menu.onAction}
       >
         <DropdownItem key="edit" startContent={<Icon name="edit" size={16} />}>
           Изменить
@@ -396,7 +397,7 @@ export default function UsersPage() {
         <DrawerContent>
           {(close) => (
             <>
-              <SheetHandle onClose={close} />
+              <SheetHandle onBackdrop={close} onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields filters={filters} set={set} />

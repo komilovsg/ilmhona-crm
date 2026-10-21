@@ -284,7 +284,7 @@ export default function AuditPage() {
         <DrawerContent>
           {(close) => (
             <>
-              <SheetHandle onClose={close} />
+              <SheetHandle onBackdrop={close} onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields filters={filters} set={set} sections={sections} />

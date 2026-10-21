@@ -519,7 +519,7 @@ export default function PaymentsPage() {
         <DrawerContent>
           {(close) => (
             <>
-              <SheetHandle onClose={close} />
+              <SheetHandle onBackdrop={close} onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields debtors={debtors} filters={filters} set={set} />
