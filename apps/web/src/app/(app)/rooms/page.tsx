@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 
@@ -22,9 +21,10 @@ import { formatPrice } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const CourseFormModal = dynamic(() => import("./forms").then((m) => m.CourseFormModal));
-const RoomFormModal = dynamic(() => import("./forms").then((m) => m.RoomFormModal));
+const CourseFormModal = lazyModal(() => import("./forms").then((m) => m.CourseFormModal));
+const RoomFormModal = lazyModal(() => import("./forms").then((m) => m.RoomFormModal));
 
 type Tab = "schedule" | "rooms" | "courses";
 type Removal = { kind: "room"; item: Room } | { kind: "course"; item: Course };

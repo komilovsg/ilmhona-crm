@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Input } from "@heroui/input";
 
@@ -21,8 +20,9 @@ import { api } from "@/lib/api";
 import { fullDate } from "@/lib/education";
 import type { EmploymentRow, Paged } from "@/lib/reports-types";
 import { notify, notifyError } from "@/lib/toast";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const EmploymentFormModal = dynamic(() => import("../graduates/EmploymentFormModal").then((m) => m.EmploymentFormModal));
+const EmploymentFormModal = lazyModal(() => import("../graduates/EmploymentFormModal").then((m) => m.EmploymentFormModal));
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; from: string; to: string };

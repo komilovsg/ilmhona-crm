@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 
+import { preloadModals } from "@/lib/lazy-modal";
+
 /**
  * Open state of a HeroUI Dropdown that runs the chosen action only after the menu has closed. An action that opens
  * a (lazy-loaded) modal in the same tick left the popover's portal open behind it, over the sheet.
@@ -13,6 +15,7 @@ export function useMenu(run: (key: string) => void) {
 
   const onOpenChange = (next: boolean) => {
     setOpen(next);
+    if (next) preloadModals(); // the modal chunk is on its way before the item is picked
     if (!next && picked.current !== null) {
       const key = picked.current;
 

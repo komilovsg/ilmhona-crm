@@ -24,13 +24,14 @@ import { daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
 
 // Tabs other than the first load on demand; the skeleton keeps the height while the chunk arrives.
 const tabLoading = () => <ListSkeleton />;
 const LessonsTab = dynamic(() => import("./LessonsTab").then((m) => m.LessonsTab), { loading: tabLoading });
 const AttendanceTab = dynamic(() => import("./AttendanceTab").then((m) => m.AttendanceTab), { loading: tabLoading });
 const GradesTab = dynamic(() => import("./GradesTab").then((m) => m.GradesTab), { loading: tabLoading });
-const CohortFormModal = dynamic(() => import("../CohortFormModal").then((m) => m.CohortFormModal));
+const CohortFormModal = lazyModal(() => import("../CohortFormModal").then((m) => m.CohortFormModal));
 
 type Tab = "students" | "lessons" | "attendance" | "grades";
 type Action = "cancel" | "restore" | "delete";

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
@@ -25,8 +24,9 @@ import { api } from "@/lib/api";
 import { COHORT_STATUSES, daysLabel, fullDate } from "@/lib/education";
 import type { CohortRow, Paged } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const CohortFormModal = dynamic(() => import("./CohortFormModal").then((m) => m.CohortFormModal));
+const CohortFormModal = lazyModal(() => import("./CohortFormModal").then((m) => m.CohortFormModal));
 
 const PAGE_SIZE = 12;
 type Filters = { q: string; status: string | null; branch: string | null };

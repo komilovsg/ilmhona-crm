@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 
 
@@ -21,9 +20,10 @@ import { api } from "@/lib/api";
 import { monthOf, monthOptions } from "@/lib/money";
 import { todayIso } from "@/lib/education";
 import type { InstructorCard, PayoutsPage, SalaryData, SalaryRow } from "@/lib/money-types";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const RateModal = dynamic(() => import("../instructors/RateModal").then((m) => m.RateModal));
-const PayoutModal = dynamic(() => import("./PayoutModal").then((m) => m.PayoutModal));
+const RateModal = lazyModal(() => import("../instructors/RateModal").then((m) => m.RateModal));
+const PayoutModal = lazyModal(() => import("./PayoutModal").then((m) => m.PayoutModal));
 
 type Tab = "schedule" | "payouts";
 const PAGE_SIZE = 25;

@@ -429,6 +429,9 @@ if (LOGIN && PASSWORD) {
           await context.close();
           continue;
         }
+        await page.waitForTimeout(500);
+        const busyBefore = await count(page, '[aria-busy="true"]');
+
         await trigger.click();
         await page.getByRole("menuitem").first().waitFor();
         // the modal chunk arrives late (a slow network): the menu must not wait for it to close
@@ -437,7 +440,9 @@ if (LOGIN && PASSWORD) {
           await route.continue();
         });
         await (path === "/leads" && vp === DESKTOP ? page.getByRole("menuitem", { name: "Изменить" }) : page.getByRole("menuitem")).first().click({ force: true });
-        await page.waitForTimeout(2600);
+        await page.waitForTimeout(300);
+        expect(busyBefore > 0 || (await count(page, '[aria-busy="true"]')) === 0, `${tag}: the page fell back to skeletons while the modal chunk loaded on ${path} ${vp.width}px`);
+        await page.waitForTimeout(2300);
         const menus = await count(page, '[role="menu"]');
         const dialogs = await count(page, '[role="dialog"]');
 

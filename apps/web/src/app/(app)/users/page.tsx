@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
@@ -29,9 +28,10 @@ import { can } from "@/lib/permissions";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged, TempPassword, UserRow } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const UserFormModal = dynamic(() => import("./UserFormModal").then((m) => m.UserFormModal));
-const TempPasswordModal = dynamic(() => import("@/components/TempPasswordModal").then((m) => m.TempPasswordModal));
+const UserFormModal = lazyModal(() => import("./UserFormModal").then((m) => m.UserFormModal));
+const TempPasswordModal = lazyModal(() => import("@/components/TempPasswordModal").then((m) => m.TempPasswordModal));
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
@@ -20,8 +19,9 @@ import { api } from "@/lib/api";
 import { formatPrice } from "@/lib/education";
 import { telHref } from "@/lib/format";
 import type { InstructorCard, InstructorDetail } from "@/lib/money-types";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const RateModal = dynamic(() => import("./RateModal").then((m) => m.RateModal));
+const RateModal = lazyModal(() => import("./RateModal").then((m) => m.RateModal));
 
 type Editing = { title: string; hint?: string; record: RateRecord; field: string; request: (rate: string, version: number) => Promise<unknown> };
 

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
@@ -25,8 +24,9 @@ import { dushanbeDay, telHref } from "@/lib/format";
 import { notifyError } from "@/lib/toast";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
 
-const StudentFormModal = dynamic(() => import("./StudentFormModal").then((m) => m.StudentFormModal));
+const StudentFormModal = lazyModal(() => import("./StudentFormModal").then((m) => m.StudentFormModal));
 
 const PAGE_SIZE = 25;
 
