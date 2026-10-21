@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
 
-import { StudentFormModal } from "./StudentFormModal";
 
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -25,6 +25,8 @@ import { dushanbeDay, telHref } from "@/lib/format";
 import { notifyError } from "@/lib/toast";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
+
+const StudentFormModal = dynamic(() => import("./StudentFormModal").then((m) => m.StudentFormModal));
 
 const PAGE_SIZE = 25;
 

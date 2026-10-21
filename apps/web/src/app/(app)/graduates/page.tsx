@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Chip } from "@heroui/chip";
 import { Input } from "@heroui/input";
 
-import { EmploymentFormModal } from "./EmploymentFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -27,6 +27,8 @@ import { orDash } from "@/lib/reports";
 import { percentLabel } from "@/lib/sales";
 import type { GraduateCourseRow, GraduateRow, Paged } from "@/lib/reports-types";
 import { notify, notifyError } from "@/lib/toast";
+
+const EmploymentFormModal = dynamic(() => import("./EmploymentFormModal").then((m) => m.EmploymentFormModal));
 
 const PAGE_SIZE = 25;
 type View = "students" | "courses";

@@ -11,6 +11,12 @@ const nextConfig: NextConfig = {
   // These static headers apply to every path, including static assets the proxy does not cover.
   async headers() {
     return [
+      // /api/* answers carry Cache-Control: no-store from src/proxy.ts (headers() does not reach a proxied response).
+      // Hashed build output (/_next/static) is immutable by default; these public files keep their name, so a week.
+      ...["/brand/:path*", "/icon-192.png", "/icon-512.png", "/icon-maskable-192.png", "/icon-maskable-512.png"].map((source) => ({
+        source,
+        headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
+      })),
       {
         source: "/:path*",
         headers: [

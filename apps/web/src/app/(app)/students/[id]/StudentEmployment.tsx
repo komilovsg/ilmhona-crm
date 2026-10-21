@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 
-import { EmploymentFormModal } from "../../graduates/EmploymentFormModal";
 
 import { Icon } from "@/components/Icon";
 import { RowMenu } from "@/components/RowMenu";
@@ -12,6 +12,8 @@ import { useCanChangeGraduates, useCanSeeGraduates } from "@/hooks/reports";
 import { api } from "@/lib/api";
 import { fullDate } from "@/lib/education";
 import type { EmploymentRow, Paged } from "@/lib/reports-types";
+
+const EmploymentFormModal = dynamic(() => import("../../graduates/EmploymentFormModal").then((m) => m.EmploymentFormModal));
 
 /** The student's jobs (the one employment table). Adding needs a graduate enrollment. */
 export function StudentEmployment({ student, graduateEnrollmentId }: { student: { id: string; name: string }; graduateEnrollmentId: string | null }) {

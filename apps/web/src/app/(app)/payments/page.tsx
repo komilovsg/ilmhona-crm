@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useMutation, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
@@ -9,7 +10,6 @@ import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@
 import { SheetHandle } from "@/components/SheetHandle";
 import { Input } from "@heroui/input";
 
-import { PaymentFormModal } from "./PaymentFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -33,6 +33,8 @@ import type { DebtorRow, DebtorsPage, PaymentRow, PaymentsPage } from "@/lib/mon
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import { useOverlayMotion } from "@/lib/motion";
+
+const PaymentFormModal = dynamic(() => import("./PaymentFormModal").then((m) => m.PaymentFormModal));
 
 const PAGE_SIZE = 25;
 type Tab = "payments" | "debtors";
