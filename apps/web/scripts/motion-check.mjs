@@ -23,6 +23,8 @@ import { chromium } from "playwright-core";
 const BASE = process.env.WEB_URL ?? "http://localhost:3560";
 const LOGIN = process.env.CRM_LOGIN;
 const PASSWORD = process.env.CRM_PASSWORD;
+// MOTION_ONLY=gestures runs part 3 alone (quick loop while working on it); the full run is the gate
+const ONLY = process.env.MOTION_ONLY;
 const bad = [];
 const browser = await chromium.launch();
 
@@ -37,7 +39,7 @@ const effectiveOpacity = (selector) => {
   return o;
 };
 
-for (const [label, ctxOptions] of [
+for (const [label, ctxOptions] of ONLY ? [] : [
   ["reduced motion", { reducedMotion: "reduce" }],
   ["reduced motion, no JS", { reducedMotion: "reduce", javaScriptEnabled: false }],
   ["normal", {}],
@@ -247,7 +249,7 @@ const CASES = [
   },
 ];
 
-if (LOGIN && PASSWORD) {
+if (LOGIN && PASSWORD && !ONLY) {
   for (const mode of ["normal", "reduced before load", "reduced toggled"]) {
     for (const c of CASES) {
       const context = await loggedIn(mode, c.viewport);
@@ -263,7 +265,7 @@ if (LOGIN && PASSWORD) {
       await context.close();
     }
   }
-} else {
+} else if (!ONLY) {
   console.log("overlays skipped: set CRM_LOGIN and CRM_PASSWORD");
 }
 
@@ -305,7 +307,7 @@ if (LOGIN && PASSWORD) {
       await exportBtn.click();
       await page.locator("[data-toast]").first().waitFor();
       await page.waitForTimeout(700);
-      const r0 = await rectOf(page, "[data-toast]");
+      const r0 = await rectOf(page, "[data-toast] > div");
       const cy = r0.y + r0.h / 2;
 
       expect(r0.y < 100 && r0.y >= 0, `${tag}: toast not at the top (y ${r0.y})`);
@@ -318,7 +320,7 @@ if (LOGIN && PASSWORD) {
       await page.waitForTimeout(600);
       expect((await count(page, "[data-toast]")) === 1, `${tag}: a 12 px nudge dismissed the toast`);
       const up = await touchSwipe(page, [150, cy], [150, cy - 70], { steps: 6 });
-      const mid = await rectOf(page, "[data-toast]");
+      const mid = await rectOf(page, "[data-toast] > div");
 
       expect(r0.y - mid.y > 30, `${tag}: the toast did not follow the finger (${r0.y} -> ${mid.y})`);
       await up.release();
@@ -327,7 +329,7 @@ if (LOGIN && PASSWORD) {
       await exportBtn.click();
       await page.locator("[data-toast]").first().waitFor();
       await page.waitForTimeout(700);
-      const r1 = await rectOf(page, "[data-toast]");
+      const r1 = await rectOf(page, "[data-toast] > div");
       const side = await touchSwipe(page, [100, r1.y + r1.h / 2], [300, r1.y + r1.h / 2], { steps: 6 });
 
       await side.release();

@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { AnimatePresence, animate, motion, useMotionValue, type PanInfo, type Variants } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, type PanInfo, type Variants } from "framer-motion";
 
 import { useIsPhone, useReducedMotion } from "@/lib/client-store";
-import { toastSwipe } from "@/lib/sheet";
+import { toastSwipe, type SwipeDir } from "@/lib/sheet";
 import { dismissToast, getServerToasts, getToasts, subscribeToasts, TOAST_MS, type Toast } from "@/lib/toast-store";
 
 const OFF = "calc(100% + 24px)";
@@ -24,7 +24,12 @@ function variantsFor(phone: boolean, reduced: boolean): Variants {
   return {
     hidden: { opacity: 0, ...away },
     shown: { opacity: 1, x: 0, y: 0, transition: { type: "spring", duration: 0.38, bounce: 0.12 } },
-    gone: { opacity: 0, ...away, transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } },
+    // a swiped toast leaves the way it was thrown
+    gone: (dir?: SwipeDir) => ({
+      opacity: 0,
+      ...(dir === "left" ? { x: "-120%" } : dir === "right" ? { x: "120%" } : dir === "up" ? { y: "calc(-100% - 24px)" } : away),
+      transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
+    }),
   };
 }
 
@@ -52,29 +57,29 @@ function ToastItem({ toast, phone, reduced }: { toast: Toast; phone: boolean; re
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [thrown, setThrown] = useState<SwipeDir | null>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const close = useCallback(() => dismissToast(toast.id), [toast.id]);
 
   useCountdown(TOAST_MS[toast.kind], hovered || focused || dragging, close);
 
+  // a swipe sets `thrown`; the next render carries it to the exit variant, then the toast is removed
+  useEffect(() => {
+    if (thrown) close();
+  }, [thrown, close]);
+
   function onDragEnd(_: unknown, info: PanInfo) {
     setDragging(false);
     const dir = toastSwipe({ dx: info.offset.x, dy: info.offset.y, vx: info.velocity.x, vy: info.velocity.y });
 
-    if (!dir) return;
-    if (reduced) return close(); // fades out where the finger left it
-    // carry the finger's velocity into the exit so there is no seam between the drag and the fling
-    const target = dir === "up" ? y : x;
-    const end = dir === "up" ? -400 : dir === "left" ? -window.innerWidth : window.innerWidth;
-    const v = dir === "up" ? info.velocity.y : info.velocity.x;
-
-    animate(target, end, { type: "spring", stiffness: 300, damping: 40, velocity: v, restDelta: 4, onComplete: close });
+    if (dir) setThrown(dir);
   }
 
   return (
     <motion.li
       animate="shown"
+      custom={thrown ?? undefined}
       data-toast=""
       exit="gone"
       initial="hidden"
