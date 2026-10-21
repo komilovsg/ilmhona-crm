@@ -1,4 +1,6 @@
-// Pure helpers of the sales screens (no React, no imports: unit-tested with node --test).
+// Pure helpers of the sales screens (unit-tested with node --test).
+
+import { formatPrice } from "./education.ts";
 
 export const LEAD_STATUSES = ["новый", "заинтересован", "нулевой урок", "записан", "отказ"] as const;
 export const CALL_STATUSES = ["не звонили", "не ответил", "позвонили", "перезвонить"] as const;
@@ -76,7 +78,7 @@ export function telegramHref(phone: string | null | undefined): string | null {
 export function moneyOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
 
-  return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(Number(value))} TJS`;
+  return formatPrice(value);
 }
 
 export function percentLabel(value: number): string {

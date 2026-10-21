@@ -39,13 +39,14 @@ async def test_bug_14_lead_ids_are_generated_by_the_database(admin: httpx.AsyncC
 @pytest.mark.parametrize(
     ("raw", "name", "review"),
     [
-        ("🔥 Алишер 🔥", "Алишер", False),
-        ("Нигина ❤️", "Нигина", False),
-        ("𝗟𝗶𝘃𝗲 𝗦𝗰𝗵𝗼𝗼𝗹", "Live School", False),
-        ("Ａｌｉ Ｋａｒｉｍｏｖ", "Ali Karimov", False),
-        ("Али​бер‍ди", "Алиберди", False),
+        ("🔥 Алишер 🔥", "Алишер", True),
+        ("Нигина ❤️", "Нигина", True),
+        ("𝗟𝗶𝘃𝗲 𝗦𝗰𝗵𝗼𝗼𝗹", "Live School", True),
+        ("𝗟𝗶𝘃𝗲𝗿𝗽𝗼𝗼𝗹 𝗙𝗮𝗻 𝗘𝗱𝗶𝘁𝘀 🔴", "Liverpool Fan Edits", True),
+        ("Ａｌｉ Ｋａｒｉｍｏｖ", "Ali Karimov", True),
+        ("Али​бер‍ди", "Алиберди", True),
         ("  Нигина    Рахимова  ", "Нигина Рахимова", False),
-        ("✨ Мадина ✨", "Мадина", False),
+        ("✨ Мадина ✨", "Мадина", True),
         ("Ӣсо Нурализода", "Ӣсо Нурализода", False),
         ("Dilnoza O'Neil", "Dilnoza O'Neil", False),
         ("Курбон | Школа Эльбрус", "Курбон Школа Эльбрус", True),
@@ -72,7 +73,7 @@ async def test_bug_15_api_keeps_the_original_and_flags(admin: httpx.AsyncClient)
     assert (ok["full_name"], ok["raw_name"], ok["needs_review"]) == (
         "Алишер",
         "🔥 Алишер 🔥",
-        False,
+        True,
     )
     bad = await make_lead(admin, "latipov_008_")
     assert (bad["full_name"], bad["raw_name"], bad["needs_review"]) == (
@@ -81,7 +82,7 @@ async def test_bug_15_api_keeps_the_original_and_flags(admin: httpx.AsyncClient)
         True,
     )
     only = (await admin.get(L, params={"needs_review": "true"})).json()
-    assert [i["id"] for i in only["items"]] == [bad["id"]]
+    assert {i["id"] for i in only["items"]} == {ok["id"], bad["id"]}
     # a person fixes the name: it is re-checked and the flag goes
     r = await admin.patch(f"{L}/{bad['id']}", json={"full_name": "Латипов Фарход"})
     assert (r.json()["full_name"], r.json()["needs_review"]) == ("Латипов Фарход", False)
@@ -385,7 +386,7 @@ async def test_import_preview_writes_nothing_and_flags(admin: httpx.AsyncClient)
     rows = {x["line"]: x for x in body["rows"]}
     assert (rows[2]["full_name"], rows[2]["needs_review"], rows[2]["source"]) == (
         "Алишер Каримов",
-        False,
+        True,
         "Facebook",
     )
     assert (rows[2]["phone"], rows[2]["raw_name"]) == ("+992901112233", "🔥 Алишер Каримов")
@@ -402,7 +403,7 @@ async def test_import_preview_writes_nothing_and_flags(admin: httpx.AsyncClient)
         "rows": 5,
         "importable": 4,
         "skipped": 1,
-        "needs_review": 2,
+        "needs_review": 3,
         "duplicates": 2,
     }
 
@@ -419,7 +420,7 @@ async def test_import_confirm_creates_leads(admin: httpx.AsyncClient) -> None:
         course_id=str(course),
     )
     assert r.status_code == 201, r.text
-    assert (r.json()["created"], r.json()["skipped"], r.json()["needs_review"]) == (4, 1, 2)
+    assert (r.json()["created"], r.json()["skipped"], r.json()["needs_review"]) == (4, 1, 3)
     rows = (await admin.get(L)).json()["items"]
     assert len(rows) == 4
     assert {i["campaign_id"] for i in rows} == {camp["id"]}
@@ -428,7 +429,7 @@ async def test_import_confirm_creates_leads(admin: httpx.AsyncClient) -> None:
     log = await sql("SELECT action FROM audit_log WHERE entity = 'lead'")
     assert [x[0] for x in log] == ["lead.import"]
     audit = (await admin.get("/api/v1/audit", params={"entity": "lead"})).json()["items"]
-    assert "импортировано лидов из CSV: 4, из них на проверку: 2" in audit[0]["text"]
+    assert "импортировано лидов из CSV: 4, из них на проверку: 3" in audit[0]["text"]
 
 
 async def test_import_mapping_semicolons_utf16_and_cp1251(admin: httpx.AsyncClient) -> None:
@@ -583,3 +584,24 @@ async def test_audit_sentences(admin: httpx.AsyncClient) -> None:
     assert any("статус новый → заинтересован" in t for t in texts)
     assert any("лид Анна Каримова записан — создан новый студент Анна Каримова" in t for t in texts)
     assert sentence(Entry("Курбон", "lead.delete", "lead", "Анна", {})) == "Курбон: удалён лид Анна"
+
+
+async def test_implausible_phone_goes_to_review(admin: httpx.AsyncClient) -> None:
+    for bad in ("abc", "12", "+7"):
+        assert (await make_lead(admin, "Анна Каримова", phone=bad))["needs_review"] is True, bad
+    assert (await make_lead(admin, "Анна Каримова", phone="+7 495 123 45 67"))[
+        "needs_review"
+    ] is False
+    assert (await make_lead(admin, "Анна Каримова", phone="901234567"))["needs_review"] is False
+    good = await make_lead(admin, "Борис Каримов", phone="901234567")
+    r = await admin.patch(f"{L}/{good['id']}", json={"phone": "12"})
+    assert r.json()["needs_review"] is True
+    table = [
+        ["full_name", "phone_number"],
+        ["Анна Каримова", "abc"],
+        ["Борис Каримов", "901112233"],
+    ]
+    r = await _post(
+        admin, "/import/preview", csv_bytes(table), branch_id=str(await branch_id("Душанбе"))
+    )
+    assert [x["needs_review"] for x in r.json()["rows"]] == [True, False]

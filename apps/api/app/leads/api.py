@@ -36,7 +36,7 @@ from app.leads.errors import (
     LEAD_CONVERTED,
     LEAD_USE_CONVERT,
 )
-from app.leads.hygiene import clean_name, phone_key, phone_parts
+from app.leads.hygiene import clean_name, phone_key, phone_parts, phone_plausible
 from app.leads.query import lead_where
 from app.leads.scope import LeadReader, LeadWriter
 from app.metrics import cohort_enrolled
@@ -279,7 +279,7 @@ async def list_leads(
     callback: bool = False,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=1)] = 1,
+    page: Annotated[int, Query(ge=1, le=100_000)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> dict[str, Any]:
     where = lead_where(
@@ -389,6 +389,7 @@ async def create_lead(body: LeadCreate, p: LeadWriter, db: DB) -> dict[str, Any]
         comment=body.comment or None,
     )
     _apply_name(lead, body.full_name)
+    lead.needs_review = lead.needs_review or not phone_plausible(phone_raw)
     db.add(lead)
     await db.flush()
     await record(
@@ -437,6 +438,8 @@ async def update_lead(
         lead.needs_review = body.needs_review  # a person looked: the flag is theirs to set
     if "phone" in sent:
         lead.phone, lead.phone_raw = phone_parts(body.phone)
+        if not phone_plausible(lead.phone_raw) and "needs_review" not in sent:
+            lead.needs_review = True  # a number nobody can call goes to a person
     if "course_id" in sent:
         await _check_course(db, body.course_id)
         lead.course_id = body.course_id
@@ -514,6 +517,9 @@ async def convert_lead(
     ).scalar_one_or_none()
     if lead is None:
         raise DomainError(NOT_FOUND)
+    # converting creates or links a student and shows who it is: a students write
+    if not allows(p.level("students"), "change"):
+        raise DomainError(FORBIDDEN, section="students", level="change")
     cohort: Cohort | None = None
     if body.cohort_id is not None:
         if not allows(p.level("cohorts"), "change"):
@@ -617,7 +623,8 @@ async def _enroll(
 
 async def _read_body(request: Request) -> bytes:
     """The raw CSV, capped while it streams in (the limit holds even without Content-Length)."""
-    if int(request.headers.get("content-length") or 0) > importer.MAX_BYTES:
+    declared = request.headers.get("content-length") or ""
+    if declared.isdigit() and int(declared) > importer.MAX_BYTES:
         raise DomainError(IMPORT_TOO_LARGE, limit=importer.MAX_BYTES)
     data = bytearray()
     async for chunk in request.stream():

@@ -93,6 +93,8 @@ export default function SalariesPage() {
         onChange={(t) => {
           setTab(t);
           reset();
+          // payouts are made after the month: the current month alone looks empty
+          if (t === "payouts" && month === current) setMonth("all");
         }}
       />
 
