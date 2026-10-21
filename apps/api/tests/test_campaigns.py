@@ -122,8 +122,10 @@ async def test_campaign_validation(admin: httpx.AsyncClient) -> None:
 
 async def test_campaign_version_conflict_and_delete(admin: httpx.AsyncClient) -> None:
     camp = await make_campaign(admin)
-    await admin.patch(f"{CA}/{camp['id']}", json={"budget": "5"}, headers={"If-Match": "1"})
-    stale = await admin.patch(f"{CA}/{camp['id']}", json={"budget": "6"}, headers={"If-Match": "1"})
+    await admin.patch(f"{CA}/{camp['id']}", json={"budget": "5"}, headers={"X-Record-Version": "1"})
+    stale = await admin.patch(
+        f"{CA}/{camp['id']}", json={"budget": "6"}, headers={"X-Record-Version": "1"}
+    )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     await make_lead(admin, "Анна", campaign_id=camp["id"])
     r = await admin.delete(f"{CA}/{camp['id']}")

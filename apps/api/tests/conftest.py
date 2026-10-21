@@ -123,42 +123,42 @@ TABLES = {
 
 class Browser(httpx.AsyncClient):
     """A browser. Like the web app, `patch` / `put` send the version of the record as it is now
-    in `If-Match` (#25), unless the test passes its own `headers={"If-Match": ...}` or
+    in `X-Record-Version` (#25), unless the test passes its own `headers={"X-Record-Version": ...}` or
     `no_version=True`: tests of the conflict itself set the header by hand."""
 
     async def _with_version(self, url: str, kw: dict[str, Any]) -> None:
         headers = dict(kw.get("headers") or {})
-        if kw.pop("no_version", False) or "If-Match" in headers:
+        if kw.pop("no_version", False) or "X-Record-Version" in headers:
             return
         parts = url.split("?")[0].rstrip("/").split("/")
         if parts[-1] == "grade":
             rows = await sql("SELECT version FROM grade WHERE enrollment_id = :i", i=parts[-2])
-            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
             return
         if parts[-1] == "review":  # /enrollments/<id>/review edits the enrollment row
             rows = await sql("SELECT version FROM enrollment WHERE id = :i", i=parts[-2])
-            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
             return
         if parts[-1] == "rate":  # /salaries/cohorts/<id>/rate edits the cohort row
             rows = await sql("SELECT version FROM cohort WHERE id = :i", i=parts[-2])
-            kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
             return
         if parts[-1] == "me":
             version = (await self.get(url)).json()["version"]
         else:
             rows = await sql(f"SELECT version FROM {TABLES[parts[-2]]} WHERE id = :i", i=parts[-1])
             version = rows[0][0] if rows else 1
-        kw["headers"] = {**headers, "If-Match": str(version)}
+        kw["headers"] = {**headers, "X-Record-Version": str(version)}
 
     async def post(self, url: Any, **kw: Any) -> httpx.Response:
         parts = str(url).split("?")[0].rstrip("/").split("/")
         if parts[-1] in ("confirm", "unconfirm") and parts[-3] == "payments":
             headers = dict(kw.get("headers") or {})
-            if not kw.pop("no_version", False) and "If-Match" not in headers:
+            if not kw.pop("no_version", False) and "X-Record-Version" not in headers:
                 rows = await sql("SELECT version FROM payment WHERE id = :i", i=parts[-2])
-                kw["headers"] = {**headers, "If-Match": str(rows[0][0] if rows else 1)}
+                kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
         return await super().post(url, **kw)
 
     async def patch(self, url: Any, **kw: Any) -> httpx.Response:

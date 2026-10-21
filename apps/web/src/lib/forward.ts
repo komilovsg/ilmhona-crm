@@ -2,6 +2,9 @@
 export const PROXY_SECRET_HEADER = "x-proxy-secret";
 /** The one header the API believes for the client address, set here (never by the browser). */
 export const CLIENT_IP_HEADER = "x-client-ip";
+/** The browser's User-Agent, copied here because the rewrite does not carry it to the API. */
+export const CLIENT_UA_HEADER = "x-client-ua";
+const CLIENT_UA_MAX = 400;
 
 // Forwarding headers a client could send to spoof its address: dropped before we forward, so the
 // API only ever sees the address we put in CLIENT_IP_HEADER below.
@@ -36,6 +39,9 @@ export function apiRequestHeaders(
 ): Headers {
   const headers = new Headers(incoming);
   headers.delete(PROXY_SECRET_HEADER);
+  headers.delete(CLIENT_UA_HEADER);
+  const agent = incoming.get("user-agent")?.slice(0, CLIENT_UA_MAX);
+  if (agent) headers.set(CLIENT_UA_HEADER, agent);
   for (const h of CLIENT_FORWARDING_HEADERS) headers.delete(h);
   const value = secret?.split(",")[0]?.trim();
   if (value) {

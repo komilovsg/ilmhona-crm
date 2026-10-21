@@ -80,7 +80,7 @@ async def test_students_filter_and_clear_the_flag(admin: httpx.AsyncClient) -> N
     stale = await admin.patch(
         f"/api/v1/students/{zarina['id']}",
         json={"needs_review": False},
-        headers={"If-Match": str(zarina["version"] + 5)},
+        headers={"X-Record-Version": str(zarina["version"] + 5)},
     )
     assert stale.status_code == 409
     done = await admin.patch(f"/api/v1/students/{zarina['id']}", json={"needs_review": False})

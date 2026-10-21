@@ -257,7 +257,9 @@ async def update_employment(
     async def current() -> dict[str, Any]:
         return _out(await _one(db, p, employment_id))
 
-    await check_version(db, job, version, "employment", current)
+    await check_version(
+        db, job, version, "employment", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = _snapshot(job)
     sent = body.model_fields_set
     if "enrollment_id" in sent:

@@ -174,7 +174,14 @@ async def update_instructor(
     if p.branch_id is not None and u.branch_id != p.branch_id:
         # an instructor of all branches: their default rate seeds the other branch's cohorts too
         raise DomainError(BRANCH_FORBIDDEN)
-    await check_version(db, u, version, "app_user", lambda: _detail(db, p, u, branch))
+    await check_version(
+        db,
+        u,
+        version,
+        "app_user",
+        lambda: _detail(db, p, u, branch),
+        changes=body.model_dump(exclude_unset=True),
+    )
     before = {"default_rate": str(u.default_rate)}
     u.default_rate = body.default_rate
     await db.flush()

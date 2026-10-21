@@ -23,7 +23,7 @@ type Options<R extends { version: number }, V extends Values> = {
   toValues: (record: R) => V;
   /** Put fields back into the form (after «Обновить и повторить»). */
   apply: (values: V) => void;
-  /** The PATCH: `changed` has only the fields the user changed; `version` goes to `If-Match`. */
+  /** The PATCH: `changed` has only the fields the user changed; `version` goes to `X-Record-Version`. */
   request: (changed: Partial<V>, version: number, all: V) => Promise<unknown>;
   /** Field names for the conflict dialog, and optional value formatters. */
   labels: Partial<Record<keyof V, string>>;

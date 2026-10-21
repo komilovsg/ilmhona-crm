@@ -95,7 +95,9 @@ async def test_empty_grade_patch_does_not_bump_the_version(admin: httpx.AsyncCli
     cohort, _ = await past_cohort(admin)
     e = await enroll(admin, cohort, "Алиев")
     assert (await admin.patch(f"{E}/{e}/grade", json={"homework": 10})).status_code == 200
-    r = await admin.patch(f"{E}/{e}/grade", json={}, headers={"If-Match": "2"})
+    r = await admin.patch(f"{E}/{e}/grade", json={}, headers={"X-Record-Version": "2"})
     assert r.status_code == 200 and r.json()["version"] == 2
-    r = await admin.patch(f"{E}/{e}/grade", json={"homework": 10}, headers={"If-Match": "2"})
+    r = await admin.patch(
+        f"{E}/{e}/grade", json={"homework": 10}, headers={"X-Record-Version": "2"}
+    )
     assert r.status_code == 200 and r.json()["version"] == 2

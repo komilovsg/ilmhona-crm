@@ -424,7 +424,9 @@ async def update_lead(
     async def current() -> dict[str, Any]:
         return await _detail(db, p, lead)
 
-    await check_version(db, lead, version, "lead", current)
+    await check_version(
+        db, lead, version, "lead", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = _snapshot(lead)
     sent = body.model_fields_set
     if "status" in sent and body.status is not None and body.status != lead.status:

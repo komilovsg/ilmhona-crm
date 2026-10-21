@@ -38,7 +38,7 @@ from app.core.db import DB
 from app.core.errors import NOT_AUTHENTICATED, DomainError
 from app.core.password_policy import MAX_LENGTH as PASSWORD_MAX_LENGTH
 from app.core.password_policy import policy, violations
-from app.core.proxy import client_ip
+from app.core.proxy import CLIENT_UA_HEADER, VIA_PROXY, client_ip
 from app.core.security import (
     hash_password,
     new_token,
@@ -126,7 +126,13 @@ def clear_cookies(response: Response) -> None:
 
 
 def agent_of(request: Request) -> str | None:
-    return (request.headers.get("user-agent") or "")[:USER_AGENT_MAX] or None
+    # Behind the web proxy the rewrite does not carry the browser's User-Agent: the proxy sends it
+    # in X-Client-UA, believed only once the proxy secret matched (like X-Client-IP).
+    via_proxy = request.scope.get(VIA_PROXY)
+    agent = (via_proxy and request.headers.get(CLIENT_UA_HEADER)) or request.headers.get(
+        "user-agent"
+    )
+    return (agent or "")[:USER_AGENT_MAX] or None
 
 
 async def issue_session(
@@ -329,7 +335,9 @@ async def update_me(body: ProfileIn, version: Version, p: CurrentUser, db: DB) -
     async def current() -> dict[str, Any]:
         return me_out(p, await _branch_name(db, u.branch_id))
 
-    await check_version(db, u, version, "app_user", current)
+    await check_version(
+        db, u, version, "app_user", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = {"full_name": u.full_name, "phone": u.phone, "email": u.email}
     sent = body.model_fields_set
     if "full_name" in sent and body.full_name:
