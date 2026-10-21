@@ -110,6 +110,38 @@ async def test_api_refuses_callers_that_bypass_the_web_proxy(guarded: httpx.Asyn
     assert (await guarded.get("/api/health")).status_code == 200
 
 
+async def test_lockout_keys_on_proxy_client_ip_not_forged_xff(guarded: httpx.AsyncClient) -> None:
+    """A spoofed X-Forwarded-For cannot steer the per-address lockout: the key is the single
+    X-Client-IP the web proxy sets. Six bad tries from one real address (rotating XFF) → 429."""
+    await make_user("anna", "manager")
+    bad = {"login": "anna", "password": "bad-bad-1!"}
+    base = {"X-Proxy-Secret": SECRET, "x-client-ip": "203.0.113.9"}
+    for n in range(5):
+        r = await guarded.post(
+            f"{A}/login", json=bad, headers={**base, "x-forwarded-for": f"10.0.0.{n}"}
+        )
+        assert r.status_code == 401
+    r = await guarded.post(f"{A}/login", json=bad, headers={**base, "x-forwarded-for": "10.9.9.9"})
+    assert (r.status_code, r.json()["code"]) == (429, "too_many_attempts")
+    # One locked row, keyed on the proxy-set address, not the five forged X-Forwarded-For values.
+    rows = await sql("SELECT ip FROM login_ip_attempt WHERE login = 'anna'")
+    assert [r[0] for r in rows] == ["203.0.113.9"]
+
+
+async def test_client_ip_header_is_ignored_without_the_proxy_secret(
+    guarded: httpx.AsyncClient,
+) -> None:
+    """A direct caller forging X-Client-IP never reaches login: the proxy secret gate refuses it,
+    so X-Client-IP is believed only together with a valid secret."""
+    await make_user("anna", "manager")
+    r = await guarded.post(
+        f"{A}/login",
+        json={"login": "anna", "password": PASSWORD},
+        headers={"x-client-ip": "203.0.113.9"},
+    )
+    assert (r.status_code, r.json()["code"]) == (403, "proxy_required")
+
+
 def _prod(**kw: object) -> Settings:
     base: dict[str, object] = {
         "env": "production",
