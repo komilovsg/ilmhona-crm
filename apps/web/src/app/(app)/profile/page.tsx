@@ -7,6 +7,7 @@ import { Input } from "@heroui/input";
 
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { PageHeader } from "@/components/PageHeader";
+import { NewPasswordFields, usePasswordRules } from "@/components/NewPasswordFields";
 import { PasswordField } from "@/components/PasswordField";
 import { SessionsList } from "@/components/SessionsList";
 import { ME_KEY, useMe } from "@/hooks/queries";
@@ -22,18 +23,26 @@ function ProfileForm({ me }: { me: Me }) {
   const [fullName, setFullName] = useState(me.full_name);
   const [phone, setPhone] = useState(me.phone ?? "");
   const [email, setEmail] = useState(me.email ?? "");
-  const values = { full_name: fullName.trim(), phone: phone.trim() || null, email: email.trim() || null };
+  const [login, setLogin] = useState(me.login);
+  // Only a superadmin edits a login (through the users endpoint); everyone else sees it fixed.
+  const isSuper = me.role.code === "superadmin";
+  const values = { login: login.trim(), full_name: fullName.trim(), phone: phone.trim() || null, email: email.trim() || null };
   const save = useVersionedSave({
     record: me,
     values,
-    toValues: (m) => ({ full_name: m.full_name, phone: m.phone, email: m.email }),
+    toValues: (m) => ({ login: m.login, full_name: m.full_name, phone: m.phone, email: m.email }),
     apply: (v) => {
+      setLogin(v.login);
       setFullName(v.full_name);
       setPhone(v.phone ?? "");
       setEmail(v.email ?? "");
     },
-    request: (changed, version) => api<Me>("/api/v1/auth/me", { method: "PATCH", body: changed, version }),
-    labels: { full_name: "ФИО", phone: "Телефон", email: "Email" },
+    request: async (changed, version) => {
+      if (!isSuper) return api<Me>("/api/v1/auth/me", { method: "PATCH", body: changed, version });
+      await api(`/api/v1/users/${me.id}`, { method: "PATCH", body: changed, version });
+      return api<Me>("/api/v1/auth/me");
+    },
+    labels: { login: "Логин", full_name: "ФИО", phone: "Телефон", email: "Email" },
     onSaved: (updated) => {
       if (updated) queryClient.setQueryData(ME_KEY, updated);
       notify("Профиль сохранён");
@@ -48,7 +57,13 @@ function ProfileForm({ me }: { me: Me }) {
       onSubmit={submit}
     >
       <h2 className="text-lg font-semibold">Данные</h2>
-      <Input isReadOnly label="Логин" value={me.login} />
+      <Input
+        description={isSuper ? "3–40 символов: латинские буквы, цифры, . _ -" : undefined}
+        isReadOnly={!isSuper}
+        label={isSuper ? "Логин" : "Логин (нельзя изменить)"}
+        value={login}
+        onValueChange={setLogin}
+      />
       <Input isRequired label="ФИО" value={fullName} onValueChange={setFullName} />
       <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
       <Input label="Email" type="email" value={email} onValueChange={setEmail} />
@@ -60,7 +75,7 @@ function ProfileForm({ me }: { me: Me }) {
           {save.error}
         </p>
       )}
-      <LoadingButton color="primary" isDisabled={!fullName.trim()} isLoading={save.pending} type="submit">
+      <LoadingButton color="primary" isDisabled={!fullName.trim() || login.trim().length < 3} isLoading={save.pending} type="submit">
         Сохранить
       </LoadingButton>
       <ConflictDialog save={save} />
@@ -68,11 +83,12 @@ function ProfileForm({ me }: { me: Me }) {
   );
 }
 
-function PasswordForm() {
+function PasswordForm({ login }: { login: string }) {
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const { rules, valid } = usePasswordRules(next, repeat, login, current);
   const change = useMutation({
     mutationFn: () =>
       api<Me>("/api/v1/auth/change-password", {
@@ -103,21 +119,7 @@ function PasswordForm() {
         value={current}
         onValueChange={setCurrent}
       />
-      <PasswordField
-        autoComplete="new-password"
-        description="8–72 символа, буква, цифра и спецсимвол"
-        label="Новый пароль"
-        value={next}
-        onValueChange={setNext}
-      />
-      <PasswordField
-        autoComplete="new-password"
-        errorMessage="Пароли не совпадают"
-        isInvalid={repeat !== "" && repeat !== next}
-        label="Повторите новый пароль"
-        value={repeat}
-        onValueChange={setRepeat}
-      />
+      <NewPasswordFields next={next} repeat={repeat} rules={rules} onNext={setNext} onRepeat={setRepeat} />
       {error && (
         <p className="text-sm text-danger" role="alert">
           {error}
@@ -125,7 +127,7 @@ function PasswordForm() {
       )}
       <LoadingButton
         color="primary"
-        isDisabled={!current || !next || next !== repeat}
+        isDisabled={!current || !valid}
         isLoading={change.isPending}
         type="submit"
       >
@@ -164,7 +166,7 @@ export default function ProfilePage() {
       {me && (
         <div className="grid gap-5 md:grid-cols-2">
           <ProfileForm key={me.id} me={me} />
-          <PasswordForm />
+          <PasswordForm login={me.login} />
           <SessionsCard />
         </div>
       )}

@@ -152,7 +152,8 @@ class Browser(httpx.AsyncClient):
 
 def make_client(ip: str = "127.0.0.1") -> httpx.AsyncClient:
     """A browser: its own cookie jar; the CSRF header is set like the web app does. `ip` is the
-    address the API sees (behind the proxy secret uvicorn takes it from X-Forwarded-For)."""
+    direct peer the API sees; without a proxy secret `client_ip` uses it (behind the proxy the API
+    uses the X-Client-IP header the web proxy sets instead)."""
     return Browser(
         transport=httpx.ASGITransport(app=app, client=(ip, 5000)),
         base_url="http://test",

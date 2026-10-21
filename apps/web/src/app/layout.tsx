@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Inter } from "next/font/google";
 import Script from "next/script";
 
@@ -15,11 +16,13 @@ export const metadata: Metadata = siteMetadata;
 
 export const viewport: Viewport = siteViewport;
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The CSP nonce set per request in proxy.ts; the inline theme script must carry it to run.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html suppressHydrationWarning className={inter.variable} lang="ru">
       <body className="bg-background text-foreground antialiased">
-        <Script id="theme-init" strategy="beforeInteractive">
+        <Script id="theme-init" strategy="beforeInteractive" nonce={nonce}>
           {themeInitScript}
         </Script>
         <Providers>{children}</Providers>

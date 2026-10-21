@@ -7,15 +7,17 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_URL}/api/:path*` }];
   },
-  // Signed-in pages must not be framed by another site (clickjacking).
+  // The full Content-Security-Policy is set per request in src/proxy.ts (it needs a nonce).
+  // These static headers apply to every path, including static assets the proxy does not cover.
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          // HTTPS only (the app is served over TLS on Vercel); two years, with subdomains.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
           // Private app behind a login: nothing to index (robots.txt says the same).
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
