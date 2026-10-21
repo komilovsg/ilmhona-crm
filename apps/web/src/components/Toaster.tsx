@@ -144,7 +144,7 @@ export function Toaster() {
       <ul
         className={
           phone
-            ? "pointer-events-none fixed inset-x-0 top-0 z-[110] flex flex-col gap-2 px-3 pt-[calc(env(safe-area-inset-top)+8px)]"
+            ? "pointer-events-none fixed inset-x-0 top-0 z-[110] flex flex-col gap-2 pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+8px)]"
             : "pointer-events-none fixed bottom-4 right-4 z-[110] flex w-[380px] max-w-[calc(100vw-2rem)] flex-col gap-2"
         }
         data-react-aria-top-layer="true"
