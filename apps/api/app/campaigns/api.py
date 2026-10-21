@@ -279,7 +279,9 @@ async def update_campaign(
     async def current() -> dict[str, Any]:
         return await _detail(db, p, campaign_id)
 
-    await check_version(db, campaign, version, "campaign", current)
+    await check_version(
+        db, campaign, version, "campaign", current, changes=body.model_dump(exclude_unset=True)
+    )
     before = _snapshot(campaign)
     sent = body.model_fields_set
     if "name" in sent and body.name:

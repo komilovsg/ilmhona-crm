@@ -359,7 +359,9 @@ async def update_user(
     user_id: uuid.UUID, body: UserUpdate, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
     u = await _load(db, p, user_id, touch=True)
-    await check_version(db, u, version, "app_user", lambda: _out(db, u))
+    await check_version(
+        db, u, version, "app_user", lambda: _out(db, u), changes=body.model_dump(exclude_unset=True)
+    )
     before = _snapshot(u)
     sent = body.model_fields_set
     if "login" in sent and body.login:

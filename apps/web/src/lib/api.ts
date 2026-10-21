@@ -22,7 +22,7 @@ type Options = {
   method?: string;
   body?: unknown;
   params?: Record<string, string | undefined>;
-  /** The version of the record being edited (#25): sent as `If-Match`; an older one is a 409. */
+  /** The version of the record being edited (#25): sent as `X-Record-Version`; an older one is a 409. */
   version?: number;
 };
 
@@ -66,7 +66,7 @@ export async function api<T = void>(path: string, options: Options = {}, retried
 
   if (body !== undefined) headers["Content-Type"] = "application/json";
   if (method !== "GET") headers["X-Requested-With"] = "ilm";
-  if (version !== undefined) headers["If-Match"] = String(version);
+  if (version !== undefined) headers["X-Record-Version"] = String(version);
 
   let response: Response;
   const done = trackRequest();

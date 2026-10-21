@@ -95,12 +95,14 @@ async def test_rate_version_conflicts(
     stale = await admin.patch(
         f"{S}/cohorts/{cohort['id']}/rate",
         json={"instructor_rate": "200"},
-        headers={"If-Match": str(version)},
+        headers={"X-Record-Version": str(version)},
     )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     # the default rate of the instructor is versioned too
     await set_default_rate(admin, uid, 10)
-    stale = await admin.patch(f"{I}/{uid}", json={"default_rate": "20"}, headers={"If-Match": "1"})
+    stale = await admin.patch(
+        f"{I}/{uid}", json={"default_rate": "20"}, headers={"X-Record-Version": "1"}
+    )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
 
 
@@ -245,7 +247,7 @@ async def test_payout_versions_delete_and_audit(
     ok = await admin.patch(f"{PO}/{payout['id']}", json={"note": "аванс", "method": "alif"})
     assert ok.status_code == 200 and ok.json()["note"] == "аванс"
     stale = await admin.patch(
-        f"{PO}/{payout['id']}", json={"amount": "1"}, headers={"If-Match": "1"}
+        f"{PO}/{payout['id']}", json={"amount": "1"}, headers={"X-Record-Version": "1"}
     )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     assert (await admin.delete(f"{PO}/{payout['id']}")).status_code == 204

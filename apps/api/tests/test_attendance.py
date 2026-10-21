@@ -239,11 +239,11 @@ async def test_grade_version_conflict_and_range(
     boris = await login_as("boris", await make_role("Оценщик", {"attendance": "change"}))
     loaded = (await admin.get(f"{C}/{cohort['id']}/grades")).json()[0]["version"]
     ok = await admin.patch(
-        f"{E}/{e}/grade", json={"homework": 30}, headers={"If-Match": str(loaded)}
+        f"{E}/{e}/grade", json={"homework": 30}, headers={"X-Record-Version": str(loaded)}
     )
     assert ok.status_code == 200
     stale = await boris.patch(
-        f"{E}/{e}/grade", json={"final": 20}, headers={"If-Match": str(loaded)}
+        f"{E}/{e}/grade", json={"final": 20}, headers={"X-Record-Version": str(loaded)}
     )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     assert stale.json()["params"]["current"]["homework"] == 30

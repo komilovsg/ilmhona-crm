@@ -19,6 +19,7 @@ from app.core.errors import _problem, errors
 PROXY_REQUIRED = errors.define("proxy_required", 403, "Direct API access is not allowed")
 HEADER = b"x-proxy-secret"
 CLIENT_IP_HEADER = "x-client-ip"
+CLIENT_UA_HEADER = "x-client-ua"
 OPEN_PATHS = {"/api/health"}
 # Set on the scope once the proxy secret matched: only then is X-Client-IP trustworthy.
 VIA_PROXY = "ilm_via_proxy"

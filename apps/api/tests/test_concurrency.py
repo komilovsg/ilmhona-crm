@@ -2,6 +2,7 @@
 update names the version it loaded; an older one is a 409 that shows who changed the record."""
 
 import asyncio
+from pathlib import Path
 
 import httpx
 
@@ -12,7 +13,7 @@ S = "/api/v1/students"
 
 
 def at(version: int) -> dict[str, str]:
-    return {"If-Match": str(version)}
+    return {"X-Record-Version": str(version)}
 
 
 async def test_bug_25_second_edit_of_the_same_student_is_a_409_and_nothing_is_lost(
@@ -105,7 +106,7 @@ async def test_bug_25_an_update_without_a_version_is_refused(admin: httpx.AsyncC
     r = await admin.patch(f"{S}/{sid}", json={"phone": "+992900000001"}, no_version=True)
     assert (r.status_code, r.json()["code"]) == (428, "version_required")
     r = await admin.patch(
-        f"{S}/{sid}", json={"phone": "+992900000001"}, headers={"If-Match": "abc"}
+        f"{S}/{sid}", json={"phone": "+992900000001"}, headers={"X-Record-Version": "abc"}
     )
     assert r.status_code == 400
     assert (await sql("SELECT phone FROM student WHERE id = :i", i=sid))[0][0] is None
@@ -180,3 +181,34 @@ async def test_bug_25_a_stale_edit_leaves_no_audit_entry(admin: httpx.AsyncClien
     await admin.patch(f"{S}/{sid}", json={"phone": "+992900000009"}, headers=at(1))
     after = (await sql("SELECT count(*) FROM audit_log WHERE action = 'student.update'"))[0][0]
     assert before == after == 1
+
+
+async def test_stale_retry_of_an_already_saved_change_is_a_200(login_as: SignedIn) -> None:
+    """A double submit / lost response: the version is old but the record already holds what the
+    client sends, so it is answered with the current record, not a conflict with itself."""
+    anna = await login_as("anna", "manager")
+    sid = await make_student("Алиев Алишер", phone="+992900000001")
+    first = await anna.patch(f"{S}/{sid}", json={"phone": "+992930000002"}, headers=at(1))
+    assert first.status_code == 200 and first.json()["version"] == 2
+    again = await anna.patch(f"{S}/{sid}", json={"phone": "+992930000002"}, headers=at(1))
+    assert again.status_code == 200
+    assert again.json()["version"] == 2 and again.json()["phone"] == "+992930000002"
+    # a different value at the old version is still a real conflict
+    other = await anna.patch(f"{S}/{sid}", json={"phone": "+992930000003"}, headers=at(1))
+    assert (other.status_code, other.json()["code"]) == (409, "stale_version")
+
+
+def test_no_standard_conditional_request_headers_in_the_repo() -> None:
+    """Vercel's edge evaluates these itself and answers 412 on proxied /api responses even though
+    the API already saved the change: the version travels in X-Record-Version only."""
+    root = Path(__file__).resolve().parents[3]
+    needles = ("if" + "-match", "if" + "-none-match")
+    skip = {"node_modules", ".next", ".venv", ".git", "__pycache__", ".mypy_cache", ".ruff_cache"}
+    exts = {".py", ".ts", ".tsx", ".md", ".mjs", ".json", ".yml"}
+    hits = []
+    for base in (root / "apps", root / "docs", root / "CLAUDE.md"):
+        for f in [base] if base.is_file() else base.rglob("*"):
+            if f.is_file() and f.suffix in exts and not skip & set(f.parts):
+                text = f.read_text(errors="ignore").lower()
+                hits += [str(f) for n in needles if n in text]
+    assert not hits, hits

@@ -328,9 +328,13 @@ async def test_list_filters_and_search(admin: httpx.AsyncClient) -> None:
 
 async def test_version_conflict_on_a_lead(admin: httpx.AsyncClient) -> None:
     lead = await make_lead(admin, "Анна")
-    ok = await admin.patch(f"{L}/{lead['id']}", json={"comment": "a"}, headers={"If-Match": "1"})
+    ok = await admin.patch(
+        f"{L}/{lead['id']}", json={"comment": "a"}, headers={"X-Record-Version": "1"}
+    )
     assert ok.status_code == 200
-    stale = await admin.patch(f"{L}/{lead['id']}", json={"comment": "b"}, headers={"If-Match": "1"})
+    stale = await admin.patch(
+        f"{L}/{lead['id']}", json={"comment": "b"}, headers={"X-Record-Version": "1"}
+    )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
     assert (
         await admin.patch(f"{L}/{lead['id']}", json={"comment": "c"}, no_version=True)
