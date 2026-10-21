@@ -18,6 +18,7 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { groupByDay, linkHref, timeOf } from "@/lib/audit";
 import type { AuditPage, AuditRow, Paged, UserRow } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 const PAGE_SIZE = 25;
 
@@ -172,6 +173,7 @@ function Entry({ row }: { row: AuditRow }) {
 }
 
 export default function AuditPage() {
+  const overlayMotion = useOverlayMotion();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -277,7 +279,7 @@ export default function AuditPage() {
         </>
       </QueryState>
 
-      <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
+      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>
           {(close) => (
             <>

@@ -23,6 +23,7 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { COHORT_STATUSES, daysLabel, fullDate } from "@/lib/education";
 import type { CohortRow, Paged } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 const PAGE_SIZE = 12;
 type Filters = { q: string; status: string | null; branch: string | null };
@@ -98,6 +99,7 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
 }
 
 export default function CohortsPage() {
+  const overlayMotion = useOverlayMotion();
   const canChange = useCanChange("cohorts");
   const summary = useEducationSummary();
   const [filters, setFilters] = useState<Filters>({ q: "", status: null, branch: null });
@@ -211,7 +213,7 @@ export default function CohortsPage() {
         </>
       </QueryState>
 
-      <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
+      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>
           {(close) => (
             <>

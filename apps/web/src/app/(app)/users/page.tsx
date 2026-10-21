@@ -27,6 +27,7 @@ import { formatDateTime, telHref } from "@/lib/format";
 import { can } from "@/lib/permissions";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged, TempPassword, UserRow } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };
@@ -99,8 +100,9 @@ function RowMenu({
   onAction: (a: Action["kind"]) => void;
   onSessions?: () => void;
 }) {
+  const overlayMotion = useOverlayMotion();
   return (
-    <Dropdown placement="bottom-end">
+    <Dropdown motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={`Действия: ${user.full_name}`} size="sm" variant="light">
           <Icon name="more" />
@@ -176,6 +178,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
 }
 
 export default function UsersPage() {
+  const overlayMotion = useOverlayMotion();
   const queryClient = useQueryClient();
   const { data: me } = useMe();
   const canChange = can(me?.permissions, "users", "change");
@@ -386,7 +389,7 @@ export default function UsersPage() {
         </>
       </QueryState>
 
-      <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
+      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>
           {(close) => (
             <>

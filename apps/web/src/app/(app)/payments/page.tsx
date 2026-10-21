@@ -31,6 +31,7 @@ import { methodLabel, monthOf, monthOptions, paidMonthsLabel, PAYMENT_METHODS, P
 import type { DebtorRow, DebtorsPage, PaymentRow, PaymentsPage } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
+import { useOverlayMotion } from "@/lib/motion";
 
 const PAGE_SIZE = 25;
 type Tab = "payments" | "debtors";
@@ -291,6 +292,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
 }
 
 export default function PaymentsPage() {
+  const overlayMotion = useOverlayMotion();
   const sees = useSeesPayments();
   const canPay = useCanPay();
   const refresh = useRefreshMoney();
@@ -503,7 +505,7 @@ export default function PaymentsPage() {
         </QueryState>
       )}
 
-      <Drawer isOpen={filtersOpen} placement="bottom" onOpenChange={setFiltersOpen}>
+      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
         <DrawerContent>
           {(close) => (
             <>

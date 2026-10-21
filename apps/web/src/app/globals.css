@@ -187,8 +187,10 @@ html[data-sidebar="collapsed"] .sb-label {
 }
 
 /* Safety net for every HeroUI overlay (modal, drawer, popover, dropdown, select, tooltip, toast): under
-   reduced motion nothing scales or slides, whatever motionProps they were given. Inline framer transforms
-   lose against !important. */
+   reduced motion nothing scales or slides, whatever motionProps they were given (the fade-only ones come
+   from useOverlayMotion). Inline framer transforms lose against !important. The animated element differs per
+   overlay: the modal / drawer [data-slot=wrapper] (a drawer slides it by 100%), the unnamed div around a
+   popover's [data-slot=base] (dropdown, select), the tooltip base, the toast and its parent. */
 @media (prefers-reduced-motion: reduce) {
   [role="dialog"],
   [role="alertdialog"],
@@ -196,10 +198,27 @@ html[data-sidebar="collapsed"] .sb-label {
   [role="menu"],
   [role="listbox"],
   [data-toast],
+  [data-slot="wrapper"],
   [data-slot="wrapper"] > section,
+  [data-slot="base"][data-placement],
+  :has(> [data-slot="base"][role="dialog"]),
+  :has(> [data-slot="base"][data-placement]),
+  :has(> [data-toast]),
   li[data-placement] {
     transform: none !important;
-    scale: none !important;
+    /* Tailwind 4 moves with the separate translate / scale properties; written as `translate: none` the
+       minifier folds them into the transform shorthand and they survive, so their variables are reset */
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    --tw-scale-x: 100% !important;
+    --tw-scale-y: 100% !important;
+  }
+
+  /* A closing toast normally slides out (its inline opacity stays 1) and is removed on transitionend. With the
+     slide gone it fades instead, so a transition still runs and ends. */
+  [data-toast][data-toast-exiting="true"] {
+    opacity: 0 !important;
+    transition: opacity 120ms ease-out !important;
   }
 }
 

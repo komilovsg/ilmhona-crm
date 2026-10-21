@@ -1,8 +1,12 @@
 // Shared motion presets (framer-motion, the library HeroUI already ships with; `motion` is its new name).
 // Rules: 150-250 ms, springs where the thing is touched, transform + opacity only (no layout shift),
-// and everything is switched to «no movement» by <MotionConfig reducedMotion> in Providers (follows the OS live).
+// and nothing moves under prefers-reduced-motion (followed live): our own motion reads useReducedMotion, every
+// HeroUI overlay gets a fade-only motionProps (<MotionConfig reducedMotion> does not stop their
+// slides: measured), and globals.css keeps a transform safety net.
 
 import type { Transition } from "framer-motion";
+
+import { useReducedMotion } from "./client-store";
 
 /** Touch feedback and small state changes: quick, no overshoot. */
 export const SPRING_SNAPPY: Transition = { type: "spring", stiffness: 520, damping: 34, mass: 0.8 };
@@ -42,19 +46,39 @@ export const modalMotion = {
   },
 } as const;
 
-/** Modal under reduced motion: opacity only, no scale and no slide. */
-export const modalMotionReduced = {
+/**
+ * Any HeroUI overlay under reduced motion (modal, drawer, popover / dropdown / select, tooltip): opacity only,
+ * no scale and no slide. Covers every variant name HeroUI uses (`initial` for popovers, `exit` as the start
+ * for modals, drawers and tooltips).
+ */
+export const overlayFade = {
   variants: {
-    enter: { scale: 1, y: 0, opacity: 1, transition: { duration: 0.12 } },
-    exit: { scale: 1, y: 0, opacity: 0, transition: { duration: 0.1 } },
+    initial: { opacity: 0, scale: 1, x: 0, y: 0 },
+    enter: { opacity: 1, scale: 1, x: 0, y: 0, transition: { duration: 0.12 } },
+    exit: { opacity: 0, scale: 1, x: 0, y: 0, transition: { duration: 0.1 } },
   },
 } as const;
+
+/** motionProps for a HeroUI Drawer / Dropdown / Tooltip / Select popover: the default motion, or a fade under reduced motion. */
+export function useOverlayMotion() {
+  return useReducedMotion() ? overlayFade : undefined;
+}
 
 /** HeroUI toast: a short spring instead of the 300 ms ease. */
 export const toastMotion = { transition: { type: "spring", duration: 0.28, bounce: 0.12 } } as const;
 
-/** Toast under reduced motion: fades in place (the default slides 40 px down). */
+/**
+ * Toast under reduced motion: fades in place. The default slides 40 px and animates `top` / `bottom` / height /
+ * scaleX of the stack; those jump instead (duration 0).
+ */
 export const toastMotionReduced = {
   initial: { opacity: 0, scale: 1, y: 0 },
-  transition: { duration: 0.12 },
+  transition: {
+    duration: 0.12,
+    y: { duration: 0 },
+    top: { duration: 0 },
+    bottom: { duration: 0 },
+    height: { duration: 0 },
+    scaleX: { duration: 0 },
+  },
 } as const;

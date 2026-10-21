@@ -27,10 +27,12 @@ import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
+  const overlayMotion = useOverlayMotion();
   return (
-    <Dropdown placement="bottom-end">
+    <Dropdown motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" variant="flat">
           {row.status}

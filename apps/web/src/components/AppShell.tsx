@@ -23,6 +23,7 @@ import { api } from "@/lib/api";
 import { useBrowserValue } from "@/lib/client-store";
 import { can, canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
+import { useOverlayMotion } from "@/lib/motion";
 
 function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -103,6 +104,8 @@ const ROW = "relative flex items-center gap-3 rounded-lg px-[15px] py-2.5 text-s
 
 function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
   const { collapsed, toggle } = useSidebarCollapsed();
+  const overlayMotion = useOverlayMotion();
+
   return (
     <aside className="sb-aside fixed inset-y-0 left-0 hidden flex-col bg-sidebar md:flex">
       <div className="py-6 pl-[19px]">
@@ -126,6 +129,7 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
               content={item.label}
               delay={300}
               isDisabled={!collapsed}
+              motionProps={overlayMotion}
               placement="right"
             >
               <Link
@@ -148,7 +152,7 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
         })}
       </nav>
       <div className="px-3 pb-4">
-        <Tooltip closeDelay={0} content="Развернуть  [" delay={300} isDisabled={!collapsed} placement="right">
+        <Tooltip closeDelay={0} content="Развернуть  [" delay={300} isDisabled={!collapsed} motionProps={overlayMotion} placement="right">
           <button
             aria-expanded={!collapsed}
             aria-keyshortcuts="["
@@ -170,9 +174,10 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
 function UserMenu({ me }: { me: Me }) {
   const logout = useLogout();
   const router = useRouter();
+  const overlayMotion = useOverlayMotion();
 
   return (
-    <Dropdown placement="bottom-end">
+    <Dropdown motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button className="max-w-56" radius="full" variant="flat" startContent={<Icon name="profile" size={16} />}>
           <span className="truncate">{me.full_name}</span>
@@ -202,6 +207,7 @@ function UserMenu({ me }: { me: Me }) {
 
 function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: NavItem[]; pathname: string; badges: Badges }) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const overlayMotion = useOverlayMotion();
   const logout = useLogout();
   const moreActive = more.some((i) => isActive(pathname, i.href)) || pathname === "/profile";
   const tab = (active: boolean) =>
@@ -230,7 +236,7 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
           Ещё
         </button>
       </nav>
-      <Drawer isOpen={moreOpen} placement="bottom" size="lg" onOpenChange={setMoreOpen}>
+      <Drawer isOpen={moreOpen} motionProps={overlayMotion} placement="bottom" size="lg" onOpenChange={setMoreOpen}>
         <DrawerContent>
           {(close) => (
             <>
