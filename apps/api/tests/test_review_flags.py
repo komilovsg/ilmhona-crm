@@ -32,7 +32,7 @@ async def test_import_flags_students() -> None:
     ok, why = await flagged("student", "s.full_name", "Ali Fakerov")
     assert ok and "проверить слияние" in (why or "") and "нет телефона" in (why or "")
     ok, why = await flagged("student", "s.full_name", "Тест Студентов")
-    assert ok and "проверить слияние: один телефон" in (why or "")
+    assert ok and "общий телефон — проверить" in (why or "")
     ok, why = await flagged("student", "s.full_name", "Мура Выдуманная")
     assert (ok, why) == (False, None)
 
@@ -137,4 +137,4 @@ async def test_reapply_counts_everything_as_already_there() -> None:
     await do_import(snapshot(), apply=True)
     again = await do_import(snapshot(), apply=True)
     assert sum(again.imported.values()) == 0
-    assert again.existing["STUDENTS"] == 8 and again.existing["GRADES"] >= 1
+    assert again.existing["STUDENTS"] == 9 and again.existing["GRADES"] >= 1

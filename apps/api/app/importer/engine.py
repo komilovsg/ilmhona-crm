@@ -687,6 +687,7 @@ class Importer:
     def _build_persons(self) -> dict[str, Person]:
         rep = self.rep
         by_key: dict[str, Person] = {}
+        phone_people: dict[str, list[Person]] = defaultdict(list)  # one phone, several people
         for r in self.rows("STUDENTS"):
             sid = p.text(r.get("student_id"))
             if not p.text(r.get("full_name")):
@@ -695,10 +696,26 @@ class Importer:
             nm = p.norm_name(r.get("full_name"))
             ph = p.phone9(r.get("phone"))
             city = self.branch_of(p.text(r.get("city"))) or ""
-            key = f"p:{ph}" if ph else f"n:{nm}|{city}"
-            person = by_key.get(key)
-            if person is None:
-                person = by_key[key] = Person(len(by_key), key)
+            if ph:
+                # a phone merges only the same person (typo, Latin, word order); other names on
+                # the phone are siblings on a parent's phone: separate students (docs/IMPORT.md)
+                person = next(
+                    (
+                        x
+                        for x in phone_people[ph]
+                        if any(p.same_person(nm, y.get("full_name")) for y in x.rows)
+                    ),
+                    None,
+                )
+                if person is None:
+                    key = f"p:{ph}" if not phone_people[ph] else f"p:{ph}|{p.translit_key(nm)}"
+                    person = by_key[key] = Person(len(by_key), key)
+                    phone_people[ph].append(person)
+            else:
+                key = f"n:{nm}|{city}"
+                person = by_key.get(key)
+                if person is None:
+                    person = by_key[key] = Person(len(by_key), key)
             person.rows.append(r)
         for person in by_key.values():
             rows = person.rows
@@ -713,14 +730,12 @@ class Importer:
                     "STUDENTS", "проверить слияние: то же ФИО без телефона, разные ID", old_id,
                     name=person.name, ids=", ".join(sorted(ids)),
                 )  # fmt: skip
-            if person.key.startswith("p:"):
-                toks = [set(p.norm_name(r.get("full_name")).split()) for r in rows]
-                if len(rows) > 1 and not set.intersection(*toks):
-                    person.reasons.append("проверить слияние: один телефон, разные ФИО")
-                    rep.flag(
-                        "STUDENTS", "проверить слияние: один телефон, совсем разные ФИО", old_id,
-                        names=" / ".join(sorted({p.name_of(r.get("full_name"))[0] for r in rows})),
-                    )  # fmt: skip
+            if person.key.startswith("p:") and len(phone_people[person.key[2:].split("|")[0]]) > 1:
+                person.reasons.append("общий телефон — проверить")
+                rep.flag(
+                    "STUDENTS", "общий телефон — проверить", old_id, name=person.name,
+                    phone=p.text(rows[0].get("phone")),
+                )  # fmt: skip
         return by_key
 
     def _index_persons(self, persons: list[Person]) -> None:
