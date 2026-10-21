@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/drawer";
+import { SheetHandle } from "./SheetHandle";
 import { Tooltip } from "@heroui/tooltip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
@@ -240,6 +241,7 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onClose={close} />
               <DrawerHeader>Ещё</DrawerHeader>
               <DrawerBody className="gap-1 pb-8">
                 {[...more, { section: "", href: "/profile", label: "Профиль", icon: "profile" }].map((item) => (

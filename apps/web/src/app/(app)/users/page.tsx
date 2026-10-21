@@ -5,6 +5,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { SheetHandle } from "@/components/SheetHandle";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { Input } from "@heroui/input";
 
@@ -393,6 +394,7 @@ export default function UsersPage() {
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields filters={filters} set={set} />

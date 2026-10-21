@@ -6,6 +6,7 @@ import { useMutation, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { SheetHandle } from "@/components/SheetHandle";
 import { Input } from "@heroui/input";
 
 import { PaymentFormModal } from "./PaymentFormModal";
@@ -509,6 +510,7 @@ export default function PaymentsPage() {
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields debtors={debtors} filters={filters} set={set} />
