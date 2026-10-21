@@ -8,7 +8,7 @@ rows without `legacy_ref` are never changed or deleted.
 import re
 import uuid
 from calendar import monthrange
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
@@ -746,14 +746,20 @@ class Importer:
         self._index_persons(persons)
         # enrollment plans
         groups: dict[tuple[int, str], EnrollPlan] = {}
+        self.enr_drops: Counter[str] = Counter()
+        self.enr_active_rows = 0
         for r in self.rows("ENROLLMENTS"):
             eid = p.text(r.get("enrollment_id"))
+            is_active = p.text(r.get("status")) == "Активный"
+            self.enr_active_rows += is_active
             if not eid or not p.text(r.get("student_id")) or not p.text(r.get("cohort_id")):
                 rep.drop("ENROLLMENTS", "пустой ID", eid)
+                self.enr_drops["пустой ID"] += is_active
                 continue
             person = self.person_of(p.text(r.get("student_id")), p.text(r.get("student_name")))
             if person is None:
                 rep.drop("ENROLLMENTS", "студент не найден в STUDENTS", eid)
+                self.enr_drops["студент не найден в STUDENTS"] += is_active
                 rep.flag(
                     "ENROLLMENTS",
                     "студент не найден в STUDENTS",
@@ -764,6 +770,7 @@ class Importer:
             cohort_old = p.text(r.get("cohort_id"))
             if cohort_old not in self.cohorts:
                 rep.drop("ENROLLMENTS", "поток удалён или не перенесён", eid)
+                self.enr_drops["поток удалён или не перенесён"] += is_active
                 continue
             key = (person.idx, cohort_old)
             plan = groups.get(key)
@@ -942,13 +949,57 @@ class Importer:
 
     # ---- PAYMENTS -------------------------------------------------------------------------
 
+    def _ledger(self, kind: str, label: str, confirmed: bool, amount: Decimal | None) -> None:
+        """Counts and confirmed money per outcome: the sheet total must balance to the dirham."""
+        line = self.pay_ledger[kind].setdefault(label, [0, Decimal(0)])
+        line[0] += 1
+        if confirmed and amount:
+            line[1] += amount
+
+    async def _restore_enrollment(
+        self, person: Person, cohort_old: str, pid: str, name: str, amount: str
+    ) -> EnrollPlan:
+        """A payment whose student and cohort both exist but which has no enrollment: the money
+        is real, so the enrollment is made from it (and flagged)."""
+        ctx = self.cohorts[cohort_old]
+        plan = EnrollPlan(person, cohort_old)
+        plan.status = "завершил" if ctx.obj.status == DONE else "активный"
+        plan.manual = True
+        plan.ref = p.make_ref("ENROLLMENTS", "from-payment", person.ref, cohort_old)
+        if plan.ref in self.refs["enrollment"]:
+            plan.id = self.refs["enrollment"][plan.ref]
+            self.rep.existing["ENROLLMENTS"] += 1
+        else:
+            self.db.add(
+                Enrollment(
+                    id=plan.id,
+                    cohort_id=ctx.obj.id,
+                    student_id=person.id,
+                    status=plan.status,
+                    enrolled_at=noon(ctx.obj.start_date),
+                    status_manual=True,
+                    legacy_ref=plan.ref,
+                )
+            )
+            self.refs["enrollment"][plan.ref] = plan.id
+            self.rep.imported["ENROLLMENTS"] += 1
+            self.rep.note("зачисление восстановлено из оплаты")
+            self.rep.flag(
+                "PAYMENTS", "зачисление восстановлено из оплаты", pid, name=name, amount=amount
+            )
+            await self.db.flush()
+        self.plans[(person.idx, cohort_old)] = plan
+        return plan
+
     async def _payments(self) -> None:
         rep = self.rep
+        self.pay_ledger: dict[str, dict[str, list[Any]]] = {"drop": {}, "merge": {}, "in": {}}
+        self.pay_rows, self.pay_total = 0, Decimal(0)
         seen: set[tuple[Any, ...]] = set()
         batch: list[Payment] = []
         for r in self.rows("PAYMENTS"):
             pid = p.text(r.get("payment_id"))
-            plan = self.plan_of(
+            sid, name, cohort_old = (
                 p.text(r.get("student_id")),
                 p.text(r.get("student_name")),
                 p.text(r.get("cohort_id")),
@@ -956,44 +1007,55 @@ class Importer:
             amount = p.to_decimal(r.get("amount"))
             paid = p.parse_date(r.get("payment_date"))
             method = METHODS.get(p.text(r.get("payment_method")).lower())
-            if plan is None:
-                rep.drop("PAYMENTS", "нет зачисления (#5)", pid)
+            verified = p.text(r.get("verified")) == "Да"
+            self.pay_rows += 1
+            if verified and amount:
+                self.pay_total += amount
+
+            def drop(
+                reason: str,
+                flag: str,
+                pid: str = pid,
+                r: Row = r,
+                amount: Decimal | None = amount,
+                verified: bool = verified,
+            ) -> None:
+                rep.drop("PAYMENTS", reason, pid)
+                self._ledger("drop", reason, verified, amount)
                 rep.flag(
-                    "PAYMENTS",
-                    "оплата без зачисления — не перенесена (#5)",
-                    pid,
-                    name=p.text(r.get("student_name")),
+                    "PAYMENTS", flag, pid, name=p.text(r.get("student_name")),
                     amount=p.text(r.get("amount")),
-                )
+                )  # fmt: skip
+
+            plan = self.plan_of(sid, name, cohort_old)
+            if plan is None:
+                person = self.person_of(sid, name)
+                if person is None:
+                    drop("студент не найден", "оплата: студент не найден — не перенесена (#5)")
+                    continue
+                if cohort_old not in self.cohorts:
+                    drop("поток не перенесён (удалён или пуст)", "оплата: поток не перенесён")
+                    continue
+                if amount is not None and amount > 0 and paid and method:
+                    plan = await self._restore_enrollment(
+                        person, cohort_old, pid, name, p.text(r.get("amount"))
+                    )
+            if plan is None:
+                if amount is None or amount <= 0:
+                    drop("нет суммы", "оплата без суммы — не перенесена")
+                elif paid is None:
+                    drop("дата пустая или вне 2020–2035", "дата оплаты не разобрана")
+                else:
+                    drop("нет способа оплаты", "нет способа оплаты — не перенесена")
                 continue
             if amount is None or amount <= 0:
-                rep.drop("PAYMENTS", "нет суммы", pid)
-                rep.flag(
-                    "PAYMENTS",
-                    "оплата без суммы — не перенесена",
-                    pid,
-                    name=p.text(r.get("student_name")),
-                )
+                drop("нет суммы", "оплата без суммы — не перенесена")
                 continue
             if paid is None:
-                rep.drop("PAYMENTS", "дата пустая или вне 2020–2035", pid)
-                rep.flag(
-                    "PAYMENTS",
-                    "дата оплаты не разобрана — не перенесена",
-                    pid,
-                    name=p.text(r.get("student_name")),
-                    amount=str(amount),
-                )
+                drop("дата пустая или вне 2020–2035", "дата оплаты не разобрана — не перенесена")
                 continue
             if method is None:
-                rep.drop("PAYMENTS", "нет способа оплаты", pid)
-                rep.flag(
-                    "PAYMENTS",
-                    "нет способа оплаты — не перенесена",
-                    pid,
-                    name=p.text(r.get("student_name")),
-                    amount=str(amount),
-                )
+                drop("нет способа оплаты", "нет способа оплаты — не перенесена")
                 continue
             kind = p.text(r.get("payment_type"))
             note_parts = []
@@ -1006,16 +1068,18 @@ class Importer:
             for extra in (r.get("notes"), r.get("screenshot_link")):
                 if neutral(p.text(extra)):
                     note_parts.append(neutral(p.text(extra)) or "")
-            key = (plan.id, month, amount, paid, method)
+            # only a row identical in EVERY field (old payment id included) is a repeat
+            key = tuple(p.text(v) for k, v in r.items() if k != "_rowIndex")
             if key in seen:
                 rep.merged["PAYMENTS"] += 1
+                self._ledger("merge", "точные повторы строки (все поля, вкл. ID)", verified, amount)
                 continue
             seen.add(key)
-            ref = p.make_ref("PAYMENTS", pid, plan.ref, month, amount, paid, method)
+            ref = p.make_ref("PAYMENTS", pid, plan.ref, *key)
             if ref in self.refs["payment"]:
                 rep.existing["PAYMENTS"] += 1
+                self._ledger("in", "уже были в базе", verified, amount)
                 continue
-            verified = p.text(r.get("verified")) == "Да"
             batch.append(
                 Payment(
                     id=uuid.uuid4(),
@@ -1033,6 +1097,7 @@ class Importer:
             )
             self.refs["payment"][ref] = batch[-1].id
             rep.imported["PAYMENTS"] += 1
+            self._ledger("in", "перенесено", verified, amount)
         self.db.add_all(batch)
         await self.db.flush()
 
@@ -1420,3 +1485,59 @@ class Importer:
                 "",
             )
         )
+
+        await self._ledgers(income)
+
+    async def _ledgers(self, income: Decimal) -> None:
+        """The balance sheets of the money and of the active enrollments (they must add up)."""
+        rep = self.rep
+        led = self.pay_ledger
+        n0, total = self.pay_rows, self.pay_total
+        lines: list[tuple[str, str, str]] = [
+            ("Лист PAYMENTS: все строки / подтверждённая сумма", str(n0), f"{total:.2f}")
+        ]
+        left_n, left_sum = n0, total
+        for kind, sign in (("drop", "− отброшено: "), ("merge", "− слито: ")):
+            for label, (n, amount) in sorted(led[kind].items()):
+                lines.append((sign + label, str(n), f"{amount:.2f}"))
+                left_n, left_sum = left_n - n, left_sum - amount
+        lines.append(("= перенесено (расчёт)", str(left_n), f"{left_sum:.2f}"))
+        lines.append(("перенесено по `app/metrics` (income_total)", "", f"{income:.2f}"))
+        lines.append(("разница (должна быть 0)", "", f"{left_sum - income:.2f}"))
+        rep.ledgers.append(("Сверка денег", lines))
+        # active enrollments
+        plans = [
+            pl
+            for pl in self.plans.values()
+            if any(p.text(r.get("status")) == "Активный" for r in pl.rows)
+        ]
+        merged = sum(
+            sum(1 for r in pl.rows if p.text(r.get("status")) == "Активный") - 1 for pl in plans
+        )
+        status = {
+            i: st
+            for i, st in (
+                await self.db.execute(
+                    select(Enrollment.id, Enrollment.status).where(
+                        Enrollment.id.in_([pl.id for pl in plans])
+                    )
+                )
+            ).all()
+        }
+        by_status = Counter(status.values())
+        enr: list[tuple[str, str, str]] = [
+            ("Лист ENROLLMENTS: строки со статусом «Активный»", str(self.enr_active_rows), "")
+        ]
+        for label, n in sorted(self.enr_drops.items()):
+            enr.append((f"− отброшено: {label}", str(n), ""))
+        enr.append(("− слито повторов (то же зачисление студент+поток)", str(merged), ""))
+        enr.append(("= зачислений из активных строк", str(len(plans)), ""))
+        names = {
+            "активный": "остались активными",
+            "выпускник": "стали выпускниками (поток завершён, итог ≥ 70)",
+            "завершил": "закрыты как «завершил» (поток завершён, #11)",
+            "отчислен": "отчислены (старший статус в слитых строках)",
+        }
+        for st, label in names.items():
+            enr.append((f"  из них {label}", str(by_status.get(st, 0)), ""))
+        rep.ledgers.append(("Сверка активных зачислений", enr))

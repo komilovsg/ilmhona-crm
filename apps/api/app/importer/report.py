@@ -59,6 +59,7 @@ class Report:
     review: list[ReviewRow] = field(default_factory=list)
     notes: Counter[str] = field(default_factory=Counter)
     recon: list[Recon] = field(default_factory=list)
+    ledgers: list[tuple[str, list[tuple[str, str, str]]]] = field(default_factory=list)
 
     def drop(self, sheet: str, reason: str, old_id: str) -> None:
         self.dropped[sheet][reason].append(old_id or "—")
@@ -125,6 +126,9 @@ class Report:
         ]
         for line in self.recon:
             out.append(f"| {line.label} | {line.new} | {line.old} | {line.comment} |")
+        for title, lines in self.ledgers:
+            out += ["", f"## {title}", "", "| Статья | Строк | Сумма, TJS |", "|---|---:|---:|"]
+            out += [f"| {a} | {b} | {c} |" for a, b, c in lines]
         out.append("")
         return "\n".join(out)
 

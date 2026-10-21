@@ -64,14 +64,14 @@ async def test_dry_run_writes_nothing_and_reports(snapshot: dict[str, Any]) -> N
     report = await do_import(snapshot, apply=False)
     assert await counts() == before
     assert report.mode == "dry-run"
-    assert report.imported["STUDENTS"] == 8 and report.imported["ENROLLMENTS"] == 9
+    assert report.imported["STUDENTS"] == 8 and report.imported["ENROLLMENTS"] == 10
     assert report.recon, "the reconciliation is part of the dry-run"
 
 
 async def test_apply_imports_in_one_go_and_reapply_adds_nothing(snapshot: dict[str, Any]) -> None:
     first = await do_import(snapshot, apply=True)
     after_first = await counts()
-    assert after_first["student"] == 8 and after_first["enrollment"] == 9
+    assert after_first["student"] == 8 and after_first["enrollment"] == 10
     assert first.imported["STUDENTS"] == 8 and first.existing["STUDENTS"] == 0
     again = await do_import(snapshot, apply=True)
     after_second = await counts()
@@ -363,7 +363,7 @@ async def test_enrollments_merge_pick_senior_status_and_close_with_the_cohort(
             "JOIN student s ON s.id = e.student_id JOIN cohort c ON c.id = e.cohort_id"
         )
     }
-    assert len(status) == 9 and report.merged["ENROLLMENTS"] == 1
+    assert len(status) == 10 and report.merged["ENROLLMENTS"] == 1
     # E-001: Активный + Отчислен -> the senior one; total 85 on a finished cohort -> выпускник
     assert status[("Тест Студентов", "COHORTS:G-001")] == "выпускник"
     assert status[("Ali Fakerov", "COHORTS:G-001")] == "отчислен"
@@ -415,7 +415,7 @@ async def test_payments_dedupe_months_status_and_no_orphans(snapshot: dict[str, 
         "SELECT p.legacy_ref, p.month_no, p.amount, p.method, p.status, p.note, "
         "p.confirmed_at IS NOT NULL FROM payment p ORDER BY p.legacy_ref"
     )
-    assert len(rows) == 4 and report.merged["PAYMENTS"] == 1  # the exact repeat of P-001
+    assert len(rows) == 5 and report.merged["PAYMENTS"] == 1  # the exact repeat of P-001
     by_ref = {r[0]: r for r in rows}
     p1 = [r for r in rows if r[0].startswith("PAYMENTS:P-001")]
     assert sorted((r[1], r[2]) for r in p1) == [(1, Decimal("600")), (2, Decimal("650"))]
@@ -425,12 +425,12 @@ async def test_payments_dedupe_months_status_and_no_orphans(snapshot: dict[str, 
     p3 = by_ref[next(k for k in by_ref if k.startswith("PAYMENTS:P-003"))]
     assert (p3[3], p3[4], p3[6]) == ("payvand", "ожидает", False)  # verified is empty
     dropped = report.dropped["PAYMENTS"]
-    assert dropped["нет зачисления (#5)"] == ["P-004"] and dropped["нет суммы"] == ["P-005"]
+    assert dropped["студент не найден"] == ["P-004"] and dropped["нет суммы"] == ["P-005"]
     async with sessionmaker() as db:
         from app.models import Cohort
 
         total = await income_total(db, [Cohort.legacy_ref.is_not(None)])
-    assert total == Decimal("3050.00")  # 600 + 650 + 1800, the pending one does not count
+    assert total == Decimal("3350.00")  # 600 + 650 + 1800 + 300, the pending one does not count
 
 
 async def test_attendance_creates_missing_lessons_and_resolves_conflicts(
@@ -585,7 +585,7 @@ async def test_reconciliation_numbers_come_from_the_metrics(snapshot: dict[str, 
     recon = {r.label: r for r in report.recon}
     assert recon["Студентов (всего)"].new == "8"
     assert recon["Выпускников"].new == "2"
-    assert recon["Сумма подтверждённых оплат, TJS"].new == "3050.00"
+    assert recon["Сумма подтверждённых оплат, TJS"].new == "3350.00"
 
 
 async def test_cli_dry_run_and_apply(snapshot: dict[str, Any], tmp_path: Path) -> None:
@@ -597,3 +597,26 @@ async def test_cli_dry_run_and_apply(snapshot: dict[str, Any], tmp_path: Path) -
     assert (await sql("SELECT count(*) FROM student"))[0][0] == 8
     with pytest.raises(SystemExit):
         await importer_main([str(FIXTURE), "--out-dir", str(tmp_path)])  # a mode is required
+
+
+async def test_payment_without_enrollment_restores_it_and_the_money_balances(
+    snapshot: dict[str, Any],
+) -> None:
+    report = await do_import(snapshot, apply=True)
+    # P-006: the student and the cohort exist, the enrollment id does not -> made from the payment
+    status, manual = await one(
+        "SELECT e.status, e.status_manual FROM enrollment e JOIN student s ON s.id = e.student_id "
+        "JOIN cohort c ON c.id = e.cohort_id WHERE s.full_name = 'Зарина Придуманная' "
+        "AND c.legacy_ref = 'COHORTS:G-001'"
+    )
+    assert (status, manual) == ("завершил", True)
+    assert any(r.reason == "зачисление восстановлено из оплаты" for r in report.review)
+    # a payment of a cohort that is not imported is dropped with its amount in the review list
+    # the ledger: sheet total - drops - exact repeats = imported, to the dirham
+    (title, lines), *_ = report.ledgers
+    assert title == "Сверка денег"
+    by = {label: (n, amount) for label, n, amount in lines}
+    assert by["Лист PAYMENTS: все строки / подтверждённая сумма"] == ("8", "4550.00")
+    assert by["= перенесено (расчёт)"][1] == "3350.00"
+    assert by["разница (должна быть 0)"][1] == "0.00"
+    assert by["− слито: точные повторы строки (все поля, вкл. ID)"] == ("1", "600.00")
