@@ -3,9 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { StudentFormModal } from "../StudentFormModal";
 import { StudentEmployment } from "./StudentEmployment";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -22,6 +22,8 @@ import { fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { StudentDetail } from "@/lib/types";
+
+const StudentFormModal = dynamic(() => import("../StudentFormModal").then((m) => m.StudentFormModal));
 
 export default function StudentPage() {
   const { id } = useParams<{ id: string }>();

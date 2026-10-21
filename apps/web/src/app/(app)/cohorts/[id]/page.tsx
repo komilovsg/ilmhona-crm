@@ -3,13 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
-import { CohortFormModal } from "../CohortFormModal";
 
-import { AttendanceTab } from "./AttendanceTab";
-import { GradesTab } from "./GradesTab";
-import { LessonsTab } from "./LessonsTab";
 import { StudentsTab } from "./StudentsTab";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -18,7 +15,7 @@ import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
-import { DetailSkeleton } from "@/components/Skeletons";
+import { DetailSkeleton, ListSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
@@ -27,6 +24,13 @@ import { daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
+
+// Tabs other than the first load on demand; the skeleton keeps the height while the chunk arrives.
+const tabLoading = () => <ListSkeleton />;
+const LessonsTab = dynamic(() => import("./LessonsTab").then((m) => m.LessonsTab), { loading: tabLoading });
+const AttendanceTab = dynamic(() => import("./AttendanceTab").then((m) => m.AttendanceTab), { loading: tabLoading });
+const GradesTab = dynamic(() => import("./GradesTab").then((m) => m.GradesTab), { loading: tabLoading });
+const CohortFormModal = dynamic(() => import("../CohortFormModal").then((m) => m.CohortFormModal));
 
 type Tab = "students" | "lessons" | "attendance" | "grades";
 type Action = "cancel" | "restore" | "delete";

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
@@ -8,7 +9,6 @@ import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { Input } from "@heroui/input";
 
-import { UserFormModal } from "./UserFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -18,7 +18,6 @@ import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton } from "@/components/Skeletons";
-import { TempPasswordModal } from "@/components/TempPasswordModal";
 import { SessionsList } from "@/components/SessionsList";
 import { AppModal } from "@/components/AppModal";
 import { RESET_REQUESTS_KEY, useBranches, useMe, useResetRequests, useRoles } from "@/hooks/queries";
@@ -28,6 +27,9 @@ import { can } from "@/lib/permissions";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged, TempPassword, UserRow } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+
+const UserFormModal = dynamic(() => import("./UserFormModal").then((m) => m.UserFormModal));
+const TempPasswordModal = dynamic(() => import("@/components/TempPasswordModal").then((m) => m.TempPasswordModal));
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };

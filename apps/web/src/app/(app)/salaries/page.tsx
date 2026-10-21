@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 
-import { RateModal } from "../instructors/RateModal";
 
-import { PayoutModal } from "./PayoutModal";
 import { PayoutsList, ScheduleList, salaryStats } from "./parts";
 
 import { ExportButton } from "@/components/ExportButton";
@@ -22,6 +21,9 @@ import { api } from "@/lib/api";
 import { monthOf, monthOptions } from "@/lib/money";
 import { todayIso } from "@/lib/education";
 import type { InstructorCard, PayoutsPage, SalaryData, SalaryRow } from "@/lib/money-types";
+
+const RateModal = dynamic(() => import("../instructors/RateModal").then((m) => m.RateModal));
+const PayoutModal = dynamic(() => import("./PayoutModal").then((m) => m.PayoutModal));
 
 type Tab = "schedule" | "payouts";
 const PAGE_SIZE = 25;

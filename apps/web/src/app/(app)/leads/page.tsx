@@ -1,16 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
 
-import { ConvertModal } from "./ConvertModal";
-import { DuplicatesNotice } from "./DuplicatesNotice";
-import { ImportWizard } from "./ImportWizard";
-import { LeadFormModal } from "./LeadFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -43,6 +40,11 @@ import {
 import type { Duplicates, LeadFunnel, LeadRow } from "@/lib/sales-types";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged } from "@/lib/types";
+
+const ConvertModal = dynamic(() => import("./ConvertModal").then((m) => m.ConvertModal));
+const DuplicatesNotice = dynamic(() => import("./DuplicatesNotice").then((m) => m.DuplicatesNotice));
+const ImportWizard = dynamic(() => import("./ImportWizard").then((m) => m.ImportWizard));
+const LeadFormModal = dynamic(() => import("./LeadFormModal").then((m) => m.LeadFormModal));
 
 const PAGE_SIZE = 25;
 const OPEN_STATUSES = LEAD_STATUSES.filter((s) => s !== "записан");

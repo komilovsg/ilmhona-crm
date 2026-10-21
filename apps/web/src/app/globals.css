@@ -241,14 +241,27 @@ html[data-sidebar="collapsed"] .sb-dot {
   }
 }
 
+/* The brand block holds the page's largest text (the LCP element): it only slides, never starts transparent,
+   so it counts as painted from the first frame. */
+@keyframes rise-slide {
+  from {
+    transform: translateY(14px);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .rise {
     animation: rise 450ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
+
+  .rise-slide {
+    animation: rise-slide 450ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rise {
+  .rise,
+  .rise-slide {
     opacity: 1 !important;
     transform: none !important;
     animation: none !important;
