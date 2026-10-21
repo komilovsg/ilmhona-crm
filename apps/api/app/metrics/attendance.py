@@ -78,12 +78,13 @@ def stats_of(held: int, present: int, marked: int) -> dict[str, Any]:
 
 async def enrollment_attendance(
     db: AsyncSession,
-    cohort_id: uuid.UUID,
+    cohort_id: uuid.UUID | None,
     *,
     now: datetime | None = None,
     enrollment_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, dict[str, Any]]:
-    """Per enrollment of the cohort: held, present, absent, unmarked, percent, score."""
+    """Per enrollment of the cohort (or, with `cohort_id` None, of the given enrollments in any
+    cohorts, in one query): held, present, absent, unmarked, percent, score."""
     now = now or _now()
     held = and_(Lesson.cohort_id == Enrollment.cohort_id, held_lesson(now), enrolled_by())
     query = (
@@ -99,9 +100,10 @@ async def enrollment_attendance(
             Attendance,
             and_(Attendance.lesson_id == Lesson.id, Attendance.enrollment_id == Enrollment.id),
         )
-        .where(Enrollment.cohort_id == cohort_id)
         .group_by(Enrollment.id)
     )
+    if cohort_id is not None:
+        query = query.where(Enrollment.cohort_id == cohort_id)
     if enrollment_ids is not None:
         query = query.where(Enrollment.id.in_(enrollment_ids))
     rows = await db.execute(query)
@@ -110,7 +112,7 @@ async def enrollment_attendance(
 
 async def enrollment_results(
     db: AsyncSession,
-    cohort_id: uuid.UUID,
+    cohort_id: uuid.UUID | None,
     *,
     now: datetime | None = None,
     enrollment_ids: list[uuid.UUID] | None = None,

@@ -18,9 +18,7 @@ from io import BytesIO
 from typing import Any, Literal
 
 from fastapi import Response
-from openpyxl import Workbook
-from openpyxl.styles import Font
-from openpyxl.utils import get_column_letter
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import record
@@ -86,6 +84,11 @@ def _shown_len(value: Any) -> int:
 
 
 def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> bytes:
+    # imported here: openpyxl is slow to import and only exports need it (cold start)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
     wb = Workbook()
     ws = wb.active
     assert ws is not None
@@ -94,13 +97,15 @@ def build_xlsx[T](title: str, columns: Sequence[Col[T]], rows: Sequence[T]) -> b
     for cell in ws[1]:
         cell.font = Font(bold=True)
     widths = [len(c.header) for c in columns]
-    for row in rows:
-        cells = [_cell(c.value(row), c.kind) for c in columns]
-        ws.append([v for v, _ in cells])
-        for i, (value, fmt) in enumerate(cells):
-            widths[i] = max(widths[i], _shown_len(value))
+    for r, row in enumerate(rows, start=2):
+        for i, c in enumerate(columns):
+            value, fmt = _cell(c.value(row), c.kind)
+            if value is None:
+                continue
+            cell = ws.cell(row=r, column=i + 1, value=value)
             if fmt:
-                ws.cell(row=ws.max_row, column=i + 1).number_format = fmt
+                cell.number_format = fmt
+            widths[i] = max(widths[i], _shown_len(value))
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = min(max(w + 2, 8), 60)
     ws.freeze_panes = "A2"
@@ -128,7 +133,8 @@ async def xlsx_response[T](
 ) -> Response:
     """Build the file and write the audit entry (same transaction as the request)."""
     check_cap(rows)
-    data = build_xlsx(title, columns, rows)
+    # CPU-bound: off the event loop, so one big export does not stall every other request
+    data = await run_in_threadpool(build_xlsx, title, columns, rows)
     await record(
         db,
         p.id,
