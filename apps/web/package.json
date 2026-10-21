@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "node --test \"src/**/*.test.ts\"",
-    "cls": "node scripts/cls.mjs"
+    "cls": "node scripts/cls.mjs",
+    "motion": "node scripts/motion-check.mjs"
   },
   "dependencies": {
     "@heroui/avatar": "^2.2.26",

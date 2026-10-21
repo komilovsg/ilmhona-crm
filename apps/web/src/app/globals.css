@@ -183,3 +183,26 @@ html[data-sidebar="collapsed"] .sb-label {
 html[data-sidebar="collapsed"] .sb-dot {
   display: block;
 }
+
+/* Entrance of the sign-in blocks: visible by default (also in the server HTML and with JS off);
+   the animation only plays from a transparent start when motion is allowed. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .rise {
+    animation: rise 450ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    opacity: 1 !important;
+    transform: none !important;
+    animation: none !important;
+  }
+}

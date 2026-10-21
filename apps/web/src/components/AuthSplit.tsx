@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "framer-motion";
 
 import { IlmMark } from "./brand/IlmMark";
 import { ThemeToggle } from "./ThemeToggle";
@@ -22,38 +21,28 @@ function Wordmark({ className = "" }: { className?: string }) {
 
 /**
  * Sign-in frame. Desktop: the brand panel on the left, the form on the right. Phone: a gradient
- * band with the wordmark, the form on a sheet below it. The form rises in once (not with reduced motion).
+ * band with the wordmark, the form on a sheet below it. The form rises in once: a CSS animation (`.rise`), so the server markup is always visible and reduced motion simply skips it.
  */
 export function AuthSplit({ children }: { children: ReactNode }) {
-  const still = useReducedMotion();
-  const rise = (delay: number) =>
-    still
-      ? {}
-      : {
-          initial: { opacity: 0, y: 14 },
-          animate: { opacity: 1, y: 0 },
-          transition: { duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] as const },
-        };
-
   return (
     <div className="min-h-dvh md:grid md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <aside className="relative flex h-44 flex-col justify-end overflow-hidden px-6 pb-9 md:h-auto md:min-h-dvh md:justify-between md:p-14" style={{ background: GLOW }}>
         <div className="hidden md:block" />
-        <motion.div {...rise(0)}>
+        <div className="rise">
           <Wordmark className="text-4xl md:text-6xl" />
           <p className="mt-2 max-w-xs text-sm text-[#C9D6E0] md:mt-4 md:text-lg">
             Учёт студентов, потоков и оплат в одном месте.
           </p>
-        </motion.div>
+        </div>
       </aside>
 
       <main className="relative -mt-5 rounded-t-3xl bg-background px-5 pb-10 pt-16 md:mt-0 md:flex md:items-center md:justify-center md:rounded-none md:px-10">
         <div className="absolute right-4 top-4">
           <ThemeToggle />
         </div>
-        <motion.div className="mx-auto w-full max-w-sm" {...rise(0.12)}>
+        <div className="rise mx-auto w-full max-w-sm" style={{ animationDelay: "120ms" }}>
           {children}
-        </motion.div>
+        </div>
       </main>
     </div>
   );
