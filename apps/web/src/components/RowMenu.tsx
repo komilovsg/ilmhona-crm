@@ -4,6 +4,7 @@ import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
 import { Icon } from "./Icon";
+import { useMenu } from "./useMenu";
 
 import { useOverlayMotion } from "@/lib/motion";
 
@@ -20,15 +21,16 @@ export function RowMenu({
   onAction: (key: string) => void;
 }) {
   const overlayMotion = useOverlayMotion();
+  const menu = useMenu(onAction);
 
   return (
-    <Dropdown motionProps={overlayMotion} placement="bottom-end">
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={label} size="sm" variant="light">
           <Icon name="more" size={20} strokeWidth={3} />
         </Button>
       </DropdownTrigger>
-      <DropdownMenu aria-label={label} onAction={(key) => onAction(String(key))}>
+      <DropdownMenu aria-label={label} onAction={menu.onAction}>
         {actions.map((a) => (
           <DropdownItem
             key={a.key}

@@ -88,7 +88,7 @@ export function AppModal({
         }}
       >
         <ModalContent>
-          <SheetHandle canClose={requestClose} onClose={onClose} />
+          <SheetHandle canClose={requestClose} onBackdrop={requestClose} onClose={onClose} />
           <ModalHeader className="text-lg">{title}</ModalHeader>
           <ModalBody
             onChange={(e) => markDirty(e.target, e.nativeEvent.isTrusted)}

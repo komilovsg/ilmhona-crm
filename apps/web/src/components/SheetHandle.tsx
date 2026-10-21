@@ -27,17 +27,20 @@ function scrollParent(el: HTMLElement | null, stop: HTMLElement): HTMLElement | 
  * sheet only when it is already at the top and the finger moves down. Touch events are used (not pointer
  * events) because the browser must be told per move whether it may scroll.
  *
+ * A touch tap on the empty strip around the sheet (the wrapper, which sits over the backdrop) calls `onBackdrop`:
+ * react-aria's outside-press does not fire there on touch, and the tap must not fall through to the page.
+ *
  * `canClose` runs on release before closing: return false to keep the sheet (the unsaved-changes guard shows
  * its question there). `onClose` is called once the sheet has left the screen.
  */
-export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClose?: () => boolean }) {
+export function SheetHandle({ onClose, canClose, onBackdrop }: { onClose: () => void; canClose?: () => boolean; onBackdrop?: () => void }) {
   const phone = useIsPhone();
   const reduced = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
-  const callbacks = useRef({ onClose, canClose, reduced });
+  const callbacks = useRef({ onClose, canClose, onBackdrop, reduced });
 
   useEffect(() => {
-    callbacks.current = { onClose, canClose, reduced };
+    callbacks.current = { onClose, canClose, onBackdrop, reduced };
   });
 
   useEffect(() => {
@@ -55,6 +58,7 @@ export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClo
     let start = 0;
     let scroller: HTMLElement | null = null;
     let samples: Sample[] = [];
+    let onHandle = false;
 
     const unsub = offset.on("change", (v) => {
       dialog.style.translate = v ? `0 ${v}px` : "";
@@ -94,6 +98,7 @@ export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClo
 
       x0 = t.clientX;
       y0 = t.clientY;
+      onHandle = e.target instanceof Element && !!e.target.closest("[data-sheet-handle]");
       scroller = scrollParent(e.target as HTMLElement, dialog);
       samples = [{ y: t.clientY, t: e.timeStamp }];
       start = offset.get();
@@ -127,10 +132,17 @@ export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClo
       offset.set(sheetOffset(start + (t.clientY - y0), dialog.offsetHeight));
     };
 
-    const onEnd = () => {
+    const onEnd = (e: TouchEvent) => {
       const was = mode;
 
       mode = "idle";
+      // a tap on the handle (the touch lands there when aimed at the thin backdrop strip above a tall sheet) closes
+      if (was === "pending" && onHandle && e.type === "touchend") {
+        if (e.cancelable) e.preventDefault();
+        callbacks.current.onBackdrop?.();
+
+        return;
+      }
       if (was !== "drag") return;
       const velocity = velocityOf(samples);
       const height = dialog.offsetHeight;
@@ -143,6 +155,22 @@ export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClo
     dialog.addEventListener("touchmove", onMove, { passive: false });
     dialog.addEventListener("touchend", onEnd);
     dialog.addEventListener("touchcancel", onEnd);
+
+    let tap: { x: number; y: number } | null = null;
+    const onWrapStart = (e: TouchEvent) => {
+      tap = e.target === wrapper && e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+    };
+    const onWrapEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+
+      if (!tap || e.target !== wrapper || !t || Math.abs(t.clientX - tap.x) > DRAG_SLOP || Math.abs(t.clientY - tap.y) > DRAG_SLOP) return;
+      tap = null;
+      if (e.cancelable) e.preventDefault(); // no click afterwards: it would hit the page under the backdrop
+      callbacks.current.onBackdrop?.();
+    };
+
+    wrapper?.addEventListener("touchstart", onWrapStart, { passive: true });
+    wrapper?.addEventListener("touchend", onWrapEnd);
 
     // Keyboard: keep the sheet in the visible part of the screen and the focused field above the keyboard.
     const vv = window.visualViewport;
@@ -166,6 +194,8 @@ export function SheetHandle({ onClose, canClose }: { onClose: () => void; canClo
       dialog.removeEventListener("touchend", onEnd);
       dialog.removeEventListener("touchcancel", onEnd);
       dialog.removeEventListener("focusin", onFocusIn);
+      wrapper?.removeEventListener("touchstart", onWrapStart);
+      wrapper?.removeEventListener("touchend", onWrapEnd);
       vv?.removeEventListener("resize", fit);
       vv?.removeEventListener("scroll", fit);
       running?.stop();
