@@ -348,11 +348,11 @@ async def test_bug_17_card_has_numbers_and_no_efficiency_percent(
     other, _ = await instructor(browser, "other")
     await set_default_rate(admin, uid, 1000)
     mine = await running_cohort(admin, name="M", back=1, instructor_id=str(uid), price=500)
-    theirs = await running_cohort(admin, name="T", back=1, instructor_id=str(other))
+    theirs = await running_cohort(admin, name="T", back=1, instructor_id=str(other), price=800)
     a, b = await enroll(admin, mine, "Алиев"), await enroll(admin, mine, "Бобоев")
     await pay(admin, a, amount=500, confirm=True)
     await pay(admin, b, amount=250, confirm=True)
-    await pay(admin, b, month=2, amount=999)  # pending: not income
+    await pay(admin, b, month=2, amount=499)  # pending: not income
     await pay(admin, await enroll(admin, theirs, "Чужой"), amount=777, confirm=True)
     await admin.patch(f"/api/v1/enrollments/{b}", json={"status": "отчислен"})
     await make_payout(admin, mine, amount="600")
