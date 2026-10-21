@@ -2,6 +2,8 @@
 management); `review-*.xlsx` lists the rows that need a human and DOES hold names and phones, so
 both files stay in the gitignored `import-data/`."""
 
+import os
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -9,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 
@@ -26,6 +29,12 @@ SHEETS = (
     "INSTRUCTOR_PAYMENTS",
 )
 MAX_IDS = 60  # old ids listed per reason in the md report
+_ID_UNSAFE = re.compile(r"[^\w.:/~#-]")
+
+
+def safe_id(old_id: str) -> str:
+    """An old id as the md shows it: an untrusted cell, so no markup and a short length."""
+    return _ID_UNSAFE.sub("?", old_id)[:40] or "—"
 
 
 @dataclass
@@ -62,10 +71,10 @@ class Report:
     ledgers: list[tuple[str, list[tuple[str, str, str]]]] = field(default_factory=list)
 
     def drop(self, sheet: str, reason: str, old_id: str) -> None:
-        self.dropped[sheet][reason].append(old_id or "—")
+        self.dropped[sheet][reason].append(safe_id(old_id))
 
     def flag(self, sheet: str, reason: str, old_id: str, **details: Any) -> None:
-        self.review.append(ReviewRow(sheet, old_id or "—", reason, details))
+        self.review.append(ReviewRow(sheet, safe_id(old_id), reason, details))
 
     def note(self, text: str, n: int = 1) -> None:
         self.notes[text] += n
@@ -162,17 +171,28 @@ class Report:
         return wb
 
     def write(self, directory: Path, stamp: str) -> tuple[Path, Path]:
-        directory.mkdir(parents=True, exist_ok=True)
+        """Both files are created owner-only (0600): never readable by others, not even briefly."""
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         md = directory / f"report-{stamp}.md"
         xlsx = directory / f"review-{stamp}.xlsx"
-        md.write_text(self.markdown(), encoding="utf-8")
-        md.chmod(0o600)
-        self.review_workbook().save(xlsx)
-        xlsx.chmod(0o600)
+        _write_private(md, self.markdown().encode("utf-8"))
+        with _open_private(xlsx) as out:
+            self.review_workbook().save(out)
         return md, xlsx
 
 
 def _plain(value: Any) -> Any:
-    if value is None or isinstance(value, int | float | str):
+    if value is None or isinstance(value, int | float):
         return value
-    return str(value)
+    return ILLEGAL_CHARACTERS_RE.sub("", str(value))
+
+
+def _open_private(path: Path) -> Any:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    os.fchmod(fd, 0o600)  # a file that was there before keeps no wider mode
+    return os.fdopen(fd, "wb")
+
+
+def _write_private(path: Path, data: bytes) -> None:
+    with _open_private(path) as out:
+        out.write(data)

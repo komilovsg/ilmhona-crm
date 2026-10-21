@@ -385,7 +385,7 @@ class Importer:
                     self.phones.add(phone)
                 if not city or not person.branch:
                     rep.flag("INSTRUCTORS", "город не указан", old_id, name=name)
-                email = neutral(first(rows, "email"))
+                email = p.clip(neutral(first(rows, "email")), 200)
                 self.db.add(
                     AppUser(
                         id=person.id,
@@ -445,7 +445,7 @@ class Importer:
         """The cohort has no (free) room: its own stand-in, so the lessons stay valid (#7)."""
         if old_id not in self.placeholder_rooms:
             rid = uuid.uuid4()
-            name = f"Без аудитории ({old_id})"
+            name = f"Без аудитории ({old_id[:80]})"
             self.db.add(
                 Room(
                     id=rid,
@@ -462,8 +462,8 @@ class Importer:
 
     @staticmethod
     def _room_name(raw: str) -> str:
-        name = re.sub(r"\s+", " ", raw).strip()
-        return re.sub(r"(?i)^istaravshan", "Истаравшан", name)
+        name = neutral(re.sub(r"\s+", " ", raw)) or ""
+        return p.clip(re.sub(r"(?i)^istaravshan", "Истаравшан", name), 100) or ""
 
     async def _cohorts(self) -> None:
         rep = self.rep
@@ -929,7 +929,7 @@ class Importer:
                 p.text(r.get("cohort_id")),
             )
             score = p.to_int(r.get("score"))
-            if plan is None or score is None:
+            if plan is None or score is None or score < 0:
                 rep.drop("GRADES", "зачисление не найдено или нет оценки", gid)
                 rep.flag(
                     "GRADES",
@@ -941,6 +941,7 @@ class Importer:
             kind = p.text(r.get("assessment_type"))
             default_max = p.OLD_FINAL_MAX if kind == "final_work" else p.OLD_HOMEWORK_MAX
             top = p.to_int(r.get("max_score")) or default_max
+            top = top if top > 0 else default_max
             value = p.rescale(min(score, top), top)
             if kind == "homework":
                 plan.homework = value if plan.homework is None else plan.homework
@@ -1081,10 +1082,10 @@ class Importer:
             note_parts = []
             if kind == "Помесячно":
                 month = p.to_int(r.get("month_number"))
-                month = month if month and month >= 1 else 1
+                month = month if month and 1 <= month <= 36 else 1
             else:
                 month = 1
-                note_parts.append(kind or "без типа")
+                note_parts.append(neutral(kind) or "без типа")
             for extra in (r.get("notes"), r.get("screenshot_link")):
                 if neutral(p.text(extra)):
                     note_parts.append(neutral(p.text(extra)) or "")
@@ -1110,7 +1111,7 @@ class Importer:
                     paid_at=paid,
                     status="подтверждено" if verified else "ожидает",
                     confirmed_at=noon(paid) if verified else None,
-                    note="; ".join(note_parts) or None,
+                    note=p.clip("; ".join(note_parts), 500) or None,
                     idempotency_key=uuid.uuid5(NS, ref),
                     legacy_ref=ref,
                 )  # fmt: skip
@@ -1187,7 +1188,7 @@ class Importer:
             lesson_id = self.lessons.get((ctx.obj.id, day))
             if lesson_id is None:
                 lesson_id = await self._manual_lesson(ctx, day)
-            reason = None if present else neutral(note)
+            reason = None if present else p.clip(neutral(note), 200)
             values.append(
                 {
                     "lesson_id": lesson_id,
@@ -1248,7 +1249,8 @@ class Importer:
                     "кампания с повреждёнными метриками (даты вместо чисел): пересчитаны заново"
                 )
             campaign = Campaign(
-                id=uuid.uuid4(), name=neutral(title) or cid or "Кампания", course_id=course_id,
+                id=uuid.uuid4(), course_id=course_id,
+                name=p.clip(neutral(title), 200) or p.clip(cid, 200) or "Кампания",
                 branch_id=self.branches[branch], platform=platform, start_date=start, end_date=end,
                 budget=budget, status=status, legacy_ref=ref,
             )  # fmt: skip
@@ -1309,13 +1311,14 @@ class Importer:
                 comment_parts.append("источник в старой системе: электронная почта")
             course_text = p.text(r.get("Название компании"))
             lead = Lead(
-                id=uuid.uuid4(), full_name=name, raw_name=p.text(r.get("full_name")),
-                phone=phone or (raw or None), phone_raw=raw or None,
+                id=uuid.uuid4(), full_name=name, raw_name=p.clip(p.text(r.get("full_name")), 300),
+                phone=phone or p.clip(neutral(raw), 40), phone_raw=p.clip(raw, 40) or None,
                 course_id=self.course_lookup.get(p.norm_name(course_text)) if course_text else None,
                 source=LEAD_SOURCE.get(source_raw, "другое"), branch_id=self.branches[branch],
                 call_status=CALL_STATUS.get(p.text(r.get("call_status")), "не звонили"),
                 status=LEAD_STATUS.get(p.text(r.get("client_status")), "новый"),
-                comment="; ".join(c for c in comment_parts if c) or None, needs_review=review,
+                comment=p.clip("; ".join(c for c in comment_parts if c), 2000) or None,
+                needs_review=review,
                 created_at=moment or datetime.now(UTC), legacy_ref=ref,
             )  # fmt: skip
             self.db.add(lead)
@@ -1410,7 +1413,7 @@ class Importer:
             payout = InstructorPayout(
                 id=uuid.uuid4(), instructor_id=person.id, cohort_id=ctx.obj.id, period=period,
                 amount=amount, paid_at=paid, method="наличные",
-                note=f"перенос; способ неизвестен; месяц потока {month_no}".strip(),
+                note=p.clip(f"перенос; способ неизвестен; месяц потока {month_no}", 500),
                 legacy_ref=ref,
             )  # fmt: skip
             self.db.add(payout)
