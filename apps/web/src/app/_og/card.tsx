@@ -2,10 +2,12 @@ import { readFile } from "node:fs/promises";
 
 import { ImageResponse } from "next/og";
 
+import { ILM_MARK_PATH } from "@/components/brand/IlmMark";
+
 export const OG_SIZE = { width: 1200, height: 630 };
 export const OG_ALT = "ilmhona CRM — skills accelerator";
 
-/** Static link-preview card: brand text only, never any data. Fonts are bundled (Inter, Latin + Cyrillic subset). */
+/** Static link-preview card: brand mark and text only, never any data. Fonts are bundled (Inter, Latin + Cyrillic subset). */
 export async function ogCard(): Promise<ImageResponse> {
   const [bold, regular] = await Promise.all([
     readFile(new URL("./Inter-Bold.otf", import.meta.url)),
@@ -21,16 +23,18 @@ export async function ogCard(): Promise<ImageResponse> {
           flexDirection: "column",
           justifyContent: "center",
           padding: "0 96px",
-          background: "#101820",
+          background: "radial-gradient(circle at 0% 0%, #2aa9cc 0%, #14303d 42%, #101820 85%)",
           fontFamily: "Inter",
         }}
       >
-        <div style={{ display: "flex", fontSize: 168, fontWeight: 700, letterSpacing: -4, lineHeight: 1 }}>
-          <span style={{ color: "#FFFFFF" }}>ilm</span>
-          <span style={{ color: "#00A0DC" }}>hona</span>
+        <svg fill="#FFFFFF" height={150} viewBox="0 0 960 754" width={191}>
+          <path d={ILM_MARK_PATH} />
+        </svg>
+        <div style={{ display: "flex", marginTop: 36, fontSize: 96, fontWeight: 700, letterSpacing: -2, lineHeight: 1, color: "#FFFFFF" }}>
+          ilmhona
         </div>
-        <div style={{ marginTop: 16, fontSize: 40, color: "#8B98A5", letterSpacing: 2 }}>skills accelerator</div>
-        <div style={{ marginTop: 56, fontSize: 36, color: "#FFFFFF", lineHeight: 1.3 }}>
+        <div style={{ marginTop: 12, fontSize: 36, color: "#9FB3BF", letterSpacing: 2 }}>skills accelerator</div>
+        <div style={{ marginTop: 48, fontSize: 36, color: "#FFFFFF", lineHeight: 1.3 }}>
           Учёт студентов, потоков, посещаемости и оплат
         </div>
       </div>
