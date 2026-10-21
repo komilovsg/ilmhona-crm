@@ -49,7 +49,6 @@ def upgrade() -> None:
         "WHERE certificate_no IS NOT NULL"
     )
 
-
     # owner decision: the seeded manager role marks attendance and grades by default
     op.execute(
         "UPDATE role_permission SET level = 'change' WHERE section = 'attendance' "
