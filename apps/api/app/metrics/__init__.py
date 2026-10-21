@@ -20,6 +20,7 @@ from app.models import Cohort, Enrollment, Student
 
 NO_ENROLLMENT = "без зачисления"
 STUDENT_STATUSES = ("активный", "выпускник", "отчислен", NO_ENROLLMENT)
+ENROLLMENT_STATUSES = ("активный", "завершил", "выпускник", "отчислен")
 COHORT_STATUSES = ("набор", "активный", "завершён", "отменён")
 
 
@@ -78,6 +79,20 @@ async def student_counts(db: AsyncSession, where: list[ColumnElement[bool]]) -> 
     return counts
 
 
+async def enrollment_counts(db: AsyncSession, where: list[ColumnElement[bool]]) -> dict[str, int]:
+    """Enrollments by status (every status key present) and the total."""
+    rows = await db.execute(
+        select(Enrollment.status, func.count())
+        .join(Cohort, Cohort.id == Enrollment.cohort_id)
+        .where(*where)
+        .group_by(Enrollment.status)
+    )
+    counts = dict.fromkeys(ENROLLMENT_STATUSES, 0)
+    counts.update({s: n for s, n in rows.all()})
+    counts["всего"] = sum(counts[s] for s in ENROLLMENT_STATUSES)
+    return counts
+
+
 async def cohort_counts(db: AsyncSession, where: list[ColumnElement[bool]]) -> dict[str, int]:
     rows = await db.execute(
         select(Cohort.status, func.count()).where(*where).group_by(Cohort.status)
@@ -118,6 +133,7 @@ __all__ = [
     "cohort_enrolled",
     "cohort_fill",
     "education_summary",
+    "enrollment_counts",
     "enrollment_attendance",
     "enrollment_results",
     "fill_of",

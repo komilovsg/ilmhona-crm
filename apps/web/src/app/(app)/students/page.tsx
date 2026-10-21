@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
@@ -16,11 +16,13 @@ import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton, PillsSkeleton } from "@/components/Skeletons";
+import { ReviewChip } from "@/components/ReviewChip";
 import { PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { dushanbeDay, telHref } from "@/lib/format";
+import { notifyError } from "@/lib/toast";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
 
@@ -47,15 +49,24 @@ export default function StudentsPage() {
   const [branch, setBranch] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
+  const [review, setReview] = useState(false);
+  const queryClient = useQueryClient();
+  const clear = useMutation({
+    mutationFn: (s: StudentRow) =>
+      api(`/api/v1/students/${s.id}`, { method: "PATCH", body: { needs_review: false }, version: s.version }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ["students"] }),
+    onError: notifyError,
+  });
 
   const list = useQuery({
-    queryKey: ["students", q, status, branch, page],
+    queryKey: ["students", q, status, branch, review, page],
     queryFn: () =>
       api<Paged<StudentRow>>("/api/v1/students", {
         params: {
           q: q.trim() || undefined,
           status: status ?? undefined,
           branch_id: branch ?? undefined,
+          needs_review: review ? "true" : undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
         },
@@ -75,7 +86,7 @@ export default function StudentsPage() {
       <PageHeader
         actions={
           <>
-            <ExportButton params={{ q: q.trim(), status, branch_id: branch }} path="/api/v1/students/export" />
+            <ExportButton params={{ q: q.trim(), status, branch_id: branch, needs_review: review ? "true" : null }} path="/api/v1/students/export" />
             {canChange && (
               <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
                 Студент
@@ -122,6 +133,20 @@ export default function StudentsPage() {
             setPage(1);
           }}
         />
+        <button
+          aria-pressed={review}
+          className={clsx(
+            "shrink-0 rounded-full px-3 py-1.5 text-sm transition-colors",
+            review ? "bg-warning text-warning-foreground" : "bg-content1 hover:bg-default-100",
+          )}
+          type="button"
+          onClick={() => {
+            setReview(!review);
+            setPage(1);
+          }}
+        >
+          Нужна проверка
+        </button>
         {!me?.branch && (
           <SelectField
             allLabel="Все филиалы"
@@ -141,14 +166,14 @@ export default function StudentsPage() {
         empty={
           <EmptyState
             action={
-              canChange && !q.trim() && !status && !branch ? (
+              canChange && !q.trim() && !status && !branch && !review ? (
                 <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
                   Студент
                 </Button>
               ) : undefined
             }
-            hint={q.trim() || status || branch ? "Измените поиск или фильтры." : undefined}
-            title={q.trim() || status || branch ? "Студентов не найдено" : "Нет студентов"}
+            hint={q.trim() || status || branch || review ? "Измените поиск или фильтры." : undefined}
+            title={q.trim() || status || branch || review ? "Студентов не найдено" : "Нет студентов"}
           />
         }
         isEmpty={(d) => d.items.length === 0}
@@ -175,6 +200,15 @@ export default function StudentsPage() {
                       <Link className="hover:text-brand-text" href={`/students/${s.id}`}>
                         {s.full_name}
                       </Link>
+                      {s.needs_review && (
+                        <div className="mt-1">
+                          <ReviewChip
+                            clearing={clear.isPending && clear.variables?.id === s.id}
+                            reason={s.review_reason}
+                            onClear={canChange ? () => clear.mutate(s) : undefined}
+                          />
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Phone value={s.phone} />
@@ -205,6 +239,15 @@ export default function StudentsPage() {
                 <div className="mt-2 text-sm">
                   <Phone value={s.phone} />
                 </div>
+                {s.needs_review && (
+                  <div className="mt-2">
+                    <ReviewChip
+                      clearing={clear.isPending && clear.variables?.id === s.id}
+                      reason={s.review_reason}
+                      onClear={canChange ? () => clear.mutate(s) : undefined}
+                    />
+                  </div>
+                )}
               </li>
             ))}
           </ul>

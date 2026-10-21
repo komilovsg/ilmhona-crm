@@ -26,7 +26,14 @@ def verify_password(stored: str | None, password: str) -> bool:
     which logins exist."""
     try:
         _hasher.verify(stored or _DUMMY, password)
-    except VerificationError, InvalidHashError:
+    except VerificationError:
+        return False
+    except InvalidHashError:
+        # an unusable hash (an imported account before activation) costs a real check too
+        try:
+            _hasher.verify(_DUMMY, password)
+        except VerificationError:
+            pass
         return False
     return stored is not None
 
