@@ -4,6 +4,7 @@ import { useId } from "react";
 import clsx from "clsx";
 import { motion } from "framer-motion";
 
+import { useReducedMotion } from "@/lib/client-store";
 import { SPRING_SLIDE } from "@/lib/motion";
 
 export type SegmentOption<T extends string> = { key: T; label: string };
@@ -26,6 +27,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   const id = useId();
+  const reduced = useReducedMotion();
 
   return (
     <div
@@ -50,7 +52,7 @@ export function Segmented<T extends string>({
               aria-hidden="true"
               className="absolute inset-0 rounded-lg bg-content1 shadow-sm"
               layoutId={`seg-${id}`}
-              transition={SPRING_SLIDE}
+              transition={reduced ? { duration: 0 } : SPRING_SLIDE}
             />
           )}
           <span className="relative">{o.label}</span>

@@ -1,8 +1,8 @@
 // Shared motion presets (framer-motion, the library HeroUI already ships with; `motion` is its new name).
 // Rules: 150-250 ms, springs where the thing is touched, transform + opacity only (no layout shift),
-// and everything is switched to «no movement» by <MotionConfig reducedMotion="user"> in Providers.
+// and everything is switched to «no movement» by <MotionConfig reducedMotion> in Providers (follows the OS live).
 
-import type { Transition, Variants } from "framer-motion";
+import type { Transition } from "framer-motion";
 
 /** Touch feedback and small state changes: quick, no overshoot. */
 export const SPRING_SNAPPY: Transition = { type: "spring", stiffness: 520, damping: 34, mass: 0.8 };
@@ -14,12 +14,6 @@ export const SPRING_POP: Transition = { type: "spring", stiffness: 500, damping:
 export const SPRING_SLIDE: Transition = { type: "spring", stiffness: 600, damping: 42 };
 
 export const EASE_OUT = [0.22, 1, 0.36, 1] as const;
-
-/** Route change: the new page fades in and rises 6 px. */
-export const pageVariants: Variants = {
-  hidden: { opacity: 0, y: 6 },
-  shown: { opacity: 1, y: 0, transition: { duration: 0.2, ease: EASE_OUT } },
-};
 
 /**
  * HeroUI modal: keeps its CSS variables (scale / slide differ per size and placement) but swaps the slow

@@ -7,7 +7,7 @@ import { ToastProvider } from "@heroui/toast";
 import { MotionConfig } from "framer-motion";
 import { useRouter } from "next/navigation";
 
-import { useIsPhone } from "@/lib/client-store";
+import { useIsPhone, useReducedMotion } from "@/lib/client-store";
 import { ServerWakeup } from "@/components/ServerWakeup";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { isApiError } from "@/lib/api";
@@ -37,6 +37,7 @@ function Toasts() {
 }
 
 export function Providers({ children }: { children: ReactNode }) {
+  const reduced = useReducedMotion();
   // One client per browser tab; useState keeps it stable across re-renders.
   const [queryClient] = useState(
     () =>
@@ -56,9 +57,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* reducedMotion="user": under prefers-reduced-motion every transform / layout animation (ours and
+      {/* reducedMotion follows the OS live: under prefers-reduced-motion every transform / layout animation (ours and
           HeroUI's) is dropped and only opacity changes stay */}
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={reduced ? "always" : "never"}>
         <HeroUI>
           <ThemeProvider>
             <Toasts />

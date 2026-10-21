@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@heroui/drawer";
-import { motion } from "framer-motion";
 import { Tooltip } from "@heroui/tooltip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 
@@ -22,7 +21,6 @@ import { useMe, useResetRequests } from "@/hooks/queries";
 import { SIDEBAR_STORAGE_KEY } from "@/context/theme-init";
 import { api } from "@/lib/api";
 import { useBrowserValue } from "@/lib/client-store";
-import { pageVariants } from "@/lib/motion";
 import { can, canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 
@@ -323,9 +321,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-6xl px-4 pb-28 pt-5 md:px-8 md:pb-10 md:pt-8">
         {canOpen(me.permissions, pathname, me.role.code) ? (
-          <motion.div key={pathname} animate="shown" initial="hidden" variants={pageVariants}>
+          <div key={pathname} className="page-in">
             {children}
-          </motion.div>
+          </div>
         ) : (
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
         )}

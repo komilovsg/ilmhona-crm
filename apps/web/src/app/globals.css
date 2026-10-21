@@ -144,6 +144,14 @@ html[data-sidebar="collapsed"] .sb-label {
   }
 }
 
+/* Route change: the new page fades in and rises 6 px (CSS, so it is never stuck hidden). */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
 @keyframes row-in {
   from {
     opacity: 0;
@@ -154,6 +162,10 @@ html[data-sidebar="collapsed"] .sb-label {
 @media (prefers-reduced-motion: no-preference) {
   .fade-in {
     animation: fade-in 180ms ease-out backwards;
+  }
+
+  .page-in {
+    animation: page-in 200ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
   }
 
   /* List rows: a row plays this only when it is mounted (first load, a new page of rows, a new row),

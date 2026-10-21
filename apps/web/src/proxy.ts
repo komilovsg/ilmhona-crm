@@ -15,7 +15,8 @@ const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-ic
  */
 function withCsp(request: NextRequest, redirectTo?: URL): NextResponse {
   const nonce = makeNonce();
-  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production" });
+  const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
+  const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https: proto.startsWith("https") });
   const headers = new Headers(request.headers);
   headers.set("x-nonce", nonce);
   headers.set("content-security-policy", csp);

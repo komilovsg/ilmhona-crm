@@ -8,7 +8,7 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import { Spinner } from "@heroui/spinner";
 import clsx from "clsx";
-import { animate, motion, useReducedMotion } from "framer-motion";
+import { animate, motion } from "framer-motion";
 
 import { Icon } from "@/components/Icon";
 import { LoadingButton } from "@/components/LoadingButton";
@@ -18,6 +18,7 @@ import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
 import { dayTitle, fullDate, todayIso } from "@/lib/education";
+import { useReducedMotion } from "@/lib/client-store";
 import { SPRING_POP, SPRING_SNAPPY } from "@/lib/motion";
 import { notify, notifyError } from "@/lib/toast";
 import type { LessonAttendance, MarkRow } from "@/lib/types";
@@ -86,7 +87,7 @@ function Toggle({
       disabled={disabled}
       transition={SPRING_SNAPPY}
       type="button"
-      whileTap={disabled ? undefined : { scale: 0.9 }}
+      whileTap={disabled || reduced ? undefined : { scale: 0.9 }}
       onClick={() => {
         // the mark pops when it becomes the chosen one (not on load, not under reduced motion)
         if (!active && !reduced && icon.current)
