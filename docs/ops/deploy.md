@@ -125,13 +125,33 @@ encrypts with `age` to the public key in `BACKUP_AGE_PUBLIC_KEY` and pushes
 `dumps/ilmhona-<UTC time>.sql.gz.age` to `komilovsg/ilmhona-backups`; only the newest 30 files
 stay in the tree (git history keeps older ones: delete or squash the repo when it grows).
 The private key is `~/.config/ilmhona/backup-age-key.txt` on the owner's machine only: keep a
-second copy offline, without it the dumps cannot be read. Restore:
+second copy offline, without it the dumps cannot be read. The dump has no owners and no
+grants, and it contains `CREATE SCHEMA public` and the two extensions. Restore (drilled, see
+`restore-drill.md`):
 
 ```
-age -d -i ~/.config/ilmhona/backup-age-key.txt dumps/<file>.sql.gz.age | gunzip | psql "<owner URL>"
+# 1. empty database, the `public` schema removed (the dump creates it)
+psql "<owner URL, db postgres>" -c "CREATE DATABASE neondb"
+psql "<owner URL>" -c "DROP SCHEMA public"
+# 2. data
+age -d -i ~/.config/ilmhona/backup-age-key.txt dumps/<file>.sql.gz.age | gunzip \
+  | psql "<owner URL>" -v ON_ERROR_STOP=1
+# 3. runtime role and grants (same as "Roles in the database"; the dump carries none)
+CREATE ROLE ilm_app LOGIN PASSWORD '<generated>' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+GRANT CONNECT ON DATABASE neondb TO ilm_app;
+GRANT USAGE ON SCHEMA public TO ilm_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ilm_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ilm_app;
+REVOKE UPDATE, DELETE ON audit_log FROM ilm_app;
+REVOKE ALL ON alembic_version FROM ilm_app;
+GRANT SELECT ON alembic_version TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ilm_app;
 ```
 
-(on an empty database; create the extensions first if the target forbids `CREATE EXTENSION`).
+Without step 1 the load prints `schema "public" already exists` (harmless, but fatal with
+`ON_ERROR_STOP`). Check with `select version_num from alembic_version` and row counts. The
+target must be Postgres 18 (or newer): the dump sets `transaction_timeout`.
 
 ## Private app
 
