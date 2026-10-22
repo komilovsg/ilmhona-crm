@@ -149,7 +149,12 @@ export async function downloadExport(path: string, params: Record<string, string
  * POST a CSV file as the raw request body (`text/csv`) with the settings in the query: the lead
  * import's two steps (`/preview` reads, the other writes). Same refresh-once handling as `api()`.
  */
-export async function uploadCsv<T>(path: string, file: File, params: Record<string, string | undefined> = {}): Promise<T> {
+export async function uploadCsv<T>(
+  path: string,
+  file: File,
+  params: Record<string, string | undefined> = {},
+  contentType = "text/csv",
+): Promise<T> {
   const query = new URLSearchParams(
     Object.entries(params).filter((e): e is [string, string] => !!e[1]),
   ).toString();
@@ -157,7 +162,7 @@ export async function uploadCsv<T>(path: string, file: File, params: Record<stri
   const send = () =>
     fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "text/csv", "X-Requested-With": "ilm" },
+      headers: { "Content-Type": contentType, "X-Requested-With": "ilm" },
       body: file,
       credentials: "same-origin",
     });

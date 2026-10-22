@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from app.attendance.api import router as attendance_router
+from app.attendance.journal_api import router as journal_router
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
 from app.auth.reset import router as reset_router
@@ -70,6 +71,7 @@ for router in (
     rooms_router,
     cohorts_router,
     attendance_router,
+    journal_router,
     students_router,
     metrics_router,
     payments_router,

@@ -8,6 +8,7 @@ import { Input } from "@heroui/input";
 
 import type { RateRecord } from "./RateModal";
 
+import { ActivateUserButton } from "@/components/ActivateUserButton";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
@@ -101,8 +102,10 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
       <div>
         <div className="flex items-start justify-between gap-2">
           <h2 className="min-w-0 truncate text-base font-semibold">{c.full_name}</h2>
-          {!c.is_active && <span className="shrink-0 rounded-full bg-default-100 px-2 py-0.5 text-xs">не работает</span>}
+          {!c.is_active && <span className="shrink-0 rounded-full bg-default-100 px-2 py-0.5 text-xs">нет доступа</span>}
         </div>
+        {/* always mounted: once the account is active the button goes, the password modal stays */}
+        <ActivateUserButton active={c.is_active} className="mt-2" name={c.full_name} userId={c.id} />
         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 text-sm text-default-500">
           <span>{c.branch_name ?? "Все филиалы"}</span>
           {c.phone && (

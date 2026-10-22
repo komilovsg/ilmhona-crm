@@ -1,7 +1,10 @@
 "use client";
 
+import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { Button } from "@heroui/button";
 import clsx from "clsx";
 
 import { ExportButton } from "@/components/ExportButton";
@@ -13,6 +16,16 @@ import { api } from "@/lib/api";
 import { lessonProgress, markedLabel, markState, percentLabel } from "@/lib/attendance";
 import { dayMonth, dayTitle, todayIso } from "@/lib/education";
 import type { AttendanceGrid, GridStudent } from "@/lib/types";
+
+const ImportJournal = dynamic(() => import("./ImportJournal").then((m) => m.ImportJournal));
+
+function ImportButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Button startContent={<Icon name="upload" size={18} />} variant="flat" onPress={onPress}>
+      Импорт из Excel
+    </Button>
+  );
+}
 
 function Cell({ student, lesson }: { student: GridStudent; lesson: AttendanceGrid["lessons"][number] }) {
   const mark = student.marks[lesson.id];
@@ -60,17 +73,28 @@ export function AttendanceTab({ cohortId, canMark }: { cohortId: string; canMark
     queryFn: () => api<AttendanceGrid>(`/api/v1/cohorts/${cohortId}/attendance`),
   });
   const today = todayIso();
+  const [importing, setImporting] = useState(false);
+  const onImport = canMark ? () => setImporting(true) : undefined;
 
   return (
-    <QueryState
-      empty={<EmptyState title="Нечего отмечать" hint="В потоке нет студентов или уроков." />}
-      errorText="Не удалось загрузить посещаемость"
-      isEmpty={(g) => g.students.length === 0 || g.lessons.length === 0}
-      query={grid}
-      skeleton={<ListSkeleton cols={8} rows={6} />}
-    >
-      {(data) => <Grid canMark={canMark} cohortId={cohortId} grid={data} today={today} />}
-    </QueryState>
+    <>
+      <QueryState
+        empty={
+          <EmptyState
+            action={onImport && <ImportButton onPress={onImport} />}
+            hint="В потоке нет студентов или уроков."
+            title="Нечего отмечать"
+          />
+        }
+        errorText="Не удалось загрузить посещаемость"
+        isEmpty={(g) => g.students.length === 0 || g.lessons.length === 0}
+        query={grid}
+        skeleton={<ListSkeleton cols={8} rows={6} />}
+      >
+        {(data) => <Grid canMark={canMark} cohortId={cohortId} grid={data} today={today} onImport={onImport} />}
+      </QueryState>
+      {importing && <ImportJournal cohortId={cohortId} onClose={() => setImporting(false)} />}
+    </>
   );
 }
 
@@ -79,11 +103,13 @@ function Grid({
   cohortId,
   canMark,
   today,
+  onImport,
 }: {
   grid: AttendanceGrid;
   cohortId: string;
   canMark: boolean;
   today: string;
+  onImport?: () => void;
 }) {
   const { lessons, students } = grid;
   const progress = lessonProgress(grid, (iso) => todayIso(new Date(iso)));
@@ -101,7 +127,10 @@ function Grid({
           <b className="text-default-700">%</b> считается от проведённых уроков, пока студент в потоке; неотмеченные
           уроки показаны отдельно.
         </p>
-        <ExportButton label="Табель" path={`/api/v1/cohorts/${cohortId}/attendance/export`} />
+        <div className="flex flex-wrap gap-2">
+          {onImport && <ImportButton onPress={onImport} />}
+          <ExportButton label="Табель" path={`/api/v1/cohorts/${cohortId}/attendance/export`} />
+        </div>
       </div>
 
       <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">

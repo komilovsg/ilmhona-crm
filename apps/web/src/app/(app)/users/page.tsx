@@ -81,7 +81,7 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
 }
 
 function StatusChip({ user }: { user: UserRow }) {
-  if (!user.is_active) return <Chip size="sm">Заблокирован</Chip>;
+  if (!user.is_active) return <Chip size="sm">Нет доступа</Chip>;
   if (user.must_change_password)
     return (
       <Chip color="warning" size="sm" variant="flat">
@@ -175,7 +175,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         label="Статус"
         options={[
           { key: "true", label: "Активные" },
-          { key: "false", label: "Заблокированные" },
+          { key: "false", label: "Нет доступа" },
         ]}
         value={filters.status}
         onChange={(status) => set({ ...filters, status })}
@@ -241,6 +241,13 @@ export default function UsersPage() {
   };
   const users = list.data?.items ?? [];
   const activeFilters = [filters.branch, filters.role, filters.status].filter(Boolean).length;
+  const activate = (u: UserRow) =>
+    canChange &&
+    !u.is_active && (
+      <Button aria-label={`Активировать: ${u.full_name}`} className="ml-2" size="sm" variant="flat" onPress={() => setAction({ kind: "activate", user: u })}>
+        Активировать
+      </Button>
+    );
   const menu = (u: UserRow) =>
     canChange && (
       <RowMenu
@@ -357,6 +364,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip user={u} />
+                      {activate(u)}
                       {u.must_change_password && u.temp_password_expires_at && (
                         <div className="mt-1 text-xs text-default-500">до {formatDateTime(u.temp_password_expires_at)}</div>
                       )}
@@ -380,6 +388,7 @@ export default function UsersPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <StatusChip user={u} />
+                  {activate(u)}
                   <span>{u.role_name}</span>
                   <span className="text-default-500">· {u.branch_name ?? "Все филиалы"}</span>
                 </div>
