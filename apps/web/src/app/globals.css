@@ -259,3 +259,17 @@ html[data-sidebar="collapsed"] .sb-dot {
     animation: none !important;
   }
 }
+
+/* error / 404 screens: a short rise-in, none under reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .err-in {
+    animation: err-in 250ms ease-out;
+  }
+
+  @keyframes err-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+}

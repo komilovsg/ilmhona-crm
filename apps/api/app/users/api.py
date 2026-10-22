@@ -24,7 +24,7 @@ from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
-from app.export import MAX_ROWS, Col, xlsx_response
+from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.models import AppUser, Branch, PasswordResetRequest, Role
 from app.permissions import SUPERADMIN_CODE
 from app.users.errors import (
@@ -330,6 +330,30 @@ async def _open_requests(db: AsyncSession, p: Principal) -> list[dict[str, Any]]
 async def list_reset_requests(p: Change, db: DB) -> dict[str, Any]:
     items = await _open_requests(db, p)
     return {"items": items, "total": len(items)}
+
+
+RESET_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Логин", lambda r: r["login"]),
+    Col("Сотрудник", lambda r: r["full_name"]),
+    Col("Роль", lambda r: r["role_name"]),
+    Col("Запрошено", lambda r: r["created_at"], "datetime"),
+]
+
+
+@router.get("/reset-requests/export")
+async def export_reset_requests(p: Change, db: DB) -> Response:
+    rows = await _open_requests(db, p)
+    check_cap(rows)
+    return await xlsx_response(
+        db,
+        p,
+        entity="reset_request",
+        slug="zaprosy_parolya",
+        title="Запросы пароля",
+        columns=RESET_COLUMNS,
+        rows=rows,
+        filters={},
+    )
 
 
 @router.post("/reset-requests/{request_id}/reject", status_code=204)

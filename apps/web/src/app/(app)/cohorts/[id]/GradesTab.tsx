@@ -10,6 +10,7 @@ import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { PersonStatus } from "@/components/StatusChip";
+import { ExportButton } from "@/components/ExportButton";
 import { useRefreshAttendance } from "@/hooks/attendance";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
@@ -303,10 +304,13 @@ export function GradesTab({ cohortId, canMark }: { cohortId: string; canMark: bo
 function GradesList({ cohortId, canMark, rows }: { cohortId: string; canMark: boolean; rows: GradeRow[] }) {
   return (
     <>
-      <p className="mb-3 text-xs text-default-500">
-        Итог = посещаемость (до 20, считается сама) + Д/З (до {GRADE_MAX}) + финал (до {GRADE_MAX}). От {PASS_TOTAL}{" "}
-        баллов студент станет выпускником, когда поток закончится.
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-default-500">
+          Итог = посещаемость (до 20, считается сама) + Д/З (до {GRADE_MAX}) + финал (до {GRADE_MAX}). От {PASS_TOTAL}{" "}
+          баллов студент станет выпускником, когда поток закончится.
+        </p>
+        <ExportButton label="Оценки" path={`/api/v1/cohorts/${cohortId}/grades/export`} />
+      </div>
       <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">

@@ -54,7 +54,10 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
 
   return (
     <section aria-label="Запросы на сброс" className="mb-5 rounded-2xl border border-warning/40 bg-content1 p-4">
-      <h2 className="mb-2 font-semibold">Запросы на сброс пароля · {items.length}</h2>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Запросы на сброс пароля · {items.length}</h2>
+        <ExportButton path="/api/v1/users/reset-requests/export" />
+      </div>
       <ul className="divide-y divide-divider">
         {items.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5">

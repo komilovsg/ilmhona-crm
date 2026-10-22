@@ -123,6 +123,10 @@ TABLES: dict[str, str] = {
     "graduate_course": "выпускники по курсам",
     "employment": "трудоустройство",
     "dashboard_month": "дашборд по месяцам",
+    "grade": "оценки потока",
+    "today": "сегодня и не заполнено",
+    "student_card": "карточка студента",
+    "reset_request": "запросы пароля",
 }
 FILTERS = {
     "q": "поиск",
@@ -141,6 +145,7 @@ FILTERS = {
     "method": "способ",
     "month": "месяц",
     "instructor_id": "инструктор",
+    "student": "студент",
 }
 MONEY = {
     "default_price_month",

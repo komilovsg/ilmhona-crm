@@ -35,7 +35,7 @@ from app.education.errors import (
     LESSON_NOT_HELD,
 )
 from app.education.scope import check_cohort_visible, cohort_filters
-from app.export import Col, check_cap, xlsx_response
+from app.export import MAX_ROWS, Col, Sheet, check_cap, workbook_response, xlsx_response
 from app.metrics import (
     enrollment_attendance,
     enrollment_results,
@@ -448,17 +448,19 @@ def _grade_out(enrollment_id: uuid.UUID, result: dict[str, Any]) -> dict[str, An
     }
 
 
-@router.get("/cohorts/{cohort_id}/grades")
-async def cohort_grades(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
-    cohort = await _cohort(db, p, cohort_id)
-    rows = (
-        await db.execute(
-            select(Enrollment, Student.full_name)
-            .join(Student, Student.id == Enrollment.student_id)
-            .where(Enrollment.cohort_id == cohort.id, Enrollment.status != EXPELLED)
-            .order_by(Student.full_name, Enrollment.id)
-        )
-    ).all()
+async def _grade_rows(
+    db: AsyncSession, cohort: Cohort, limit: int | None = None
+) -> list[dict[str, Any]]:
+    """The «Оценки» rows of a cohort: the one query behind the screen and its Excel file."""
+    stmt = (
+        select(Enrollment, Student.full_name)
+        .join(Student, Student.id == Enrollment.student_id)
+        .where(Enrollment.cohort_id == cohort.id, Enrollment.status != EXPELLED)
+        .order_by(Student.full_name, Enrollment.id)
+    )
+    if limit is not None:
+        stmt = stmt.limit(limit)
+    rows = (await db.execute(stmt)).all()
     results = await enrollment_results(db, cohort.id)
     return [
         {
@@ -473,6 +475,43 @@ async def cohort_grades(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str,
         }
         for e, name in rows
     ]
+
+
+@router.get("/cohorts/{cohort_id}/grades")
+async def cohort_grades(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
+    return await _grade_rows(db, await _cohort(db, p, cohort_id))
+
+
+GRADE_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Студент", lambda r: r["student_name"]),
+    Col("Статус", lambda r: r["status"]),
+    Col("Д/З", lambda r: r["homework"], "int"),
+    Col("Финал", lambda r: r["final"], "int"),
+    Col("Баллы за посещаемость", lambda r: r["attendance_score"], "int"),
+    Col("Итого", lambda r: r["total"], "int"),
+    Col("Зачёт", lambda r: r["passed"], "bool"),
+    Col("Проведено уроков", lambda r: r["held"], "int"),
+    Col("Присутствовал", lambda r: r["present"], "int"),
+    Col("Не отмечено", lambda r: r["unmarked"], "int"),
+    Col("Посещаемость", lambda r: r["percent"], "percent"),
+]
+
+
+@router.get("/cohorts/{cohort_id}/grades/export")
+async def export_grades(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
+    cohort = await _cohort(db, p, cohort_id)
+    rows = await _grade_rows(db, cohort, MAX_ROWS + 1)
+    check_cap(rows)
+    return await xlsx_response(
+        db,
+        p,
+        entity="grade",
+        slug=f"otsenki_{cohort.code}",
+        title="Оценки",
+        columns=GRADE_COLUMNS,
+        rows=rows,
+        filters={"cohort": cohort.code},
+    )
 
 
 @router.patch("/enrollments/{enrollment_id}/grade")
@@ -545,11 +584,11 @@ def _lesson_item(
     }
 
 
-@router.get("/me/today")
-async def my_today(p: View, db: DB) -> dict[str, Any]:
-    """The lessons of today in the user's scope (an instructor: their own cohorts) with
-    marked / total, and the «не заполнено» list (#21): held lessons of the last 30 days with
-    somebody still unmarked, also grouped by instructor for the manager."""
+async def _today_rows(
+    db: AsyncSession, p: Principal
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """(today's lessons, unfilled lessons) in the user's scope: the one query behind the screen
+    and its Excel file."""
     where = cohort_filters(p)
     today = await today_lessons(db, where, st.today())
     unfilled = await unfilled_lessons(db, where)
@@ -564,7 +603,15 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
         if ids
         else {}
     )
-    items = [_lesson_item(r, names) for r in unfilled]
+    return [_lesson_item(r, names) for r in today], [_lesson_item(r, names) for r in unfilled]
+
+
+@router.get("/me/today")
+async def my_today(p: View, db: DB) -> dict[str, Any]:
+    """The lessons of today in the user's scope (an instructor: their own cohorts) with
+    marked / total, and the «не заполнено» list (#21): held lessons of the last 30 days with
+    somebody still unmarked, also grouped by instructor for the manager."""
+    today, items = await _today_rows(db, p)
     groups: dict[Any, dict[str, Any]] = {}
     for item in items:
         g = groups.setdefault(
@@ -578,7 +625,37 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
         g["lessons"].append(item)
     return {
         "date": st.today(),
-        "today": [_lesson_item(r, names) for r in today],
+        "today": today,
         "unfilled": items,
         "unfilled_by_instructor": list(groups.values()),
     }
+
+
+LESSON_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Дата", lambda r: r["date"], "date"),
+    Col("Начало", lambda r: r["start"]),
+    Col("Конец", lambda r: r["end"]),
+    Col("Поток", lambda r: r["cohort_code"]),
+    Col("Курс", lambda r: r["course_name"]),
+    Col("Аудитория", lambda r: r["room_name"]),
+    Col("Инструктор", lambda r: r["instructor_name"]),
+    Col("Отмечено", lambda r: r["marked"], "int"),
+    Col("Студентов", lambda r: r["total"], "int"),
+]
+
+
+@router.get("/me/today/export")
+async def export_today(p: View, db: DB) -> Response:
+    """«Сегодня» and «Не заполнено» as two sheets, the same lessons as the screen."""
+    today, unfilled = await _today_rows(db, p)
+    return await workbook_response(
+        db,
+        p,
+        entity="today",
+        slug="segodnya",
+        sheets=[
+            Sheet("Сегодня", LESSON_COLUMNS, today),
+            Sheet("Не заполнено", LESSON_COLUMNS, unfilled),
+        ],
+        filters={},
+    )

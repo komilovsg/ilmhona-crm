@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { buildCsp, makeNonce } from "./lib/csp";
-import { apiRequestHeaders, trustedClientIp } from "./lib/forward";
+import { PROXY_SECRET_HEADER, apiRequestHeaders, trustedClientIp } from "./lib/forward";
+import { isMissingStatus, recordApiPath } from "./lib/record-path";
 
 const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login", "/forgot-password"]);
@@ -13,7 +14,7 @@ const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-ic
  * through the request `Content-Security-Policy` header so Next stamps its own bootstrap scripts
  * with it, and returned on the response so the browser enforces the same policy.
  */
-function withCsp(request: NextRequest, redirectTo?: URL): NextResponse {
+function withCsp(request: NextRequest, redirectTo?: URL, rewriteTo?: URL): NextResponse {
   const nonce = makeNonce();
   const proto = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
   const csp = buildCsp(nonce, { dev: process.env.NODE_ENV !== "production", https: proto.startsWith("https") });
@@ -22,16 +23,40 @@ function withCsp(request: NextRequest, redirectTo?: URL): NextResponse {
   headers.set("content-security-policy", csp);
   const response = redirectTo
     ? NextResponse.redirect(redirectTo)
-    : NextResponse.next({ request: { headers } });
+    : rewriteTo
+      ? NextResponse.rewrite(rewriteTo, { request: { headers } })
+      : NextResponse.next({ request: { headers } });
   response.headers.set("content-security-policy", csp);
   return response;
+}
+
+function isDocumentRequest(request: NextRequest): boolean {
+  const h = request.headers;
+  return !h.has("rsc") && !h.has("next-router-prefetch") && (h.get("accept") ?? "").includes("text/html");
+}
+
+/** Ask the API whether the record exists, with the visitor's own session. Any doubt means «exists». */
+async function recordMissing(request: NextRequest, apiPath: string): Promise<boolean> {
+  const headers = new Headers({ cookie: request.headers.get("cookie") ?? "", accept: "application/json" });
+  const secret = process.env.PROXY_SHARED_SECRET?.split(",")[0]?.trim();
+  if (secret) headers.set(PROXY_SECRET_HEADER, secret);
+  try {
+    const res = await fetch(`${process.env.API_URL ?? "http://localhost:8200"}${apiPath}`, {
+      headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    return isMissingStatus(res.status);
+  } catch {
+    return false;
+  }
 }
 
 /**
  * Optimistic check by cookie presence only; the API decides whether the session is valid
  * (a stale cookie gets a 401 there and the client goes to /login).
  */
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // API calls leave through the next.config rewrite: add the proxy secret and the trusted client
@@ -54,7 +79,15 @@ export function proxy(request: NextRequest) {
       : withCsp(request);
   }
 
-  return signedIn ? withCsp(request) : withCsp(request, new URL("/login", request.url));
+  if (!signedIn) return withCsp(request, new URL("/login", request.url));
+
+  // A student or cohort that does not exist answers a real 404 (the page itself would stream a 200):
+  // only for a full page load, not for client navigation or prefetch, which need no status.
+  const record = isDocumentRequest(request) ? recordApiPath(pathname) : null;
+  if (record && (await recordMissing(request, record))) {
+    return withCsp(request, undefined, new URL("/not-found-record", request.url));
+  }
+  return withCsp(request);
 }
 
 export const config = {
