@@ -2,7 +2,7 @@
 
 ```
 browser -> Vercel (apps/web, ilmhona-crm.vercel.app)
-             -> /api/* rewrite + X-Proxy-Secret -> Render (apps/api, ilmhona-api.onrender.com)
+             -> /api/* rewrite + X-Proxy-Secret -> Render (apps/api, ilmhona-api-1oaz.onrender.com)
                   -> Neon Postgres (ilmhona-db, direct URL, role ilm_app)
 ```
 
@@ -11,7 +11,7 @@ Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
 | Part | Where | Name / id |
 |---|---|---|
 | Database | Neon (Vercel marketplace), aws-eu-central-1, Postgres 18 | project `ilmhona-db` (`icy-waterfall-82517700`), db `neondb` |
-| API | Render free, Frankfurt, Docker | `ilmhona-api` (`srv-dbc1c33ncjis7380m3a0`), `render.yaml` |
+| API | Render free, Frankfurt, Docker; own workspace `ilmhona-crm` (leader.pro11@gmail.com) | `ilmhona-api` (`srv-dbd46dcipgvc73e2s51g`), `render.yaml` |
 | Web | Vercel, root `apps/web`, production branch `main` | `ilmhona-crm` (`prj_91vTa2EjLoxLAwU1v8sdnLk7Amqg`) |
 | Backups | private repo `komilovsg/ilmhona-backups` | encrypted dumps |
 
@@ -76,8 +76,9 @@ Use the **direct** (non-pooled) Neon host. SQLAlchemy URLs are
 |---|---|---|
 | Render env | `ENV=production`, `COOKIE_SECURE=true`, `FORWARDED_ALLOW_IPS=*` | plain |
 | Render env | `DATABASE_URL` | `ilm_app` URL |
+| Render env | `SENTRY_DSN` | API Sentry project (monitoring.md) |
 | Render env | `JWT_SECRET`, `PROXY_SHARED_SECRET` | 32+ random characters; the app refuses to start in production without them |
-| Vercel env (production) | `API_URL` | `https://ilmhona-api.onrender.com` |
+| Vercel env (production) | `API_URL` | `https://ilmhona-api-1oaz.onrender.com` |
 | Vercel env (production) | `PROXY_SHARED_SECRET` | same value as on Render (sensitive) |
 | GitHub env `api-production` | `MIGRATION_DATABASE_URL` | owner URL (asyncpg form) |
 | GitHub env `api-production` | `DATABASE_URL` | `ilm_app` URL, for the daily job |
