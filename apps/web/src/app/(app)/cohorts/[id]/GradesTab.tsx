@@ -13,7 +13,7 @@ import { PersonStatus } from "@/components/StatusChip";
 import { ExportButton } from "@/components/ExportButton";
 import { useRefreshAttendance } from "@/hooks/attendance";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api } from "@/lib/api";
+import { api, messageOf } from "@/lib/api";
 import { GRADE_MAX, PASS_TOTAL, parseGrade, percentLabel } from "@/lib/attendance";
 import type { GradeRow } from "@/lib/types";
 
@@ -156,9 +156,10 @@ function useGradeRow(cohortId: string, row: GradeRow) {
     else void edit.save(values);
   };
 
-  const shown: Saved = edit.error ? "error" : edit.pending ? "saving" : saved;
+  const error = edit.failure ? messageOf(edit.failure) : null;
+  const shown: Saved = error ? "error" : edit.pending ? "saving" : saved;
 
-  return { draft, setDraft, setFocus, invalid, saved: shown, commit, edit };
+  return { draft, setDraft, setFocus, invalid, saved: shown, commit, edit, error };
 }
 
 function SavedMark({ saved }: { saved: Saved }) {
@@ -243,7 +244,7 @@ function RowEditor({
             <Total row={row} />
             <SavedMark saved={g.saved} />
           </div>
-          {g.edit.error && <p className="mt-1 text-xs text-danger">{g.edit.error}</p>}
+          {g.error && <p className="mt-1 text-xs text-danger">{g.error}</p>}
           {dialog}
         </td>
       </>
@@ -276,7 +277,7 @@ function RowEditor({
           <SavedMark saved={g.saved} />
         </span>
       </div>
-      {g.edit.error && <p className="text-xs text-danger">{g.edit.error}</p>}
+      {g.error && <p className="text-xs text-danger">{g.error}</p>}
       {dialog}
     </div>
   );

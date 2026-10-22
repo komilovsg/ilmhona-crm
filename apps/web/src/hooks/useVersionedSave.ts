@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 
-import { messageOf } from "@/lib/api";
 import {
   changedKeys,
   conflictLines,
@@ -42,7 +41,7 @@ export function useVersionedSave<R extends { version: number }, V extends Values
   const latest = useRef(opts);
   const [base, setBase] = useState<R | null>(opts.record);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<unknown>(null);
   const [stale, setStale] = useState<{ info: StaleInfo<R>; mine: V } | null>(null);
 
   // read at call time only (a submit), never during render
@@ -55,7 +54,7 @@ export function useVersionedSave<R extends { version: number }, V extends Values
     const keys = changedKeys(before, values);
 
     setPending(true);
-    setError(null);
+    setFailure(null);
     try {
       const changed = Object.fromEntries(keys.map((k) => [k, values[k]])) as Partial<V>;
 
@@ -68,7 +67,7 @@ export function useVersionedSave<R extends { version: number }, V extends Values
       const info = staleOf<R>(e);
 
       if (info) setStale({ info, mine: values });
-      else setError(messageOf(e));
+      else setFailure(e);
     } finally {
       setPending(false);
     }
@@ -104,7 +103,8 @@ export function useVersionedSave<R extends { version: number }, V extends Values
       if (base) await run(base, values);
     },
     pending,
-    error,
+    /** The raw error of the last save (feed it to `useFieldErrors`). */
+    failure,
     conflict,
     retry,
     cancel: () => setStale(null),

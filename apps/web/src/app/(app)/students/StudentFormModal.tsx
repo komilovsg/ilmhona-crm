@@ -10,8 +10,9 @@ import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { StudentRow } from "@/lib/types";
@@ -25,7 +26,6 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
   const [phone, setPhone] = useState(student?.phone ?? "");
   const [gender, setGender] = useState<string | null>(student?.gender ?? null);
   const [branchId, setBranchId] = useState<string | null>(student?.branch_id ?? me?.branch?.id ?? null);
-  const [error, setError] = useState<string | null>(null);
   const valid = name.trim() && (student || branchId);
 
   const values = { full_name: name.trim(), phone: phone.trim() || null, gender };
@@ -37,7 +37,6 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
   const create = useMutation({
     mutationFn: () => api("/api/v1/students", { method: "POST", body: { ...values, branch_id: branchId } }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: student,
@@ -54,6 +53,7 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
     show: { gender: (g: string | null) => (g === "male" ? "Мужской" : g === "female" ? "Женский" : "—") },
     onSaved: done,
   });
+  const fe = useFieldErrors(student ? edit.failure : create.error, ["full_name", "phone", "gender", "branch_id"]);
   const pending = create.isPending || edit.pending;
   const submit = useSubmit(() => (student ? edit.save(values) : create.mutateAsync()), !valid);
 
@@ -78,8 +78,8 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
         className="space-y-4"
         onSubmit={submit}
       >
-        <Input isRequired label="ФИО" value={name} onValueChange={setName} />
-        <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
+        <Input isRequired label="ФИО" value={name} {...fe.field("full_name", setName)} />
+        <Input inputMode="tel" label="Телефон" placeholder="+992 90 123 45 67" type="tel" value={phone} {...fe.field("phone", setPhone)} />
         <SelectField
           allLabel="Не указан"
           label="Пол"
@@ -88,7 +88,11 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
             { key: "female", label: "Женский" },
           ]}
           value={gender}
-          onChange={setGender}
+          onChange={(v) => {
+            fe.clear("gender");
+            setGender(v);
+          }}
+          {...fe.hint("gender")}
         />
         <SelectField
           isDisabled={!!student || !!me?.branch}
@@ -96,11 +100,15 @@ export function StudentFormModal({ student, onClose }: { student: StudentRow | n
           label="Филиал"
           options={branches.map((b) => ({ key: b.id, label: b.name }))}
           value={branchId}
-          onChange={setBranchId}
+          onChange={(v) => {
+            fe.clear("branch_id");
+            setBranchId(v);
+          }}
+          {...fe.hint("branch_id")}
         />
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>

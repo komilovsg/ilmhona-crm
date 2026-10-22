@@ -12,8 +12,9 @@ import { SelectField } from "@/components/SelectField";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useRefreshSales } from "@/hooks/sales";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MAX_DATE, MIN_DATE } from "@/lib/education";
 import { amountText, validRate } from "@/lib/money";
 import { CAMPAIGN_STATUSES, PLATFORMS } from "@/lib/sales";
@@ -44,7 +45,6 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
   const [end, setEnd] = useState(campaign?.end_date ?? "");
   const [budget, setBudget] = useState(campaign ? String(Number(campaign.budget)) : "0");
   const [status, setStatus] = useState(campaign?.status ?? "запланирована");
-  const [error, setError] = useState<string | null>(null);
 
   const budgetOk = validRate(budget);
   const datesOk = !end || !start || end >= start;
@@ -66,7 +66,6 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
   const create = useMutation({
     mutationFn: () => api("/api/v1/campaigns", { method: "POST", body: { ...values, branch_id: branchId } }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: campaign,
@@ -101,6 +100,7 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
     },
     onSaved: done,
   });
+  const fe = useFieldErrors(campaign ? edit.failure : create.error, ["name", "start_date", "end_date", "budget"]);
   const pending = create.isPending || edit.pending;
   const submit = useSubmit(() => (campaign ? edit.save(values) : create.mutateAsync()), !valid);
 
@@ -122,7 +122,7 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
       onClose={onClose}
     >
       <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-        <Input className="sm:col-span-2" isRequired label="Название" value={name} onValueChange={setName} />
+        <Input className="sm:col-span-2" isRequired label="Название" value={name} {...fe.field("name", setName)} />
         <SelectField
           label="Платформа"
           options={PLATFORMS.map((p) => ({ key: p, label: p }))}
@@ -150,31 +150,37 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
           value={status}
           onChange={(s) => setStatus(s ?? "запланирована")}
         />
-        <Input isRequired label="Старт" max={MAX_DATE} min={MIN_DATE} type="date" value={start} onValueChange={setStart} />
+        <Input isRequired label="Старт" max={MAX_DATE} min={MIN_DATE} type="date" value={start} {...fe.field("start_date", setStart)} />
         <Input
-          errorMessage="Раньше даты старта"
-          isInvalid={!datesOk}
+          errorMessage={fe.hint("end_date").errorMessage ?? "Раньше даты старта"}
+          isInvalid={!datesOk || fe.hint("end_date").isInvalid}
           label="Окончание"
           max={MAX_DATE}
           min={start || MIN_DATE}
           type="date"
           value={end}
-          onValueChange={setEnd}
+          onValueChange={(v) => {
+            fe.clear("end_date");
+            setEnd(v);
+          }}
         />
         <Input
           className="sm:col-span-2"
           endContent={<span className="text-sm text-default-500">TJS</span>}
-          errorMessage="Сумма от 0, не больше двух знаков после запятой"
+          errorMessage={fe.hint("budget").errorMessage ?? "Сумма от 0, не больше двух знаков после запятой"}
           inputMode="decimal"
-          isInvalid={!budgetOk}
+          isInvalid={!budgetOk || fe.hint("budget").isInvalid}
           isRequired
           label="Бюджет"
           value={budget}
-          onValueChange={setBudget}
+          onValueChange={(v) => {
+            fe.clear("budget");
+            setBudget(v);
+          }}
         />
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger sm:col-span-2" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>

@@ -11,8 +11,9 @@ import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoadingButton } from "@/components/LoadingButton";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshMoney } from "@/hooks/money";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { formatPrice, MAX_DATE, MIN_DATE, todayIso } from "@/lib/education";
 import { amountText, methodLabel, monthLabel, PAYMENT_METHODS, validAmount } from "@/lib/money";
 import type { SalaryRow } from "@/lib/money-types";
@@ -31,7 +32,6 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
   const [method, setMethod] = useState<string>(payout?.method ?? "наличные");
   const [paidAt, setPaidAt] = useState(payout?.paid_at ?? todayIso());
   const [note, setNote] = useState(payout?.note ?? "");
-  const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const valid = validAmount(amount) && paidAt >= MIN_DATE && paidAt <= MAX_DATE;
 
@@ -45,7 +45,6 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
     mutationFn: () =>
       api("/api/v1/payouts", { method: "POST", body: { ...values, cohort_id: row.cohort_id, period: row.period } }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: payout,
@@ -74,6 +73,7 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
       notifyError(e);
     },
   });
+  const fe = useFieldErrors(payout ? edit.failure : create.error, ["amount", "method", "paid_at", "note"]);
   const submit = useSubmit(() => (payout ? edit.save(values) : create.mutateAsync()), !valid);
   const confirmDelete = useSubmit(() => remove.mutateAsync());
 
@@ -112,10 +112,14 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
             isRequired
             endContent={<span className="text-xs text-default-500">TJS</span>}
             inputMode="decimal"
-            isInvalid={amount !== "" && !validAmount(amount)}
+            errorMessage={fe.hint("amount").errorMessage}
+            isInvalid={(amount !== "" && !validAmount(amount)) || fe.hint("amount").isInvalid}
             label="Сумма"
             value={amount}
-            onValueChange={setAmount}
+            onValueChange={(v) => {
+              fe.clear("amount");
+              setAmount(v);
+            }}
           />
           <div className="grid grid-cols-2 gap-3">
             <SelectField
@@ -123,7 +127,11 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
               label="Способ"
               options={PAYMENT_METHODS.map((m) => ({ key: m.key, label: m.label }))}
               value={method}
-              onChange={(m) => setMethod(m ?? "наличные")}
+              {...fe.hint("method")}
+              onChange={(m) => {
+                fe.clear("method");
+                setMethod(m ?? "наличные");
+              }}
             />
             <Input
               isRequired
@@ -133,13 +141,13 @@ export function PayoutModal({ row, onClose }: { row: SalaryRow; onClose: () => v
               placeholder=" "
               type="date"
               value={paidAt}
-              onValueChange={setPaidAt}
+              {...fe.field("paid_at", setPaidAt)}
             />
           </div>
-          <Input label="Заметка" maxLength={500} value={note} onValueChange={setNote} />
-          {(error ?? edit.error) && (
+          <Input label="Заметка" maxLength={500} value={note} {...fe.field("note", setNote)} />
+          {fe.message && (
             <p className="text-sm text-danger" role="alert">
-              {error ?? edit.error}
+              {fe.message}
             </p>
           )}
         </form>

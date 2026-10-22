@@ -10,8 +10,9 @@ import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshEducation } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
@@ -24,7 +25,6 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
   const [name, setName] = useState(room?.name ?? "");
   const [capacity, setCapacity] = useState(String(room?.capacity ?? 20));
   const [branchId, setBranchId] = useState<string | null>(room?.branch_id ?? me?.branch?.id ?? null);
-  const [error, setError] = useState<string | null>(null);
   const size = Number(capacity);
   const valid = name.trim() && Number.isInteger(size) && size >= 1 && size <= 100 && (room || branchId);
 
@@ -37,7 +37,6 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
   const create = useMutation({
     mutationFn: () => api("/api/v1/rooms", { method: "POST", body: { ...values, branch_id: branchId } }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: room,
@@ -51,6 +50,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
     labels: { name: "Название", capacity: "Вместимость" },
     onSaved: done,
   });
+  const fe = useFieldErrors(room ? edit.failure : create.error, ["name", "capacity"]);
   const submit = useSubmit(() => (room ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -82,7 +82,7 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           value={branchId}
           onChange={setBranchId}
         />
-        <Input isRequired label="Название" value={name} onValueChange={setName} />
+        <Input isRequired label="Название" value={name} {...fe.field("name", setName)} />
         <Input
           description="От 1 до 100"
           isRequired
@@ -91,11 +91,11 @@ export function RoomFormModal({ room, onClose }: { room: Room | null; onClose: (
           min={1}
           type="number"
           value={capacity}
-          onValueChange={setCapacity}
+          {...fe.field("capacity", setCapacity)}
         />
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>
@@ -111,7 +111,6 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
   const [price, setPrice] = useState(course ? String(Number(course.default_price_month)) : "0");
   const [months, setMonths] = useState(String(course?.duration_months ?? 3));
   const [format, setFormat] = useState<string | null>(course?.format ?? "offline");
-  const [error, setError] = useState<string | null>(null);
   const m = Number(months);
   const p = Number(price);
   const valid = name.trim() && format && Number.isInteger(m) && m >= 1 && m <= 36 && p >= 0;
@@ -131,7 +130,6 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
   const create = useMutation({
     mutationFn: () => api("/api/v1/courses", { method: "POST", body: values }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: course,
@@ -162,6 +160,7 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
     show: { format: (f: string | null) => (f === "online" ? "Онлайн" : "Офлайн") },
     onSaved: done,
   });
+  const fe = useFieldErrors(course ? edit.failure : create.error, ["name", "direction", "default_price_month", "duration_months"]);
   const submit = useSubmit(() => (course ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -185,8 +184,8 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
         className="space-y-4"
         onSubmit={submit}
       >
-        <Input isRequired label="Название" value={name} onValueChange={setName} />
-        <Input label="Направление" value={direction} onValueChange={setDirection} />
+        <Input isRequired label="Название" value={name} {...fe.field("name", setName)} />
+        <Input label="Направление" value={direction} {...fe.field("direction", setDirection)} />
         <SelectField
           label="Формат"
           options={[
@@ -203,13 +202,13 @@ export function CourseFormModal({ course, onClose }: { course: Course | null; on
             min={0}
             type="number"
             value={price}
-            onValueChange={setPrice}
+            {...fe.field("default_price_month", setPrice)}
           />
-          <Input label="Месяцев" max={36} min={1} type="number" value={months} onValueChange={setMonths} />
+          <Input label="Месяцев" max={36} min={1} type="number" value={months} {...fe.field("duration_months", setMonths)} />
         </div>
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>

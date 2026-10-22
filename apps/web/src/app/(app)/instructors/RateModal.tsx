@@ -8,6 +8,7 @@ import { AppModal } from "@/components/AppModal";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoadingButton } from "@/components/LoadingButton";
 import { useRefreshMoney } from "@/hooks/money";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { formatPrice } from "@/lib/education";
 import { amountText, validRate } from "@/lib/money";
@@ -57,6 +58,7 @@ export function RateModal({
       onClose();
     },
   });
+  const fe = useFieldErrors(save.failure, [field]);
   const submit = useSubmit(() => save.save(values), !valid);
 
   return (
@@ -82,15 +84,19 @@ export function RateModal({
           isRequired
           endContent={<span className="text-xs text-default-500">TJS</span>}
           inputMode="decimal"
-          isInvalid={text !== "" && !valid}
+          errorMessage={fe.hint(field).errorMessage}
+          isInvalid={(text !== "" && !valid) || fe.hint(field).isInvalid}
           label="Ставка за месяц"
           value={text}
-          onValueChange={setText}
+          onValueChange={(v) => {
+            fe.clear(field);
+            setText(v);
+          }}
         />
         {hint && <p className="text-sm text-default-500">{hint}</p>}
-        {save.error && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {save.error}
+            {fe.message}
           </p>
         )}
       </form>

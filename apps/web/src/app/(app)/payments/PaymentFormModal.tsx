@@ -15,8 +15,9 @@ import { Bone } from "@/components/Skeletons";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshMoney } from "@/hooks/money";
 import { usePaymentMonth } from "@/hooks/payment-month";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { formatPrice, MAX_DATE, MIN_DATE, todayIso } from "@/lib/education";
 import { amountText, methodLabel, newKey, PAYMENT_METHODS, validAmount } from "@/lib/money";
 import type { EnrollmentOption, PaymentRow } from "@/lib/money-types";
@@ -210,7 +211,7 @@ export function PaymentFormModal({
     onSuccess: done,
     onError: (e) => {
       // somebody paid the month meanwhile: say who, not a generic error
-      setError(monthConflictText(e) ?? messageOf(e));
+      setError(monthConflictText(e));
       live.refresh();
       void refresh();
     },
@@ -241,6 +242,7 @@ export function PaymentFormModal({
     },
     onSaved: done,
   });
+  const fe = useFieldErrors(payment ? edit.failure : create.error, ["month_no", "amount", "method", "paid_at", "note"]);
   const submit = useSubmit(() => (payment ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -368,7 +370,11 @@ export function PaymentFormModal({
                   min={1}
                   type="number"
                   value={String(month ?? "")}
-                  onValueChange={(m) => setMonthChoice(Number(m))}
+                  {...fe.hint("month_no")}
+                  onValueChange={(m) => {
+                    fe.clear("month_no");
+                    setMonthChoice(Number(m));
+                  }}
                 />
               )}
               <Input
@@ -376,13 +382,19 @@ export function PaymentFormModal({
                 className={option ? "col-span-2" : undefined}
                 description={creating && st && capped && mode === "full" && Number(st.paid) > 0 ? "Остаток месяца" : undefined}
                 endContent={<span className="text-xs text-default-500">TJS</span>}
-                errorMessage={creating && st && capped ? `Не больше ${tjs(st.remaining)}` : undefined}
+                errorMessage={
+                  fe.hint("amount").errorMessage ??
+                  (creating && st && capped ? `Не больше ${tjs(st.remaining)}` : undefined)
+                }
                 inputMode="decimal"
-                isInvalid={amount !== "" && !amountOk}
+                isInvalid={(amount !== "" && !amountOk) || fe.hint("amount").isInvalid}
                 isReadOnly={creating && capped && mode === "full"}
                 label="Сумма"
                 value={amount}
-                onValueChange={setAmountChoice}
+                onValueChange={(v) => {
+                  fe.clear("amount");
+                  setAmountChoice(v);
+                }}
               />
             </div>
             {creating && st && capped && mode === "partial" && !st.full && (
@@ -403,7 +415,11 @@ export function PaymentFormModal({
                 label="Способ"
                 options={PAYMENT_METHODS.map((m) => ({ key: m.key, label: m.label }))}
                 value={method}
-                onChange={(m) => setMethod(m ?? "наличные")}
+                {...fe.hint("method")}
+                onChange={(m) => {
+                  fe.clear("method");
+                  setMethod(m ?? "наличные");
+                }}
               />
               <Input
                 isRequired
@@ -413,15 +429,15 @@ export function PaymentFormModal({
                 placeholder=" "
                 type="date"
                 value={paidAt}
-                onValueChange={setPaidAt}
+                {...fe.field("paid_at", setPaidAt)}
               />
             </div>
-            <Input label="Заметка" maxLength={500} value={note} onValueChange={setNote} />
+            <Input label="Заметка" maxLength={500} value={note} {...fe.field("note", setNote)} />
           </>
         )}
-        {(error ?? edit.error) && !st?.full && (
+        {(error ?? fe.message) && !st?.full && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {error ?? fe.message}
           </p>
         )}
       </form>

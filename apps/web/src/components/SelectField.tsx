@@ -19,6 +19,8 @@ export function SelectField({
   isDisabled,
   isRequired,
   className,
+  isInvalid,
+  errorMessage,
   onChange,
 }: {
   label: string;
@@ -28,6 +30,8 @@ export function SelectField({
   isDisabled?: boolean;
   isRequired?: boolean;
   className?: string;
+  isInvalid?: boolean;
+  errorMessage?: string;
   onChange: (value: string | null) => void;
 }) {
   const items: Option[] = allLabel ? [{ key: ALL, label: allLabel }, ...options] : options;
@@ -39,7 +43,9 @@ export function SelectField({
       popoverProps={{ motionProps: overlayMotion }}
       className={className}
       disallowEmptySelection
+      errorMessage={errorMessage}
       isDisabled={isDisabled}
+      isInvalid={isInvalid}
       isRequired={isRequired}
       items={items}
       label={label}

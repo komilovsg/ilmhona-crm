@@ -46,6 +46,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.versioning import Version, check_version
+from app.leads.hygiene import ManualPhone
 from app.models import AppUser, Branch, RefreshToken, Role
 
 router = APIRouter(
@@ -82,7 +83,7 @@ class ProfileIn(Strict):
         Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
         | None
     ) = None
-    phone: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)] | None = None
+    phone: ManualPhone = None
     email: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
 
 

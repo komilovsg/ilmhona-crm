@@ -11,13 +11,16 @@ import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useCourses, useInstructors, useRefreshEducation, useRooms } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
+
+const FIELDS = ["instructor_id", "room_id", "start_date", "end_date", "start_time", "end_time", "capacity", "price_month"];
 
 export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null; onClose: () => void }) {
   const refresh = useRefreshEducation();
@@ -35,7 +38,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
   const [endTime, setEndTime] = useState(cohort?.end_time ?? "11:30");
   const [capacity, setCapacity] = useState(String(cohort?.capacity ?? 15));
   const [price, setPrice] = useState(cohort ? String(Number(cohort.price_month)) : "");
-  const [failed, setFailed] = useState<{ message: string; sig: string } | null>(null);
+  const [failed, setFailed] = useState<{ error: unknown; sig: string } | null>(null);
   const { data: rooms = [] } = useRooms(branchId);
   const { data: instructors = [] } = useInstructors(branchId);
   // the cohort's own room is always an option (an imported «Без аудитории (G-NNN)» room may be
@@ -63,7 +66,6 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
   };
   // A server error belongs to the values that were sent: any edit hides it, and so does a client hint.
   const sig = JSON.stringify([courseId, branchId, values]);
-  const error = failed?.sig === sig ? failed.message : null;
   const body = (v: Partial<typeof values>) => ({ ...v, price_month: v.price_month === "" ? undefined : v.price_month });
   const done = () => {
     void refresh();
@@ -74,7 +76,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     mutationFn: () =>
       api("/api/v1/cohorts", { method: "POST", body: { ...body(values), course_id: courseId, branch_id: branchId } }),
     onSuccess: done,
-    onError: (e) => setFailed({ message: messageOf(e), sig }),
+    onError: (e) => setFailed({ error: e, sig }),
   });
   const edit = useVersionedSave({
     record: cohort,
@@ -121,6 +123,8 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
     },
     onSaved: done,
   });
+  const fe = useFieldErrors(cohort ? edit.failure : (failed?.error ?? null), FIELDS);
+  const message = cohort || failed?.sig === sig ? fe.message : null;
   const submit = useSubmit(() => (cohort ? edit.save(values) : create.mutateAsync()), !valid);
 
   const toggleDay = (day: number) =>
@@ -178,14 +182,22 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             label="Инструктор"
             options={instructors.map((i) => ({ key: i.id, label: i.full_name }))}
             value={instructorId}
-            onChange={setInstructorId}
+            {...fe.hint("instructor_id")}
+            onChange={(v) => {
+              fe.clear("instructor_id");
+              setInstructorId(v);
+            }}
           />
           <SelectField
             isRequired
             label="Аудитория"
             options={roomOptions}
             value={roomId}
-            onChange={setRoomId}
+            {...fe.hint("room_id")}
+            onChange={(v) => {
+              fe.clear("room_id");
+              setRoomId(v);
+            }}
           />
           <Input
             isRequired
@@ -195,7 +207,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             placeholder=" "
             type="date"
             value={start}
-            onValueChange={setStart}
+            {...fe.field("start_date", setStart)}
           />
           <Input
             isRequired
@@ -205,10 +217,10 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             placeholder=" "
             type="date"
             value={end}
-            onValueChange={setEnd}
+            {...fe.field("end_date", setEnd)}
           />
-          <Input isRequired label="Время начала" placeholder=" " type="time" value={startTime} onValueChange={setStartTime} />
-          <Input isRequired label="Время конца" placeholder=" " type="time" value={endTime} onValueChange={setEndTime} />
+          <Input isRequired label="Время начала" placeholder=" " type="time" value={startTime} {...fe.field("start_time", setStartTime)} />
+          <Input isRequired label="Время конца" placeholder=" " type="time" value={endTime} {...fe.field("end_time", setEndTime)} />
           <Input
             description="От 1 до 100"
             isRequired
@@ -217,7 +229,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             min={1}
             type="number"
             value={capacity}
-            onValueChange={setCapacity}
+            {...fe.field("capacity", setCapacity)}
           />
           <Input
             description={cohort ? undefined : "Пусто: цена курса"}
@@ -226,7 +238,7 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             min={0}
             type="number"
             value={price}
-            onValueChange={setPrice}
+            {...fe.field("price_month", setPrice)}
           />
         </div>
         <fieldset>
@@ -260,9 +272,9 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
             Если изменить даты, дни, время или аудиторию, будущие уроки пересоздаются. Прошедшие остаются как были.
           </p>
         )}
-        {!problem && (error ?? edit.error) && (
+        {!problem && message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {message}
           </p>
         )}
       </form>

@@ -13,8 +13,9 @@ import { SelectField } from "@/components/SelectField";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation, useRooms } from "@/hooks/education";
 import { useMe } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
 import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
@@ -38,7 +39,6 @@ export function LessonFormModal({
   const [start, setStart] = useState(lesson?.start ?? cohort.start_time);
   const [end, setEnd] = useState(lesson?.end ?? cohort.end_time);
   const [roomId, setRoomId] = useState<string | null>(lesson?.room_id ?? cohort.room_id);
-  const [error, setError] = useState<string | null>(null);
   const problem = timeProblem(start, end);
   const valid = !!date && !!roomId && !problem && date >= MIN_DATE && date <= MAX_DATE;
 
@@ -51,7 +51,6 @@ export function LessonFormModal({
   const create = useMutation({
     mutationFn: () => api(`/api/v1/cohorts/${cohort.id}/lessons`, { method: "POST", body: values }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: lesson,
@@ -68,6 +67,7 @@ export function LessonFormModal({
     show: { room_id: (id: string | null) => rooms.find((r) => r.id === id)?.name ?? "—" },
     onSaved: done,
   });
+  const fe = useFieldErrors(lesson ? edit.failure : create.error, ["date", "start_time", "end_time", "room_id"]);
   const submit = useSubmit(() => (lesson ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -91,26 +91,30 @@ export function LessonFormModal({
         className="space-y-4"
         onSubmit={submit}
       >
-        <Input isRequired label="Дата" max={MAX_DATE} min={MIN_DATE} placeholder=" " type="date" value={date} onValueChange={setDate} />
+        <Input isRequired label="Дата" max={MAX_DATE} min={MIN_DATE} placeholder=" " type="date" value={date} {...fe.field("date", setDate)} />
         <div className="grid grid-cols-2 gap-3">
-          <Input isRequired label="Начало" placeholder=" " type="time" value={start} onValueChange={setStart} />
-          <Input isRequired label="Конец" placeholder=" " type="time" value={end} onValueChange={setEnd} />
+          <Input isRequired label="Начало" placeholder=" " type="time" value={start} {...fe.field("start_time", setStart)} />
+          <Input isRequired label="Конец" placeholder=" " type="time" value={end} {...fe.field("end_time", setEnd)} />
         </div>
         <SelectField
           isRequired
           label="Аудитория"
           options={rooms.map((r) => ({ key: r.id, label: r.name }))}
           value={roomId}
-          onChange={setRoomId}
+          {...fe.hint("room_id")}
+          onChange={(v) => {
+            fe.clear("room_id");
+            setRoomId(v);
+          }}
         />
         {problem && (
           <p className="text-sm text-warning-600 dark:text-warning" role="status">
             {problem}
           </p>
         )}
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>
@@ -132,7 +136,6 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const term = q.trim();
 
   const found = useQuery({
@@ -149,10 +152,10 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
       notify("Студент зачислен");
       onClose();
     },
-    onError: (e) => setError(messageOf(e)),
   });
 
   const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
+  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender"]);
   const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
 
   const modes = [
@@ -230,8 +233,8 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
             className="space-y-4"
             onSubmit={submitNew}
           >
-            <Input isRequired label="ФИО" value={name} onValueChange={setName} />
-            <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
+            <Input isRequired label="ФИО" value={name} {...fe.field("full_name", setName)} />
+            <Input inputMode="tel" label="Телефон" placeholder="+992 90 123 45 67" type="tel" value={phone} {...fe.field("phone", setPhone)} />
             <SelectField
               allLabel="Не указан"
               label="Пол"
@@ -240,13 +243,17 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
                 { key: "female", label: "Женский" },
               ]}
               value={gender}
-              onChange={setGender}
+              {...fe.hint("gender")}
+              onChange={(v) => {
+                fe.clear("gender");
+                setGender(v);
+              }}
             />
           </form>
         )}
-        {error && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error}
+            {fe.message}
           </p>
         )}
       </div>

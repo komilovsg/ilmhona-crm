@@ -11,6 +11,7 @@ import { NewPasswordFields, usePasswordRules } from "@/components/NewPasswordFie
 import { PasswordField } from "@/components/PasswordField";
 import { SessionsList } from "@/components/SessionsList";
 import { ME_KEY, useMe } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
@@ -49,6 +50,7 @@ function ProfileForm({ me }: { me: Me }) {
     },
   });
 
+  const fe = useFieldErrors(save.failure, ["login", "full_name", "phone", "email"]);
   const submit = useSubmit(() => save.save(values));
 
   return (
@@ -62,17 +64,17 @@ function ProfileForm({ me }: { me: Me }) {
         isReadOnly={!isSuper}
         label={isSuper ? "Логин" : "Логин (нельзя изменить)"}
         value={login}
-        onValueChange={setLogin}
+        {...fe.field("login", setLogin)}
       />
-      <Input isRequired label="ФИО" value={fullName} onValueChange={setFullName} />
-      <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
-      <Input label="Email" type="email" value={email} onValueChange={setEmail} />
+      <Input isRequired label="ФИО" value={fullName} {...fe.field("full_name", setFullName)} />
+      <Input inputMode="tel" label="Телефон" placeholder="+992 90 123 45 67" type="tel" value={phone} {...fe.field("phone", setPhone)} />
+      <Input label="Email" type="email" value={email} {...fe.field("email", setEmail)} />
       <p className="text-xs text-default-500">
         Роль: {me.role.name} · {me.branch ? me.branch.name : "все филиалы"}
       </p>
-      {save.error && (
+      {fe.message && (
         <p className="text-sm text-danger" role="alert">
-          {save.error}
+          {fe.message}
         </p>
       )}
       <LoadingButton color="primary" isDisabled={!fullName.trim() || login.trim().length < 3} isLoading={save.pending} type="submit">
