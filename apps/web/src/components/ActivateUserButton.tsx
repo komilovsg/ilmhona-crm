@@ -20,7 +20,18 @@ const TempPasswordModal = dynamic(() => import("./TempPasswordModal").then((m) =
  * temporary password for 7 days, shown once). Renders nothing for people who may not activate
  * (`users` change); the API checks the right and the branch again.
  */
-export function ActivateUserButton({ userId, name }: { userId: string; name: string }) {
+export function ActivateUserButton({
+  userId,
+  name,
+  active = false,
+  className,
+}: {
+  userId: string;
+  name: string;
+  /** the account already has access: no button, but a password just issued stays on screen */
+  active?: boolean;
+  className?: string;
+}) {
   const { data: me } = useMe();
   const queryClient = useQueryClient();
   const [confirm, setConfirm] = useState(false);
@@ -43,9 +54,13 @@ export function ActivateUserButton({ userId, name }: { userId: string; name: str
 
   return (
     <>
-      <Button aria-label={`Активировать: ${name}`} size="sm" variant="flat" onPress={() => setConfirm(true)}>
-        Активировать
-      </Button>
+      {!active && (
+        <div className={className}>
+          <Button aria-label={`Активировать: ${name}`} size="sm" variant="flat" onPress={() => setConfirm(true)}>
+            Активировать
+          </Button>
+        </div>
+      )}
       <ConfirmModal
         confirmLabel="Выдать пароль"
         isLoading={run.isPending}
