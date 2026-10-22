@@ -123,6 +123,10 @@ TABLES: dict[str, str] = {
     "graduate_course": "выпускники по курсам",
     "employment": "трудоустройство",
     "dashboard_month": "дашборд по месяцам",
+    "grade": "оценки потока",
+    "today": "сегодня и не заполнено",
+    "student_card": "карточка студента",
+    "reset_request": "запросы пароля",
 }
 FILTERS = {
     "q": "поиск",
@@ -141,6 +145,7 @@ FILTERS = {
     "method": "способ",
     "month": "месяц",
     "instructor_id": "инструктор",
+    "student": "студент",
 }
 MONEY = {
     "default_price_month",
@@ -270,6 +275,9 @@ def _money(value: Any) -> str:
     return f"{whole},{kopecks}" if kopecks else whole
 
 
+money_text = _money  # the one money formatter (audit sentences, payment notes)
+
+
 def _pair(change: Any) -> tuple[Any, Any]:
     if isinstance(change, list) and len(change) == 2:
         return change[0], change[1]
@@ -309,6 +317,11 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
         return few
     return many
+
+
+def _count(n: int, one: str, few: str, many: str) -> str:
+    """«1 урок», «2 урока», «5 уроков»: the one place a number meets its noun."""
+    return f"{n} {_plural(n, one, few, many)}"
 
 
 def _tail(label: str | None) -> str:
@@ -378,12 +391,12 @@ def sentence(
 
     if a == "import.apply":
         counts = [
-            f"{what} {_pair(e.diff.get(key))[1]}"
-            for key, what in (
-                ("student", "студентов"),
-                ("enrollment", "зачислений"),
-                ("payment", "оплат"),
-                ("lead", "лидов"),
+            f"{_count(_pair(e.diff.get(key))[1], *forms)}"
+            for key, forms in (
+                ("student", ("студент", "студента", "студентов")),
+                ("enrollment", ("зачисление", "зачисления", "зачислений")),
+                ("payment", ("оплата", "оплаты", "оплат")),
+                ("lead", ("лид", "лида", "лидов")),
             )
             if _pair(e.diff.get(key))[1]
         ]
@@ -397,7 +410,7 @@ def sentence(
         lost = []
         marks = _pair(e.diff.get("lost_marks"))[0]
         if marks:
-            lost.append(f"отметок посещаемости: {marks}")
+            lost.append(f"{_count(marks, 'отметка', 'отметки', 'отметок')} посещаемости")
         if _pair(e.diff.get("lost_grade"))[0]:
             lost.append("оценки")
         if cert := _pair(e.diff.get("lost_certificate"))[0]:
@@ -454,6 +467,17 @@ def sentence(
             f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
         )
         return head + (f", причина: {reason}" if reason else "")
+    if a == "attendance.import":
+        _, marks = _pair(e.diff.get("marks"))
+        _, lessons = _pair(e.diff.get("lessons"))
+        _, over = _pair(e.diff.get("overwritten"))
+        tail = f", перезаписано: {over}" if over else ""
+        head = f"{who}: импорт посещаемости {lab}"
+        return (
+            f"{head} — {_count(marks or 0, 'отметка', 'отметки', 'отметок')}, "
+            f"{_count(lessons or 0, 'урок', 'урока', 'уроков')} "
+            f"{_plural(lessons or 0, 'добавлен', 'добавлено', 'добавлено')}{tail}"
+        )
     if a == "attendance.mark_all":
         code, _, day = (lab or "").partition(", ")
         _, n = _pair(e.diff.get("marked"))

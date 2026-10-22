@@ -18,14 +18,29 @@ Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
 ## What runs when
 
 ```
-push to main -> ci (green) -> deploy-api: migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
-                           -> Vercel builds and deploys apps/web by itself (git integration)
+push to main -> ci (green) -> deploy-api: wait for Vercel production deployment of the same sha
+                                          -> migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
+                                          -> check the web's /version sha equals the api sha
+                           -> Vercel builds and deploys apps/web by itself (git integration; only main, see apps/web/vercel.json)
 every 10 min, 08:00-20:59 Dushanbe  keepalive   curl /api/health through the Vercel URL
+every 2 h, 21:00-07:59 Dushanbe     uptime      same check; a non-200 fails the run (e-mail), see monitoring.md
 00:30 Dushanbe (19:30 UTC)          daily       python -m app.cli daily (as ilm_app)
 01:30 Dushanbe (20:30 UTC)          backup      pg_dump -> age -> ilmhona-backups, last 30 kept
 ```
 
-All workflows have the least `permissions:` (`contents: read`, or none).
+All workflows have the least `permissions:` (`contents: read`, or none; `deploy-api` also reads
+`statuses`).
+
+### Web before API
+
+Vercel can be rate-limited (Hobby: 100 deployments a day), and an API deployed without its front
+breaks saves. So `deploy-api` first polls the commit status with context `Vercel` (the Vercel integration reports
+there, not as GitHub Deployments; `.github/scripts/wait-vercel.sh`) every 20 s: `success` lets the migration and the API deploy go on,
+`failure`/`error` fails the job («Vercel не выкатил фронт — API не выкатываем» plus Vercel's description, e.g. the rate limit), 20 minutes without a
+result fails it too. After the API is live the job reads `<WEB_URL>/version` (repo variable `WEB_URL`,
+default `https://ilmhona-crm.vercel.app`; the route returns `VERCEL_GIT_COMMIT_SHA`, public, no
+secrets) and fails when it differs from the API's sha. `apps/web/vercel.json` turns off preview
+deployments of every branch except `main`.
 
 ## Roles in the database
 
@@ -101,6 +116,18 @@ workflow waits (up to 20 min) until the version equals the commit. Free Render s
 minutes without traffic; `keepalive` keeps it awake 08:00-20:59 Asia/Dushanbe, outside that the
 first visitor waits for a cold start (about a minute).
 
+## Connections, compression, image
+
+- uvicorn runs with `--timeout-keep-alive ${KEEPALIVE_TIMEOUT:-120}`: its default (5 s) is shorter
+  than the idle time the Vercel proxy and Render's balancer keep a connection, and a request sent
+  as the server closes it fails with `ECONNRESET`. Keep it above every client's idle timeout.
+- Pool (`DB_POOL_SIZE` 5, `DB_MAX_OVERFLOW` 5, `DB_POOL_RECYCLE` 240 s): connections are recycled
+  before Neon's idle suspend and pinged on checkout; 10 connections stay far below Neon's cap.
+- JSON responses over 1 KB are gzipped (`GZipMiddleware`); xlsx files never are.
+- The image is two-stage (`python:3.14-slim`, finished virtualenv + `app/` only, ~345 MB); uv,
+  tests, tools and migrations are not in it. Measuring: `apps/api/tools` (`seed_load`, `bench`,
+  `explain`, `make_snapshot`, `time_import`, `delay_proxy`) work on a local database only.
+
 ## Daily job
 
 `python -m app.cli daily`: cohort statuses from their dates, enrollments of finished cohorts
@@ -125,13 +152,33 @@ encrypts with `age` to the public key in `BACKUP_AGE_PUBLIC_KEY` and pushes
 `dumps/ilmhona-<UTC time>.sql.gz.age` to `komilovsg/ilmhona-backups`; only the newest 30 files
 stay in the tree (git history keeps older ones: delete or squash the repo when it grows).
 The private key is `~/.config/ilmhona/backup-age-key.txt` on the owner's machine only: keep a
-second copy offline, without it the dumps cannot be read. Restore:
+second copy offline, without it the dumps cannot be read. The dump has no owners and no
+grants, and it contains `CREATE SCHEMA public` and the two extensions. Restore (drilled, see
+`restore-drill.md`):
 
 ```
-age -d -i ~/.config/ilmhona/backup-age-key.txt dumps/<file>.sql.gz.age | gunzip | psql "<owner URL>"
+# 1. empty database, the `public` schema removed (the dump creates it)
+psql "<owner URL, db postgres>" -c "CREATE DATABASE neondb"
+psql "<owner URL>" -c "DROP SCHEMA public"
+# 2. data
+age -d -i ~/.config/ilmhona/backup-age-key.txt dumps/<file>.sql.gz.age | gunzip \
+  | psql "<owner URL>" -v ON_ERROR_STOP=1
+# 3. runtime role and grants (same as "Roles in the database"; the dump carries none)
+CREATE ROLE ilm_app LOGIN PASSWORD '<generated>' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
+GRANT CONNECT ON DATABASE neondb TO ilm_app;
+GRANT USAGE ON SCHEMA public TO ilm_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ilm_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ilm_app;
+REVOKE UPDATE, DELETE ON audit_log FROM ilm_app;
+REVOKE ALL ON alembic_version FROM ilm_app;
+GRANT SELECT ON alembic_version TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ilm_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE <owner> IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ilm_app;
 ```
 
-(on an empty database; create the extensions first if the target forbids `CREATE EXTENSION`).
+Without step 1 the load prints `schema "public" already exists` (harmless, but fatal with
+`ON_ERROR_STOP`). Check with `select version_num from alembic_version` and row counts. The
+target must be Postgres 18 (or newer): the dump sets `transaction_timeout`.
 
 ## Private app
 

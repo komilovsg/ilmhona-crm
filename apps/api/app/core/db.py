@@ -9,7 +9,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.core.config import settings
 
-engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+# Neon (direct URL, free compute): few connections, and an idle one is dropped when the compute
+# suspends (~5 min), so connections are recycled before that and pinged on checkout. The pool is
+# sized for one Render instance: 5 held + 5 burst, far below Neon's connection cap.
+engine = create_async_engine(
+    settings.database_url,
+    pool_pre_ping=True,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_max_overflow,
+    pool_recycle=settings.db_pool_recycle,
+    pool_timeout=15,
+    # bound values (names, phones, amounts) stay out of error messages, logs and Sentry
+    hide_parameters=True,
+)
 sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 
 

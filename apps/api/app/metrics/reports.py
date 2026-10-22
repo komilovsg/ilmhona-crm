@@ -210,7 +210,10 @@ async def graduate_count(db: AsyncSession, where: Sequence[ColumnElement[bool]])
 
 
 async def graduate_rows(
-    db: AsyncSession, where: Sequence[ColumnElement[bool]], limit: int | None = None
+    db: AsyncSession,
+    where: Sequence[ColumnElement[bool]],
+    limit: int | None = None,
+    offset: int = 0,
 ) -> list[dict[str, Any]]:
     """One row per graduate enrollment, with score, paid, certificate and employment."""
     query = (
@@ -221,13 +224,11 @@ async def graduate_rows(
         .where(*where)
         .order_by(Student.full_name, Enrollment.id)
     )
-    found = (await db.execute(query.limit(limit) if limit else query)).all()
-    by_cohort: dict[uuid.UUID, list[uuid.UUID]] = {}
-    for e, _, c, *_ in found:
-        by_cohort.setdefault(c.id, []).append(e.id)
-    results: dict[uuid.UUID, dict[str, Any]] = {}
-    for cohort_id, ids in by_cohort.items():
-        results.update(await enrollment_results(db, cohort_id, enrollment_ids=ids))
+    if limit:
+        query = query.limit(limit).offset(offset)
+    found = (await db.execute(query)).all()
+    # one query for the enrollments of every cohort together, not one per cohort
+    results = await enrollment_results(db, None, enrollment_ids=[e.id for e, *_ in found])
     paid = await enrollment_money(db, [(e, c) for e, _, c, *_ in found])
     students = list({s.id for _, s, *_ in found})
     jobs: dict[uuid.UUID, list[Employment]] = {}
@@ -310,13 +311,20 @@ async def overview(
     fin = await finance(db, scope.cohort, scope.campaign, since, until)
     cohorts = await cohort_counts(db, scope.cohort)
     students = await student_counts(db, scope.student)
-    campaigns = (
+    # campaigns and graduates: two counts in one round trip
+    campaigns, graduates = (
         await db.execute(
-            select(func.count())
-            .select_from(Campaign)
-            .where(*scope.campaign, *_in_period(Campaign.start_date, since, until))
+            select(
+                select(func.count())
+                .select_from(Campaign)
+                .where(*scope.campaign, *_in_period(Campaign.start_date, since, until))
+                .scalar_subquery(),
+                _graduate_select(select(func.count(Enrollment.id)))
+                .where(*graduate_where(scope, since, until))
+                .scalar_subquery(),
+            )
         )
-    ).scalar_one()
+    ).one()
     converted = leads["counts"][CONVERTED]
     return {
         "leads": leads["counts"]["всего"],
@@ -332,7 +340,7 @@ async def overview(
         "profit": fin["profit"],
         "ads": fin["ads"],
         "campaigns": campaigns,
-        "graduates": await graduate_count(db, graduate_where(scope, since, until)),
+        "graduates": graduates,
         "converted": converted,
         "cac": ratio(fin["ads"], converted),
     }

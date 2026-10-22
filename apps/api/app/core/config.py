@@ -13,6 +13,9 @@ class Settings(BaseSettings):
 
     env: str = "development"  # development | test | production
     database_url: str = "postgresql+asyncpg://ilm@localhost:55433/ilmhona"
+    db_pool_size: int = 5
+    db_max_overflow: int = 5
+    db_pool_recycle: int = 240  # seconds; under Neon's idle suspend
     jwt_secret: str = DEV_JWT_SECRET
     access_ttl_minutes: int = 15
     refresh_ttl_days: int = 30
@@ -24,6 +27,8 @@ class Settings(BaseSettings):
     # The commit this build runs: Render sets it; /api/health reports it so the deploy workflow
     # can wait until the new commit serves.
     render_git_commit: str = ""
+    # Error monitoring (docs/ops/monitoring.md): empty = Sentry stays off (development, tests).
+    sentry_dsn: str = ""
     # Shared secret the web proxy sends in X-Proxy-Secret (app/core/proxy.py). Comma-separated:
     # two values are accepted while it is rotated. Empty = no check (local development).
     proxy_shared_secret: str = ""

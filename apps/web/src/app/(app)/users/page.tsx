@@ -5,10 +5,11 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
+import { useMenu } from "@/components/useMenu";
+import { SheetHandle } from "@/components/SheetHandle";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { Input } from "@heroui/input";
 
-import { UserFormModal } from "./UserFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -18,7 +19,6 @@ import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton } from "@/components/Skeletons";
-import { TempPasswordModal } from "@/components/TempPasswordModal";
 import { SessionsList } from "@/components/SessionsList";
 import { AppModal } from "@/components/AppModal";
 import { RESET_REQUESTS_KEY, useBranches, useMe, useResetRequests, useRoles } from "@/hooks/queries";
@@ -28,6 +28,10 @@ import { can } from "@/lib/permissions";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged, TempPassword, UserRow } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const UserFormModal = lazyModal(() => import("./UserFormModal").then((m) => m.UserFormModal));
+const TempPasswordModal = lazyModal(() => import("@/components/TempPasswordModal").then((m) => m.TempPasswordModal));
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };
@@ -50,7 +54,10 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
 
   return (
     <section aria-label="Запросы на сброс" className="mb-5 rounded-2xl border border-warning/40 bg-content1 p-4">
-      <h2 className="mb-2 font-semibold">Запросы на сброс пароля · {items.length}</h2>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h2 className="font-semibold">Запросы на сброс пароля · {items.length}</h2>
+        <ExportButton path="/api/v1/users/reset-requests/export" />
+      </div>
       <ul className="divide-y divide-divider">
         {items.map((r) => (
           <li key={r.id} className="flex flex-wrap items-center gap-3 py-2.5">
@@ -74,7 +81,7 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
 }
 
 function StatusChip({ user }: { user: UserRow }) {
-  if (!user.is_active) return <Chip size="sm">Заблокирован</Chip>;
+  if (!user.is_active) return <Chip size="sm">Нет доступа</Chip>;
   if (user.must_change_password)
     return (
       <Chip color="warning" size="sm" variant="flat">
@@ -101,8 +108,10 @@ function RowMenu({
   onSessions?: () => void;
 }) {
   const overlayMotion = useOverlayMotion();
+  const menu = useMenu((key) => (key === "edit" ? onEdit() : key === "sessions" ? onSessions?.() : onAction(key as Action["kind"])));
+
   return (
-    <Dropdown motionProps={overlayMotion} placement="bottom-end">
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button isIconOnly aria-label={`Действия: ${user.full_name}`} size="sm" variant="light">
           <Icon name="more" />
@@ -111,9 +120,7 @@ function RowMenu({
       <DropdownMenu
         aria-label="Действия"
         disabledKeys={user.is_active ? [] : ["deactivate"]}
-        onAction={(key) =>
-          key === "edit" ? onEdit() : key === "sessions" ? onSessions?.() : onAction(key as Action["kind"])
-        }
+        onAction={menu.onAction}
       >
         <DropdownItem key="edit" startContent={<Icon name="edit" size={16} />}>
           Изменить
@@ -168,7 +175,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         label="Статус"
         options={[
           { key: "true", label: "Активные" },
-          { key: "false", label: "Заблокированные" },
+          { key: "false", label: "Нет доступа" },
         ]}
         value={filters.status}
         onChange={(status) => set({ ...filters, status })}
@@ -234,6 +241,13 @@ export default function UsersPage() {
   };
   const users = list.data?.items ?? [];
   const activeFilters = [filters.branch, filters.role, filters.status].filter(Boolean).length;
+  const activate = (u: UserRow) =>
+    canChange &&
+    !u.is_active && (
+      <Button aria-label={`Активировать: ${u.full_name}`} className="ml-2" size="sm" variant="flat" onPress={() => setAction({ kind: "activate", user: u })}>
+        Активировать
+      </Button>
+    );
   const menu = (u: UserRow) =>
     canChange && (
       <RowMenu
@@ -350,6 +364,7 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip user={u} />
+                      {activate(u)}
                       {u.must_change_password && u.temp_password_expires_at && (
                         <div className="mt-1 text-xs text-default-500">до {formatDateTime(u.temp_password_expires_at)}</div>
                       )}
@@ -373,6 +388,7 @@ export default function UsersPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <StatusChip user={u} />
+                  {activate(u)}
                   <span>{u.role_name}</span>
                   <span className="text-default-500">· {u.branch_name ?? "Все филиалы"}</span>
                 </div>
@@ -393,6 +409,7 @@ export default function UsersPage() {
         <DrawerContent>
           {(close) => (
             <>
+              <SheetHandle onBackdrop={close} onClose={close} />
               <DrawerHeader>Фильтры</DrawerHeader>
               <DrawerBody className="gap-3">
                 <FilterFields filters={filters} set={set} />

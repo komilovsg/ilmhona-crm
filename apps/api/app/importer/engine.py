@@ -9,16 +9,17 @@ import re
 import uuid
 from calendar import monthrange
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.cohorts.schedule import check_room_free, lesson_dates, local_dt
+from app.cohorts.schedule import lesson_dates, local_dt
 from app.cohorts.status import (
     ACTIVE,
     CANCELLED,
@@ -26,16 +27,15 @@ from app.cohorts.status import (
     DONE,
     GRADUATE,
     RECRUITING,
+    close_enrollments,
     reevaluate,
     status_for,
-    sync_status,
 )
 from app.cohorts.status import today as today_local
-from app.core.errors import DomainError
 from app.importer import parse as p
 from app.importer.report import Recon, Report
 from app.leads.hygiene import neutral
-from app.metrics import enrollment_counts, student_counts
+from app.metrics import enrollment_counts, enrollment_results, student_counts
 from app.metrics.money import cohort_periods, income_total
 from app.metrics.reports import graduate_count
 from app.models import (
@@ -192,6 +192,19 @@ class Importer:
         self.placeholder_rooms: dict[str, uuid.UUID] = {}
         self.role_id: uuid.UUID | None = None
         self.created_cohorts: list[uuid.UUID] = []
+        # new cohorts and lessons wait here and go in with one multi-row INSERT each
+        self.pending_cohorts: list[Cohort] = []
+        self.pending_lessons: list[Lesson] = []
+        # live lessons per room (start, end, who): the room check runs in memory, not per cohort
+        self.busy: dict[uuid.UUID, list[tuple[datetime, datetime, str]]] = defaultdict(list)
+        # live lessons per (instructor, day): a new lesson that overlaps one is marked
+        # «конфликт инструктора» (both sides) instead of failing the import; lessons already in
+        # the database to mark are kept by id until the next lesson insert
+        self.instr_busy: dict[
+            tuple[uuid.UUID | None, date], list[tuple[datetime, datetime, Lesson | uuid.UUID, str]]
+        ] = defaultdict(list)
+        self.conflict_ids: set[uuid.UUID] = set()
+        self.existing_cohorts: dict[uuid.UUID, Cohort] = {}
 
     # ---- plumbing -------------------------------------------------------------------------
 
@@ -233,6 +246,19 @@ class Importer:
 
     def _is_new(self, table: str, ref: str) -> bool:
         return ref not in self.refs[table]
+
+    async def _bulk(self, objs: Sequence[Any]) -> None:
+        """Insert new rows (ORM objects that were never added to the session) with multi-row
+        INSERTs: one statement (one network round trip) per chunk, not one per row. The ORM's own
+        flush inserts these tables row by row because it fetches server defaults back."""
+        by_shape: dict[tuple[type, frozenset[str]], list[dict[str, Any]]] = {}
+        for obj in objs:
+            values = {k: v for k, v in vars(obj).items() if not k.startswith("_")}
+            by_shape.setdefault((type(obj), frozenset(values)), []).append(values)
+        for (model, keys), rows in by_shape.items():
+            size = max(1, min(BATCH, 30000 // max(1, len(keys))))
+            for i in range(0, len(rows), size):
+                await self.db.execute(pg_insert(model).values(rows[i : i + size]))
 
     # ---- run ------------------------------------------------------------------------------
 
@@ -467,6 +493,35 @@ class Importer:
 
     async def _cohorts(self) -> None:
         rep = self.rep
+        self.rates: dict[uuid.UUID, Decimal] = dict(
+            (await self.db.execute(select(AppUser.id, AppUser.default_rate))).all()
+        )
+        for room_id, starts, ends, code in (
+            await self.db.execute(
+                select(Lesson.room_id, Lesson.starts_at, Lesson.ends_at, Cohort.code)
+                .join(Cohort, Cohort.id == Lesson.cohort_id)
+                .where(~Lesson.cancelled)
+            )
+        ).all():
+            self.busy[room_id].append((starts, ends, code))
+        for lid, iid, day, starts, ends, code in (
+            await self.db.execute(
+                select(
+                    Lesson.id, Lesson.instructor_id, Lesson.lesson_date, Lesson.starts_at,
+                    Lesson.ends_at, Cohort.code,
+                )
+                .join(Cohort, Cohort.id == Lesson.cohort_id)
+                .where(~Lesson.cancelled, Lesson.instructor_id.is_not(None))
+            )
+        ).all():  # fmt: skip
+            self.instr_busy[(iid, day)].append((starts, ends, lid, code))
+        if self.refs["cohort"]:
+            self.existing_cohorts = {
+                c.id: c
+                for c in (
+                    await self.db.execute(select(Cohort).where(Cohort.legacy_ref.is_not(None)))
+                ).scalars()
+            }
         groups: dict[str, list[Row]] = defaultdict(list)
         for r in self.rows("COHORTS"):
             cid = p.text(r.get("cohort_id"))
@@ -480,16 +535,29 @@ class Importer:
             rep.merged["COHORTS"] += len(rows) - 1
             rows = sorted(rows, key=lambda r: -STATUS_RANK.get(p.text(r.get("status")), 0))
             await self._cohort(old_id, rows)
-        await self.db.flush()
+        await self._bulk(self.pending_cohorts)
+        await self._insert_lessons()
+        if self.pending_cohorts:
+            # the ORM objects of the new cohorts (server-made code, version) for the later steps
+            made = {
+                c.id: c
+                for c in (
+                    await self.db.execute(
+                        select(Cohort).where(Cohort.id.in_([c.id for c in self.pending_cohorts]))
+                    )
+                ).scalars()
+            }
+            for ctx in self.cohorts.values():
+                if ctx.obj.id in made:
+                    ctx.obj = made[ctx.obj.id]
+            self.pending_cohorts.clear()
 
     async def _cohort(self, old_id: str, rows: list[Row]) -> None:
         rep = self.rep
         ref = p.make_ref("COHORTS", old_id)
         status_old = first(rows, "status")
         if ref in self.refs["cohort"]:
-            obj = (
-                await self.db.execute(select(Cohort).where(Cohort.id == self.refs["cohort"][ref]))
-            ).scalar_one()
+            obj = self.existing_cohorts[self.refs["cohort"][ref]]
             self.cohorts[old_id] = CohortCtx(
                 old_id, obj, self.branch_names[obj.branch_id], False, status_old
             )
@@ -581,15 +649,9 @@ class Importer:
             instructor_id=instr.id if instr else None, room_id=room_id, start_date=start,
             end_date=end, weekdays=days, start_time=t_start, end_time=t_end, capacity=capacity,
             price_month=price, status=status, legacy_ref=ref,
-            instructor_rate=(
-                (await self.db.execute(select(AppUser.default_rate).where(AppUser.id == instr.id)))
-                .scalar_one()
-                if instr
-                else Decimal(0)
-            ),
+            instructor_rate=self.rates[instr.id] if instr else Decimal(0),
         )  # fmt: skip
-        self.db.add(obj)
-        await self.db.flush()
+        self.pending_cohorts.append(obj)
         self.refs["cohort"][ref] = obj.id
         self.created_cohorts.append(obj.id)
         rep.imported["COHORTS"] += 1
@@ -640,20 +702,68 @@ class Importer:
         )
         return cid
 
+    def _busy_with(
+        self, room_id: uuid.UUID, windows: list[tuple[datetime, datetime]]
+    ) -> str | None:
+        """Who holds the room in one of the windows (a cohort code, or the old id of a cohort of
+        this run), or None when it is free. Same rule as `check_room_free`, without a query."""
+        for starts, ends, who in self.busy[room_id]:
+            if any(starts < end and ends > start for start, end in windows):
+                return who
+        return None
+
+    def _take(self, room_id: uuid.UUID, windows: list[tuple[datetime, datetime]], who: str) -> None:
+        self.busy[room_id].extend((start, end, who) for start, end in windows)
+
+    def _instructor_take(self, ctx: CohortCtx, lessons: list[Lesson]) -> None:
+        """Give the lessons the cohort's instructor; one that overlaps another lesson of theirs is
+        marked (with the other one) and flagged for review, so the import does not fail on the
+        database's instructor × time constraint."""
+        iid = ctx.obj.instructor_id
+        if iid is None:
+            return
+        others: set[str] = set()
+        for le in lessons:
+            le.instructor_id = iid
+            day = self.instr_busy[(iid, le.lesson_date)]
+            for starts, ends, other, who in day:
+                if starts < le.ends_at and ends > le.starts_at:
+                    le.instructor_conflict = True
+                    if isinstance(other, Lesson):
+                        other.instructor_conflict = True
+                    else:
+                        self.conflict_ids.add(other)
+                    others.add(who)
+            day.append((le.starts_at, le.ends_at, le, ctx.old_id))
+        if others:
+            self.rep.flag(
+                "COHORTS", "конфликт инструктора: уроки в то же время, что у другого потока",
+                ctx.old_id, cohorts=", ".join(sorted(others)),
+            )  # fmt: skip
+
+    async def _insert_lessons(self) -> None:
+        if self.conflict_ids:
+            await self.db.execute(
+                update(Lesson)
+                .where(Lesson.id.in_(self.conflict_ids))
+                .values(instructor_conflict=True)
+                .execution_options(synchronize_session=False)
+            )
+            self.conflict_ids.clear()
+        await self._bulk(self.pending_lessons)
+        self.pending_lessons.clear()
+
     async def _generate_lessons(self, ctx: CohortCtx) -> None:
         cohort = ctx.obj
         days = lesson_dates(cohort.start_date, cohort.end_date, cohort.weekdays)
         windows = [(local_dt(d, cohort.start_time), local_dt(d, cohort.end_time)) for d in days]
         room_id = cohort.room_id
-        try:
-            await check_room_free(self.db, room_id, windows)
-        except DomainError as busy:
+        if (other := self._busy_with(room_id, windows)) is not None:
             room_id = await self._placeholder_room(cohort.branch_id, ctx.old_id)
             cohort.room_id = room_id
-            await self.db.flush()
             self.rep.flag(
                 "COHORTS", "аудитория занята другим потоком (#7): поставлена «Без аудитории»",
-                ctx.old_id, room=str(busy.params.get("cohort", "")),
+                ctx.old_id, room=other,
             )  # fmt: skip
         lessons = [
             Lesson(
@@ -668,8 +778,9 @@ class Importer:
             )  # fmt: skip
             for day, (s, e) in zip(days, windows, strict=True)
         ]
-        self.db.add_all(lessons)
-        await self.db.flush()
+        self._take(room_id, windows, ctx.old_id)
+        self._instructor_take(ctx, lessons)
+        self.pending_lessons.extend(lessons)
         self.rep.note("урок создан из расписания потока", len(lessons))
 
     async def _lessons_index(self) -> None:
@@ -804,6 +915,7 @@ class Importer:
             self._finish_plan(plan)
         self.plans = groups
         # students: branch from the city, else from a cohort they study in
+        new_students: list[Student] = []
         for person in persons:
             city = self.branch_of(first(person.rows, "city"))
             if city is None:
@@ -836,7 +948,7 @@ class Importer:
             person.phone = phone
             gender = {"муж": "male", "жен": "female"}.get(first(person.rows, "gender"))
             created = [d for r in person.rows if (d := p.parse_dt(r.get("registration_date")))]
-            self.db.add(
+            new_students.append(
                 Student(
                     id=person.id,
                     full_name=person.name,
@@ -851,7 +963,8 @@ class Importer:
             )
             self.refs["student"][person.ref] = person.id
             rep.imported["STUDENTS"] += 1
-        await self.db.flush()
+        await self._bulk(new_students)
+        new_enrollments: list[Enrollment] = []
         for plan in groups.values():
             cohort = self.cohorts[plan.cohort_old].obj
             if plan.ref in self.refs["enrollment"]:
@@ -859,7 +972,7 @@ class Importer:
                 rep.existing["ENROLLMENTS"] += 1
                 continue
             when = plan.enrolled_at or noon(cohort.start_date)
-            self.db.add(
+            new_enrollments.append(
                 Enrollment(
                     id=plan.id,
                     cohort_id=cohort.id,
@@ -878,7 +991,7 @@ class Importer:
             )
             self.refs["enrollment"][plan.ref] = plan.id
             rep.imported["ENROLLMENTS"] += 1
-        await self.db.flush()
+        await self._bulk(new_enrollments)
 
     def _finish_plan(self, plan: EnrollPlan) -> None:
         rep = self.rep
@@ -1007,18 +1120,20 @@ class Importer:
             plan.id = self.refs["enrollment"][plan.ref]
             self.rep.existing["ENROLLMENTS"] += 1
         else:
-            self.db.add(
-                Enrollment(
-                    id=plan.id,
-                    cohort_id=ctx.obj.id,
-                    student_id=person.id,
-                    status=plan.status,
-                    enrolled_at=noon(ctx.obj.start_date),
-                    status_manual=True,
-                    needs_review=True,
-                    review_reason="восстановлено из оплаты",
-                    legacy_ref=plan.ref,
-                )
+            await self._bulk(
+                [
+                    Enrollment(
+                        id=plan.id,
+                        cohort_id=ctx.obj.id,
+                        student_id=person.id,
+                        status=plan.status,
+                        enrolled_at=noon(ctx.obj.start_date),
+                        status_manual=True,
+                        needs_review=True,
+                        review_reason="восстановлено из оплаты",
+                        legacy_ref=plan.ref,
+                    )
+                ]
             )
             self.refs["enrollment"][plan.ref] = plan.id
             self.rep.imported["ENROLLMENTS"] += 1
@@ -1026,7 +1141,6 @@ class Importer:
             self.rep.flag(
                 "PAYMENTS", "зачисление восстановлено из оплаты", pid, name=name, amount=amount
             )
-            await self.db.flush()
         self.plans[(person.idx, cohort_old)] = plan
         return plan
 
@@ -1137,8 +1251,7 @@ class Importer:
             self.refs["payment"][ref] = batch[-1].id
             rep.imported["PAYMENTS"] += 1
             self._ledger("in", "перенесено", verified, amount)
-        self.db.add_all(batch)
-        await self.db.flush()
+        await self._bulk(batch)
 
     # ---- ATTENDANCE -----------------------------------------------------------------------
 
@@ -1146,17 +1259,16 @@ class Importer:
         cohort = ctx.obj
         starts, ends = local_dt(day, cohort.start_time), local_dt(day, cohort.end_time)
         room_id = cohort.room_id
-        try:
-            await check_room_free(self.db, room_id, [(starts, ends)])
-        except DomainError:
+        if self._busy_with(room_id, [(starts, ends)]) is not None:
             room_id = await self._placeholder_room(cohort.branch_id, ctx.old_id)
+        self._take(room_id, [(starts, ends)], ctx.old_id)
         lesson = Lesson(
             id=uuid.uuid4(), cohort_id=cohort.id, room_id=room_id, lesson_date=day,
             starts_at=starts, ends_at=ends, source="manual",
             legacy_ref=p.make_ref("LESSONS", ctx.old_id, day.isoformat()),
         )  # fmt: skip
-        self.db.add(lesson)
-        await self.db.flush()
+        self._instructor_take(ctx, [lesson])
+        self.pending_lessons.append(lesson)
         self.lessons[(cohort.id, day)] = lesson.id
         self.rep.note("ручной урок создан: в расписании нет урока на дату отметки")
         return lesson.id
@@ -1215,6 +1327,7 @@ class Importer:
                     "reason": reason,
                 }
             )
+        await self._insert_lessons()  # the manual lessons the marks point at
         for i in range(0, len(values), BATCH):
             done = await self.db.execute(
                 pg_insert(Attendance).values(values[i : i + BATCH]).on_conflict_do_nothing()
@@ -1227,6 +1340,7 @@ class Importer:
 
     async def _marketing(self) -> None:
         rep = self.rep
+        new_campaigns: list[Campaign] = []
         seen: set[str] = set()
         for r in self.rows("MARKETING"):
             cid = p.text(r.get("campaign_id"))
@@ -1272,15 +1386,16 @@ class Importer:
                 branch_id=self.branches[branch], platform=platform, start_date=start, end_date=end,
                 budget=budget, status=status, legacy_ref=ref,
             )  # fmt: skip
-            self.db.add(campaign)
+            new_campaigns.append(campaign)
             self.refs["campaign"][ref] = campaign.id
             rep.imported["MARKETING"] += 1
-        await self.db.flush()
+        await self._bulk(new_campaigns)
 
     # ---- LEADS ----------------------------------------------------------------------------
 
     async def _leads(self) -> None:
         rep = self.rep
+        new_leads: list[Lead] = []
         seen: set[tuple[str, date | None]] = set()
         for r in self.rows("LEADS"):
             lid = p.text(r.get("lead_id"))
@@ -1339,15 +1454,16 @@ class Importer:
                 needs_review=review,
                 created_at=moment or datetime.now(UTC), legacy_ref=ref,
             )  # fmt: skip
-            self.db.add(lead)
+            new_leads.append(lead)
             self.refs["lead"][ref] = lead.id
             rep.imported["LEADS"] += 1
-        await self.db.flush()
+        await self._bulk(new_leads)
 
     # ---- INSTRUCTOR_PAYMENTS (columns shifted by one) -------------------------------------
 
     async def _payouts(self) -> None:
         rep = self.rep
+        new_payouts: list[InstructorPayout] = []
         used: set[tuple[uuid.UUID, uuid.UUID, date]] = set()
         seen_refs: set[str] = set()
         for iid, cid, period in (
@@ -1434,33 +1550,36 @@ class Importer:
                 note=p.clip(f"перенос; способ неизвестен; месяц потока {month_no}", 500),
                 legacy_ref=ref,
             )  # fmt: skip
-            self.db.add(payout)
+            new_payouts.append(payout)
             self.refs["instructor_payout"][ref] = payout.id
             rep.imported["INSTRUCTOR_PAYMENTS"] += 1
-        await self.db.flush()
+        await self._bulk(new_payouts)
 
     # ---- statuses and numbers -------------------------------------------------------------
 
     async def _close_cohorts(self) -> None:
         """#11 + #20 for the cohorts this run created: the same code path as the daily job."""
         done = [c for c in self.cohorts.values() if c.created and c.obj.status == DONE]
-        for ctx in done:
-            await sync_status(self.db, ctx.obj, None, self.today)
-        await self.db.flush()
-        for ctx in done:
-            rows = (
-                (
-                    await self.db.execute(
-                        select(Enrollment).where(
-                            Enrollment.cohort_id == ctx.obj.id, Enrollment.status == COMPLETED
-                        )
+        if not done:
+            return
+        for ctx in done:  # DONE already: only the enrollments cascade is left
+            ctx.obj.status = status_for(ctx.obj.start_date, ctx.obj.end_date, self.today)
+        await close_enrollments(self.db, [c.obj for c in done], None)
+        by_id = {c.obj.id: c.obj for c in done}
+        completed = (
+            (
+                await self.db.execute(
+                    select(Enrollment).where(
+                        Enrollment.cohort_id.in_(list(by_id)), Enrollment.status == COMPLETED
                     )
                 )
-                .scalars()
-                .all()
             )
-            for enrollment in rows:
-                await reevaluate(self.db, enrollment, ctx.obj, None)
+            .scalars()
+            .all()
+        )
+        results = await enrollment_results(self.db, None, enrollment_ids=[e.id for e in completed])
+        for enrollment in completed:
+            await reevaluate(self.db, enrollment, by_id[enrollment.cohort_id], None, results)
         await self.db.flush()
 
     async def _reconcile(self) -> None:

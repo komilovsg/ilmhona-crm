@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 
-import { CourseFormModal, RoomFormModal } from "./forms";
 import { ScheduleTab } from "./ScheduleTab";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -22,6 +21,10 @@ import { formatPrice } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { Course, Room } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const CourseFormModal = lazyModal(() => import("./forms").then((m) => m.CourseFormModal));
+const RoomFormModal = lazyModal(() => import("./forms").then((m) => m.RoomFormModal));
 
 type Tab = "schedule" | "rooms" | "courses";
 type Removal = { kind: "room"; item: Room } | { kind: "course"; item: Course };

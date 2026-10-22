@@ -33,13 +33,13 @@
 | `role`, `role_permission` | role_permission(role_id, section, level ∈ view/change); change ⇒ delete. Системные роли: Суперадмин (всё, не редактируется), Менеджер, Инструктор |
 | `course` | name unique, direction, default_price_month, duration_months, format offline/online |
 | `cohort` (поток) | code `G-NNN` unique, course_id, branch_id, instructor_id → app_user, room_id, start_date, end_date (> start), weekdays smallint[], start_time, end_time (07:00–22:00, длительность 30–240 мин, #6), capacity, price_month, status набор/активный/завершён/отменён |
-| `lesson` | cohort_id, date, starts_at, ends_at, room_id; генерируется из расписания, ручное добавление/перенос; **exclusion constraint** room × tstzrange (#7) |
+| `lesson` | cohort_id, date, starts_at, ends_at, room_id; генерируется из расписания, ручное добавление/перенос; **exclusion constraint** room × tstzrange (#7); instructor_id (копия инструктора потока: триггер при создании, уроки впереди переходят при смене инструктора) × tstzrange — один инструктор в одном месте (409 `instructor_busy`, поток другого филиала не называется); пересечения из старых данных помечены `instructor_conflict` (вне ограничения, «Проверить: конфликт инструктора», снимается, когда пересечение устранено) |
 | `student` | full_name, gender, phone, branch_id, created_at, source_lead_id |
 | `lead` | full_name, phone, course_id, source, campaign_id, branch_id, call_status, status (новый/заинтересован/нулевой урок/оплатил/отказ), needs_review bool (#15), converted_student_id, created_at |
 | `enrollment` | cohort_id, student_id, status активный/завершил/выпускник/отчислен, enrolled_at; **unique(cohort_id, student_id)** (#4) |
 | `attendance` | lesson_id, enrollment_id, present bool, reason; PK(lesson_id, enrollment_id) |
 | `grade` | enrollment_id PK, homework 0–40, final 0–40 (check). Посещ. 20 = 20 × present / проведённые уроки (#12). Итог ≥ 70 → выпускник |
-| `payment` | enrollment_id NOT NULL (#5), month_no 1–N, amount > 0, method alif/payvand/наличные, paid_at, status ожидает/подтверждено, confirmed_by |
+| `payment` | enrollment_id NOT NULL (#5), month_no 1–N, amount > 0, method alif/payvand/наличные, paid_at, status ожидает/подтверждено, confirmed_by. Месяц принимает оплаты (ожидает + подтверждено) не больше цены потока: сверх — 409 `month_already_paid` / `month_overpaid` с тем, кто уже оплатил; create/edit блокируют строку зачисления. Частичная оплата получает заметку «Частичная оплата. Осталось оплатить X TJS». `payment_hold` (enrollment, month, user, expires_at, TTL 120 с, одна на пользователя) — только подсказка «X сейчас вносит оплату» |
 | `campaign` | course_id, branch_id, platform, start_date, end_date, budget, status |
 | `employment` | student_id, enrollment_id null, organization, employed_at — единственное место (#13) |
 | `instructor_rate` | cohort_id, amount_per_month |

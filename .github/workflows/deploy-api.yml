@@ -15,6 +15,7 @@ concurrency:
 
 permissions:
   contents: read
+  statuses: read
 
 jobs:
   # A green CI of a push to main, and only while its commit is still the tip of main: a CI
@@ -39,8 +40,25 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
-  migrate:
+  # The API goes out only after Vercel's commit status (context «Vercel») of the SAME commit is success: a
+  # rate-limited Vercel with a deployed API breaks the app (new API, old front).
+  web:
     needs: latest
+    if: needs.latest.outputs.deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: wait for Vercel's commit status of this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: .github/scripts/wait-vercel.sh
+
+  migrate:
+    needs: [latest, web]
     if: needs.latest.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     environment: api-production
@@ -86,3 +104,14 @@ jobs:
             sleep 15
           done
           echo "$SHA is live"
+      # The web must run the same commit (Vercel's /version, apps/web/src/app/version/route.ts).
+      - name: web and api run the same commit
+        env:
+          WEB_URL: ${{ vars.WEB_URL || 'https://ilmhona-crm.vercel.app' }}
+        run: |
+          web=$(curl -fsS --max-time 20 "$WEB_URL/version" | python3 -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+          if [ "$web" != "$SHA" ]; then
+            echo "::error::web runs $web, api runs $SHA"
+            exit 1
+          fi
+          echo "web and api both run $SHA"

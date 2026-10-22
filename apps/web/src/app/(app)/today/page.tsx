@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { UnfilledPanel } from "@/components/UnfilledPanel";
+import { ExportButton } from "@/components/ExportButton";
 import { useToday } from "@/hooks/attendance";
 import { markedLabel, markState } from "@/lib/attendance";
 import { dayTitle } from "@/lib/education";
@@ -17,7 +18,7 @@ export default function TodayPage() {
 
   return (
     <>
-      <PageHeader title="Сегодня" />
+      <PageHeader actions={<ExportButton path="/api/v1/me/today/export" />} title="Сегодня" />
       <p className="-mt-3 mb-5 text-sm text-default-500">{today.data ? dayTitle(today.data.date) : " "}</p>
 
       <QueryState

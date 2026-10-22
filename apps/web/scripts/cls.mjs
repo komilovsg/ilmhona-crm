@@ -98,6 +98,37 @@ for (const vp of VIEWPORTS) {
     results.push({ viewport: vp.name, path: path.replace(/[0-9a-f-]{36}/, ":id"), cls: Number(cls.toFixed(4)), stuck });
     await page.close();
   }
+
+  // Overlays must not shift the page either: a toast (stack, slide in and out) and the modal / bottom sheet,
+  // opened after the page settled, are fixed-position and leave the layout alone.
+  {
+    const page = await context.newPage();
+
+    await page.route("**/export*", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
+    await page.goto(`${BASE}/students`, { waitUntil: "networkidle" });
+    await page.waitForTimeout(800);
+    await page.evaluate(() => {
+      window.__cls = 0;
+      new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) window.__cls += e.value; // user input does not excuse an overlay: count all
+      }).observe({ type: "layout-shift" });
+    });
+    await page.getByRole("button", { name: /Excel/ }).first().click();
+    await page.getByRole("button", { name: /Excel/ }).first().click();
+    await page.locator("[data-toast]").first().waitFor();
+    await page.waitForTimeout(900);
+    await page.getByRole("button", { name: /Студент/ }).first().click();
+    await page.locator('[role="dialog"]').first().waitFor();
+    await page.waitForTimeout(900);
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(800);
+    await page.locator('[data-toast] button[aria-label="Закрыть уведомление"]').first().click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(600);
+    const cls = await page.evaluate(() => window.__cls);
+
+    results.push({ viewport: vp.name, path: "toast + modal on /students", cls: Number(cls.toFixed(4)), stuck: 0 });
+    await page.close();
+  }
   await context.close();
 }
 await browser.close();

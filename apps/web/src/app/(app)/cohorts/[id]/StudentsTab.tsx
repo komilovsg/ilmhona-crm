@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
+import { useMenu } from "@/components/useMenu";
 
-import { EnrollModal } from "./modals";
 
-import { PaymentFormModal } from "../../payments/PaymentFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { MonthStates } from "@/components/MonthStates";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { ReviewChip } from "@/components/ReviewChip";
@@ -22,17 +22,22 @@ import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
 import { ENROLLMENT_STATUSES, formatPrice } from "@/lib/education";
-import { paidMonthsLabel } from "@/lib/money";
 import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const EnrollModal = lazyModal(() => import("./modals").then((m) => m.EnrollModal));
+const PaymentFormModal = lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
   const overlayMotion = useOverlayMotion();
+  const menu = useMenu(onPick);
+
   return (
-    <Dropdown motionProps={overlayMotion} placement="bottom-end">
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
         <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" variant="flat">
           {row.status}
@@ -41,7 +46,7 @@ function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: stri
       <DropdownMenu
         aria-label="Статус зачисления"
         disabledKeys={[row.status]}
-        onAction={(key) => onPick(String(key))}
+        onAction={menu.onAction}
       >
         {ENROLLMENT_STATUSES.map((s) => (
           <DropdownItem key={s}>{s}</DropdownItem>
@@ -136,7 +141,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     return m ? (
       <>
         <span className="font-medium">{formatPrice(m.paid)}</span>
-        <span className="block text-xs text-default-500">{paidMonthsLabel(m.paid_months, money.data?.months ?? 0)}</span>
+        <MonthStates className="mt-1" states={m.month_states ?? []} />
       </>
     ) : (
       "—"

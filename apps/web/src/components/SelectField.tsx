@@ -50,7 +50,12 @@ export function SelectField({
         onChange(key === undefined || key === ALL ? null : String(key));
       }}
     >
-      {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
+      {(item) => (
+        // long labels (the payment month states) wrap instead of being cut on a phone
+        <SelectItem key={item.key} classNames={{ title: "whitespace-normal break-words" }}>
+          {item.label}
+        </SelectItem>
+      )}
     </Select>
   );
 }

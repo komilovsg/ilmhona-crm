@@ -1,3 +1,5 @@
+import { fullDate } from "./education.ts";
+
 // One Russian text per API error code. tests/test_error_registry.py (API) keeps this list equal
 // to the codes the API defines: add the text here when you define a code there.
 // Keep one `code: "text",` per line — that test reads this file.
@@ -41,6 +43,7 @@ export const apiErrors: Record<string, string> = {
   cohort_in_use: "В потоке есть студенты. Сначала уберите их или отмените поток.",
   student_in_use: "Студент зачислен в потоки. Удалить нельзя.",
   room_busy: "Аудитория занята потоком {cohort}: {date}, {start}–{end}.",
+  instructor_busy: "Инструктор в это время ведёт урок: поток {cohort}, {date}, {start}–{end}.",
   already_enrolled: "Студент уже зачислен в этот поток.",
   cohort_full: "В потоке нет свободных мест.",
   cohort_closed: "Поток завершён или отменён, изменить его нельзя.",
@@ -52,6 +55,8 @@ export const apiErrors: Record<string, string> = {
   room_branch_mismatch: "Аудитория из другого филиала.",
   student_branch_mismatch: "Студент из другого филиала.",
   payment_month_invalid: "В потоке {months} мес.: такого месяца нет.",
+  month_already_paid: "Месяц {month_no} уже оплачен: {paid} TJS.",
+  month_overpaid: "За месяц {month_no} осталось оплатить {remaining} TJS.",
   payment_confirmed: "Подтверждённую оплату нельзя менять или удалять. Сначала снимите подтверждение.",
   idempotency_key_reused: "Эта оплата уже сохранена с другими данными. Обновите форму и повторите.",
   enrollment_has_payments: "У зачисления есть оплаты. Убрать студента из потока нельзя.",
@@ -65,13 +70,17 @@ export const apiErrors: Record<string, string> = {
   campaign_dates_invalid: "Дата окончания раньше даты старта.",
   import_too_large: "Файл слишком большой (больше 2 МБ).",
   import_too_many_rows: "В файле больше 2000 строк. Разделите его на части.",
-  import_unreadable: "Не удалось прочитать файл. Нужен CSV.",
+  import_unreadable: "Не удалось прочитать файл. Нужен Excel (.xlsx) или CSV.",
   import_no_rows: "В файле нет строк для импорта.",
+  journal_no_dates: "Не нашли строку с датами уроков. Укажите её номер вручную.",
+  journal_no_names: "Не нашли колонку с ФИО. Укажите её вручную.",
   import_mapping_invalid: "Выберите колонку с именем или с телефоном.",
   not_graduate: "Сертификат и трудоустройство — только у выпускника.",
   certificate_issued: "Сертификат уже выдан: статус «выпускник» не меняется.",
   employment_enrollment_mismatch: "Это зачисление другого студента.",
 };
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 // Raised by the browser side only (no response from the API).
 const clientErrors: Record<string, string> = {
@@ -82,5 +91,10 @@ const clientErrors: Record<string, string> = {
 export function errorText(code: string | undefined, params?: Record<string, unknown>): string {
   const text = (code && (apiErrors[code] ?? clientErrors[code])) || apiErrors.internal_error;
 
-  return text.replace(/\{(\w+)\}/g, (_, key: string) => String(params?.[key] ?? ""));
+  return text.replace(/\{(\w+)\}/g, (_, key: string) => {
+    const value = params?.[key];
+
+    // a day arrives as ISO (2026-11-17), people read 17.11.2026
+    return typeof value === "string" && ISO_DAY.test(value) ? fullDate(value) : String(value ?? "");
+  });
 }

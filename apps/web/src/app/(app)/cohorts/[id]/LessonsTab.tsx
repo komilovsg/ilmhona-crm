@@ -6,7 +6,6 @@ import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import clsx from "clsx";
 
-import { LessonFormModal } from "./modals";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -20,6 +19,9 @@ import { dayTitle, fullDate, todayIso } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, LessonRow } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const LessonFormModal = lazyModal(() => import("./modals").then((m) => m.LessonFormModal));
 
 export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange: boolean }) {
   const refresh = useRefreshEducation();
@@ -63,7 +65,11 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
       />
     );
   const state = (l: LessonRow) =>
-    l.cancelled ? (
+    !l.cancelled && l.instructor_conflict ? (
+      <Chip color="warning" size="sm" title="В это время у инструктора другой урок (старые данные): перенесите или отмените один из них" variant="flat">
+        Проверить: конфликт инструктора
+      </Chip>
+    ) : l.cancelled ? (
       <Chip color="danger" size="sm" variant="flat">
         отменён
       </Chip>

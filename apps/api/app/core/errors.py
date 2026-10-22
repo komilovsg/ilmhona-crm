@@ -108,6 +108,10 @@ async def _http(request: Request, exc: Exception) -> Response:
 
 async def _validation(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, RequestValidationError)
+    # a malformed id in the URL path names no record: 404, same as an unknown id
+    found = exc.errors()
+    if found and all(e["loc"][:1] == ("path",) and e["type"] == "uuid_parsing" for e in found):
+        return _problem(request, NOT_FOUND)
     errs = [
         {"loc": list(e.get("loc", ())), "code": str(e.get("type", "invalid"))} for e in exc.errors()
     ]

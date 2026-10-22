@@ -12,6 +12,10 @@
 //    sees the animation, so the check can fail). Reduced motion, set before load and toggled after load: nothing
 //    may move or scale (rect constant, one transform value per element) while it is visible. Opacity fades are allowed.
 //
+// 3. Gestures (needs the same login): phone toast (top, tap does not dismiss, swipe up / sideways does), bottom sheet
+//    (follows the finger even under reduced motion, springs back on a short slow drag, closes on a far / fast
+//    one), unsaved-changes guard on swipe / Esc / backdrop (phone and desktop).
+//
 // Needs the web running (production build) with its API, and a Chromium for playwright-core.
 
 import { chromium } from "playwright-core";
@@ -19,6 +23,8 @@ import { chromium } from "playwright-core";
 const BASE = process.env.WEB_URL ?? "http://localhost:3560";
 const LOGIN = process.env.CRM_LOGIN;
 const PASSWORD = process.env.CRM_PASSWORD;
+// MOTION_ONLY=gestures runs part 3 alone (quick loop while working on it); the full run is the gate
+const ONLY = process.env.MOTION_ONLY;
 const bad = [];
 const browser = await chromium.launch();
 
@@ -33,7 +39,7 @@ const effectiveOpacity = (selector) => {
   return o;
 };
 
-for (const [label, ctxOptions] of [
+for (const [label, ctxOptions] of ONLY ? [] : [
   ["reduced motion", { reducedMotion: "reduce" }],
   ["reduced motion, no JS", { reducedMotion: "reduce", javaScriptEnabled: false }],
   ["normal", {}],
@@ -127,7 +133,7 @@ async function measure(page, selector, open, close) {
 }
 
 async function loggedIn(mode, viewport) {
-  const context = await browser.newContext({ viewport, ...(mode === "reduced before load" ? { reducedMotion: "reduce" } : {}) });
+  const context = await browser.newContext({ viewport, hasTouch: viewport.width < 768, ...(mode === "reduced before load" ? { reducedMotion: "reduce" } : {}) });
   const login = await context.request.post(`${BASE}/api/v1/auth/login`, {
     headers: { "X-Requested-With": "ilm" },
     data: { login: LOGIN, password: PASSWORD },
@@ -155,6 +161,11 @@ const DESKTOP = { width: 1440, height: 900 };
 const PHONE = { width: 390, height: 844 };
 const esc = (page) => () => page.keyboard.press("Escape");
 
+const closeToast = (p) => async () => {
+  await p.locator('[data-toast] button[aria-label="Закрыть уведомление"]').first().focus();
+  await p.keyboard.press("Enter");
+};
+
 const CASES = [
   {
     name: "modal",
@@ -170,11 +181,24 @@ const CASES = [
     path: "/students",
     selector: "[data-toast]",
     open: (p) => p.getByRole("button", { name: /Excel/ }).first().click(),
-    // closed from the keyboard: a pointer over the stack expands it (an instant re-layout, not motion)
-    close: (p) => async () => {
-      await p.locator("[data-toast] button[aria-label=closeButton]").first().focus();
-      await p.keyboard.press("Enter");
-    },
+    // closed from the keyboard: a pointer over the stack only pauses it, but keeps the probe honest
+    close: closeToast,
+  },
+  {
+    name: "toast 390",
+    viewport: PHONE,
+    path: "/students",
+    selector: "[data-toast]",
+    open: (p) => p.getByRole("button", { name: /Excel/ }).first().click(),
+    close: closeToast,
+  },
+  {
+    name: "modal sheet 390",
+    viewport: PHONE,
+    path: "/students",
+    selector: '[role="dialog"]',
+    open: (p) => p.getByRole("button", { name: /Студент/ }).first().click(),
+    close: esc,
   },
   {
     name: "dropdown",
@@ -225,7 +249,7 @@ const CASES = [
   },
 ];
 
-if (LOGIN && PASSWORD) {
+if (LOGIN && PASSWORD && !ONLY) {
   for (const mode of ["normal", "reduced before load", "reduced toggled"]) {
     for (const c of CASES) {
       const context = await loggedIn(mode, c.viewport);
@@ -241,8 +265,272 @@ if (LOGIN && PASSWORD) {
       await context.close();
     }
   }
-} else {
+} else if (!ONLY) {
   console.log("overlays skipped: set CRM_LOGIN and CRM_PASSWORD");
+}
+
+const ROW_MENU_PAGES = ["/leads", "/users", "/payments", "/salaries", "/marketing", "/rooms"];
+// pages whose list is lazyModal-guarded: they must have a row menu, else the check proves nothing
+const REQUIRED_ROW_MENUS = new Set(["/leads", "/users", "/payments", "/salaries", "/marketing"]);
+
+// ---- 3. gestures ------------------------------------------------------------------------------------------------
+async function touchSwipe(page, [x0, y0], [x1, y1], { steps = 10, gap = 14 } = {}) {
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type, pts) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: pts });
+
+  await send("touchStart", [{ x: x0, y: y0 }]);
+  for (let i = 1; i <= steps; i++) {
+    await send("touchMove", [{ x: x0 + ((x1 - x0) * i) / steps, y: y0 + ((y1 - y0) * i) / steps }]);
+    await page.waitForTimeout(gap);
+  }
+
+  return { release: () => send("touchEnd", []) };
+}
+
+const rectOf = (page, sel) =>
+  page.locator(sel).first().evaluate((e) => {
+    const r = e.getBoundingClientRect();
+
+    return { x: r.x, y: r.y, w: r.width, h: r.height };
+  });
+const count = (page, sel) => page.locator(sel).count();
+const expect = (cond, msg) => {
+  if (!cond) bad.push(msg);
+};
+
+if (LOGIN && PASSWORD) {
+  for (const mode of ["normal", "reduced before load", "reduced toggled"]) {
+    const tag = `${mode} gestures`;
+
+    // -- phone toast
+    {
+      const context = await loggedIn(mode, PHONE);
+      const page = await goto(context, mode, "/students");
+      const exportBtn = page.getByRole("button", { name: /Excel/ }).first();
+
+      await exportBtn.click();
+      await page.locator("[data-toast]").first().waitFor();
+      await page.waitForTimeout(700);
+      const r0 = await rectOf(page, "[data-toast] > div");
+      const cy = r0.y + r0.h / 2;
+
+      expect(r0.y < 100 && r0.y >= 0, `${tag}: toast not at the top (y ${r0.y})`);
+      await page.touchscreen.tap(r0.x + 40, cy); // a tap
+      await page.waitForTimeout(500);
+      expect((await count(page, "[data-toast]")) === 1, `${tag}: a tap dismissed the toast`);
+      const nudge = await touchSwipe(page, [150, cy], [150, cy - 12], { steps: 3 });
+
+      await nudge.release();
+      await page.waitForTimeout(600);
+      expect((await count(page, "[data-toast]")) === 1, `${tag}: a 12 px nudge dismissed the toast`);
+      const up = await touchSwipe(page, [150, cy], [150, cy - 70], { steps: 6 });
+      const mid = await rectOf(page, "[data-toast] > div");
+
+      expect(r0.y - mid.y > 30, `${tag}: the toast did not follow the finger (${r0.y} -> ${mid.y})`);
+      await up.release();
+      await page.waitForTimeout(900);
+      expect((await count(page, "[data-toast]")) === 0, `${tag}: swipe up did not dismiss the toast`);
+      await exportBtn.click();
+      await page.locator("[data-toast]").first().waitFor();
+      await page.waitForTimeout(700);
+      const r1 = await rectOf(page, "[data-toast] > div");
+      const side = await touchSwipe(page, [100, r1.y + r1.h / 2], [300, r1.y + r1.h / 2], { steps: 6 });
+
+      await side.release();
+      await page.waitForTimeout(900);
+      expect((await count(page, "[data-toast]")) === 0, `${tag}: swipe sideways did not dismiss the toast`);
+      console.log(`${tag.padEnd(28)} phone toast: top, tap + nudge ignored, swipe up and sideways dismiss`);
+      await context.close();
+    }
+
+    // -- phone sheet + unsaved-changes guard
+    {
+      const context = await loggedIn(mode, PHONE);
+      const page = await goto(context, mode, "/students");
+      const dlg = '[role="dialog"]';
+      const open = async () => {
+        await page.getByRole("button", { name: /Студент/ }).first().click();
+        await page.locator(dlg).first().waitFor();
+        await page.waitForTimeout(800);
+      };
+      const ask = page.getByText("Закрыть без сохранения?");
+
+      await open();
+      const rest = await rectOf(page, dlg);
+
+      expect(rest.y + rest.h <= 845 && rest.y > 40, `${tag}: not a bottom sheet (${JSON.stringify(rest)})`);
+      // slow, short drag from the handle: follows the finger, springs back
+      const slow = await touchSwipe(page, [195, rest.y + 10], [195, rest.y + 70], { steps: 6, gap: 60 });
+      const held = await rectOf(page, dlg);
+
+      expect(held.y - rest.y > 30 && held.y - rest.y < 62, `${tag}: sheet does not follow the finger (${rest.y} -> ${held.y})`);
+      await slow.release();
+      await page.waitForTimeout(700);
+      const back = await rectOf(page, dlg);
+
+      expect(Math.abs(back.y - rest.y) < 2 && (await count(page, dlg)) === 1, `${tag}: short slow drag did not spring back`);
+      // pulling up: rubber band, never 1:1
+      const pull = await touchSwipe(page, [195, rest.y + 10], [195, rest.y - 90], { steps: 6, gap: 20 });
+      const pulled = await rectOf(page, dlg);
+
+      expect(rest.y - pulled.y < 60, `${tag}: no resistance when pulling up (${rest.y - pulled.y} px)`);
+      await pull.release();
+      await page.waitForTimeout(700);
+      // far drag closes (clean form: no question)
+      const far = await touchSwipe(page, [195, rest.y + 10], [195, rest.y + 300], { steps: 8 });
+
+      await far.release();
+      await page.waitForTimeout(900);
+      expect((await count(page, dlg)) === 0, `${tag}: far swipe did not close the sheet`);
+      await open();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(600);
+      expect((await count(page, dlg)) === 0, `${tag}: Esc did not close a clean sheet`);
+      // dirty: swipe, Esc and backdrop ask first
+      await open();
+      await page.getByLabel(/ФИО/).first().click();
+      await page.keyboard.type("Тест");
+      const fast = await touchSwipe(page, [195, rest.y + 10], [195, rest.y + 300], { steps: 8 });
+
+      await fast.release();
+      await page.waitForTimeout(900);
+      expect(await ask.isVisible(), `${tag}: swipe on a dirty form did not ask`);
+      expect((await count(page, dlg)) === 2, `${tag}: the form closed under the question`);
+      await page.getByRole("button", { name: "Продолжить" }).click();
+      await page.waitForTimeout(600);
+      expect((await count(page, dlg)) === 1, `${tag}: «Продолжить» did not keep the form`);
+      const afterAsk = await rectOf(page, dlg);
+
+      expect(Math.abs(afterAsk.y - rest.y) < 2, `${tag}: sheet did not return after the question (${afterAsk.y})`);
+      await page.touchscreen.tap(195, 60); // backdrop
+      await page.waitForTimeout(500);
+      expect(await ask.isVisible(), `${tag}: backdrop on a dirty form did not ask`);
+      await page.getByRole("button", { name: "Продолжить" }).click();
+      await page.waitForTimeout(500);
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(500);
+      expect(await ask.isVisible(), `${tag}: Esc on a dirty form did not ask`);
+      await page.getByRole("button", { name: "Закрыть без сохранения" }).click();
+      await page.waitForTimeout(900);
+      expect((await count(page, dlg)) === 0, `${tag}: «Закрыть без сохранения» did not close`);
+      await open();
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(600);
+      expect((await count(page, dlg)) === 0, `${tag}: the guard stayed on after the form was discarded`);
+      console.log(`${tag.padEnd(28)} phone sheet: follows finger, springs back, rubber band, closes; dirty guard on swipe / backdrop / Esc`);
+      await context.close();
+    }
+
+    // -- row menus: the «…» popover closes before a (lazy) modal opens and leaves nothing behind
+    for (const vp of [DESKTOP, PHONE]) {
+      for (const path of ROW_MENU_PAGES) {
+        const context = await loggedIn(mode, vp);
+        const page = await goto(context, mode, path);
+        const trigger = page.locator('main button[aria-label^="Действия"]:visible').first();
+
+        await trigger.waitFor({ timeout: 4000 }).catch(() => {});
+        if (!(await trigger.count())) {
+          if (REQUIRED_ROW_MENUS.has(path)) bad.push(`${tag}: no row menu found on ${path} ${vp.width}px, the check proves nothing`);
+          await context.close();
+          continue;
+        }
+        await page.waitForTimeout(500);
+        // the list as it is now: this very element and the number of rows. A page that regressed to a plain
+        // dynamic() suspends while the modal chunk loads and the list is swapped for (or hidden behind) skeletons.
+        const ROWS = 'main button[aria-label^="Действия"]';
+        const rowsBefore = await count(page, ROWS);
+
+        await trigger.evaluate((el) => {
+          window.__listRow = el;
+        });
+
+        await trigger.click();
+        await page.getByRole("menuitem").first().waitFor();
+        // the modal chunk arrives late (a slow network): the menu must not wait for it to close
+        await page.route("**/_next/static/**", async (route) => {
+          await new Promise((r) => setTimeout(r, 700));
+          await route.continue();
+        });
+        await (path === "/leads" && vp === DESKTOP ? page.getByRole("menuitem", { name: "Изменить" }) : page.getByRole("menuitem")).first().click({ force: true });
+        await page.waitForTimeout(300);
+        const during = await page.evaluate((rows) => {
+          const el = window.__listRow;
+
+          return {
+            kept: !!el && el.isConnected && el.checkVisibility(),
+            rows: document.querySelectorAll(rows).length,
+            skeletons: document.querySelectorAll('main [role="status"][aria-busy="true"], main [data-skeleton]').length,
+          };
+        }, ROWS);
+
+        expect(during.kept && during.rows === rowsBefore && during.skeletons === 0, `${tag}: the list was replaced by skeletons while the modal chunk loaded on ${path} ${vp.width}px (row kept ${during.kept}, rows ${rowsBefore} -> ${during.rows}, skeletons ${during.skeletons})`);
+        await page.waitForTimeout(2300);
+        const menus = await count(page, '[role="menu"]');
+        const dialogs = await count(page, '[role="dialog"]');
+
+        expect(menus === 0, `${tag}: row menu left open on ${path} ${vp.width}px (${menus})`);
+        expect(dialogs <= 1, `${tag}: stale dialog on ${path} ${vp.width}px (${dialogs})`);
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(700);
+        expect((await count(page, '[role="menu"]')) === 0 && (await count(page, '[role="dialog"]')) === 0, `${tag}: leftovers after closing on ${path} ${vp.width}px`);
+        await context.close();
+      }
+    }
+
+    // -- a touch tap on the thin backdrop strip above a near-full-height sheet closes it (asks when dirty)
+    {
+      const context = await loggedIn(mode, { width: 390, height: 440 });
+      const page = await goto(context, mode, "/students");
+      const dlg = '[role="dialog"]';
+
+      await page.getByRole("button", { name: /Студент/ }).first().click();
+      await page.locator(dlg).first().waitFor();
+      await page.waitForTimeout(800);
+      const r = await rectOf(page, dlg);
+
+      expect(r.y > 0 && r.y < 24, `${tag}: sheet is not near full height here (${r.y})`);
+      await page.touchscreen.tap(195, r.y / 2);
+      await page.waitForTimeout(700);
+      expect((await count(page, dlg)) === 0, `${tag}: touch on the backdrop strip did not close the sheet`);
+      expect(new URL(page.url()).pathname === "/students", `${tag}: the backdrop tap went through to the page (${page.url()})`);
+      await page.goto(`${BASE}/students`, { waitUntil: "networkidle" });
+      await page.getByRole("button", { name: /Студент/ }).first().click();
+      await page.locator(dlg).first().waitFor();
+      await page.waitForTimeout(800);
+      await page.getByLabel(/ФИО/).first().click();
+      await page.keyboard.type("Тест");
+      await page.touchscreen.tap(195, r.y / 2);
+      await page.waitForTimeout(500);
+      expect(await page.getByText("Закрыть без сохранения?").isVisible(), `${tag}: touch on the backdrop strip of a dirty form did not ask`);
+      await context.close();
+    }
+
+    // -- desktop: centred modal, guard on Esc and backdrop
+    {
+      const context = await loggedIn(mode, DESKTOP);
+      const page = await goto(context, mode, "/students");
+      const dlg = '[role="dialog"]';
+
+      await page.getByRole("button", { name: /Студент/ }).first().click();
+      await page.locator(dlg).first().waitFor();
+      await page.waitForTimeout(600);
+      const r = await rectOf(page, dlg);
+
+      expect(r.y > 20 && r.y + r.h < 880 && r.x > 100, `${tag}: desktop modal is not centred (${JSON.stringify(r)})`);
+      await page.getByLabel(/ФИО/).first().click();
+      await page.keyboard.type("Тест");
+      await page.keyboard.press("Escape");
+      await page.waitForTimeout(400);
+      expect(await page.getByText("Закрыть без сохранения?").isVisible(), `${tag}: desktop Esc on a dirty form did not ask`);
+      await page.getByRole("button", { name: "Продолжить" }).click();
+      await page.waitForTimeout(400);
+      await page.mouse.click(20, 450);
+      await page.waitForTimeout(400);
+      expect(await page.getByText("Закрыть без сохранения?").isVisible(), `${tag}: desktop backdrop on a dirty form did not ask`);
+      console.log(`${tag.padEnd(28)} desktop modal: centred, guard on Esc / backdrop`);
+      await context.close();
+    }
+  }
 }
 await browser.close();
 

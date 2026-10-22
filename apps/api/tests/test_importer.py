@@ -94,7 +94,7 @@ async def test_apply_writes_an_audit_entry_dry_run_does_not(snapshot: dict[str, 
     text = sentence(
         Entry(actor=None, action="import.apply", entity="import", label=None, diff=diff)
     )
-    assert "перенос из старой системы" in text and "студентов 9" in text
+    assert "перенос из старой системы" in text and "9 студентов" in text
 
 
 async def test_error_midway_rolls_everything_back(
@@ -696,3 +696,25 @@ async def test_shared_phone_siblings_stay_apart_and_spellings_of_one_person_merg
     by = {label: amount for label, _n, amount in lines}
     assert by["разница (должна быть 0)"] == "0.00"
     assert by["= перенесено (расчёт)"] == "4250.00"  # 3350 + 200 + 300 + 400
+
+
+async def test_instructor_overlaps_are_marked_not_fatal(snapshot: dict[str, Any]) -> None:
+    """Two cohorts of one instructor at the same time: both sides marked «конфликт инструктора»
+    and flagged; the import does not fail on lesson_instructor_no_overlap."""
+    clash = {**next(r for r in snapshot["COHORTS"] if r["cohort_id"] == "G-001")}
+    clash.update(cohort_id="G-901", room="", _rowIndex=901)
+    snapshot["COHORTS"].append(clash)
+    report = await do_import(snapshot, apply=True)
+    marked = await sql(
+        "SELECT DISTINCT c.legacy_ref FROM lesson l JOIN cohort c ON c.id = l.cohort_id "
+        "WHERE l.instructor_conflict"
+    )
+    assert {r[0] for r in marked} >= {"COHORTS:G-001", "COHORTS:G-901"}
+    flags = [r for r in report.review if "конфликт инструктора" in r.reason]
+    assert "G-901" in {r.old_id for r in flags}
+    assert (await sql(
+        "SELECT count(*) FROM lesson a JOIN lesson b ON a.instructor_id = b.instructor_id "
+        "AND a.id < b.id AND tstzrange(a.starts_at, a.ends_at) && tstzrange(b.starts_at, b.ends_at) "
+        "AND NOT a.cancelled AND NOT b.cancelled "
+        "AND NOT (a.instructor_conflict AND b.instructor_conflict)"
+    ))[0][0] == 0  # fmt: skip

@@ -229,6 +229,12 @@ class Lesson(Versioned, Legacy, Base):
     cancelled: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     # 'generated' from the cohort schedule (rebuilt on change); 'manual' added or moved by hand
     source: Mapped[str] = mapped_column(Text, server_default=text("'generated'"))
+    # the cohort's instructor when the lesson was made (a trigger fills it; the lessons ahead
+    # follow an instructor change): EXCLUDE (instructor × time) keeps one lesson at a time
+    instructor_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("app_user.id"))
+    # an overlap that came with old data (migration 0015, import): outside the constraint,
+    # shown as «Проверить: конфликт инструктора» until resolved
+    instructor_conflict: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
@@ -312,6 +318,19 @@ class Payment(Versioned, Legacy, Base):
     note: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[UUID] = mapped_column(PG_UUID, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class PaymentHold(Base):
+    """«Someone is entering a payment for this month right now» (UX only: the payment rule does
+    not depend on it). Expires by itself; the form refreshes it while open."""
+
+    __tablename__ = "payment_hold"
+    enrollment_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
+    )
+    month_no: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class InstructorPayout(Versioned, Legacy, Base):

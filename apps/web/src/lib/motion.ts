@@ -47,6 +47,17 @@ export const modalMotion = {
 } as const;
 
 /**
+ * Phone bottom sheet (AppModal): rises from the bottom edge and leaves the same way (apple-design: symmetric
+ * paths), critically damped spring in, 220 ms ease out. Under reduced motion `overlayFade` is used instead.
+ */
+export const sheetMotion = {
+  variants: {
+    enter: { y: 0, opacity: 1, transition: { type: "spring", bounce: 0, duration: 0.38 } },
+    exit: { y: "100%", opacity: 1, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } },
+  },
+} as const;
+
+/**
  * Any HeroUI overlay under reduced motion (modal, drawer, popover / dropdown / select, tooltip): opacity only,
  * no scale and no slide. Covers every variant name HeroUI uses (`initial` for popovers, `exit` as the start
  * for modals, drawers and tooltips).
@@ -63,22 +74,3 @@ export const overlayFade = {
 export function useOverlayMotion() {
   return useReducedMotion() ? overlayFade : undefined;
 }
-
-/** HeroUI toast: a short spring instead of the 300 ms ease. */
-export const toastMotion = { transition: { type: "spring", duration: 0.28, bounce: 0.12 } } as const;
-
-/**
- * Toast under reduced motion: fades in place. The default slides 40 px and animates `top` / `bottom` / height /
- * scaleX of the stack; those jump instead (duration 0).
- */
-export const toastMotionReduced = {
-  initial: { opacity: 0, scale: 1, y: 0 },
-  transition: {
-    duration: 0.12,
-    y: { duration: 0 },
-    top: { duration: 0 },
-    bottom: { duration: 0 },
-    height: { duration: 0 },
-    scaleX: { duration: 0 },
-  },
-} as const;

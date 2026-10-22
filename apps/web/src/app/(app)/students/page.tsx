@@ -7,7 +7,6 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
 
-import { StudentFormModal } from "./StudentFormModal";
 
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -25,6 +24,9 @@ import { dushanbeDay, telHref } from "@/lib/format";
 import { notifyError } from "@/lib/toast";
 import { fullDate, STUDENT_STATUSES } from "@/lib/education";
 import type { Paged, StudentRow } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const StudentFormModal = lazyModal(() => import("./StudentFormModal").then((m) => m.StudentFormModal));
 
 const PAGE_SIZE = 25;
 

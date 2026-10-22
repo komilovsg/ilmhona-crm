@@ -2,8 +2,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
 from app.attendance.api import router as attendance_router
+from app.attendance.journal_api import router as journal_router
 from app.audit.api import router as audit_router
 from app.auth.api import router as auth_router
 from app.auth.reset import router as reset_router
@@ -13,8 +15,11 @@ from app.campaigns.api import router as campaigns_router
 from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
+from app.core.monitoring import init_sentry
+from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.employment.api import router as employment_router
+from app.export import XLSX
 from app.graduates.api import router as graduates_router
 from app.instructors.api import router as instructors_router
 from app.leads.api import router as leads_router
@@ -26,6 +31,9 @@ from app.rooms.api import router as rooms_router
 from app.salaries.api import router as salaries_router
 from app.students.api import router as students_router
 from app.users.api import router as users_router
+
+# before the app exists: the SDK patches Starlette's classes when it starts
+init_sentry()
 
 
 @asynccontextmanager
@@ -42,8 +50,16 @@ app = FastAPI(
     redoc_url=None,
 )
 install_error_handlers(app)
+# JSON lists compress ~8x; an xlsx is a zip already, so it goes out as it is
+app.add_middleware(
+    GZipMiddleware,
+    minimum_size=1024,
+    compresslevel=5,
+    exclude_content_types=(*DEFAULT_EXCLUDED_CONTENT_TYPES, XLSX),
+)
 if settings.proxy_secrets:
     app.add_middleware(ProxySecretRequired, secrets=settings.proxy_secrets)
+app.add_middleware(NoStore)  # outermost: also covers gzip'd and proxy-secret responses
 for router in (
     auth_router,
     reset_router,
@@ -55,6 +71,7 @@ for router in (
     rooms_router,
     cohorts_router,
     attendance_router,
+    journal_router,
     students_router,
     metrics_router,
     payments_router,

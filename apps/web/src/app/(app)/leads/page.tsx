@@ -7,10 +7,6 @@ import { Chip } from "@heroui/chip";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
 
-import { ConvertModal } from "./ConvertModal";
-import { DuplicatesNotice } from "./DuplicatesNotice";
-import { ImportWizard } from "./ImportWizard";
-import { LeadFormModal } from "./LeadFormModal";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
@@ -43,6 +39,12 @@ import {
 import type { Duplicates, LeadFunnel, LeadRow } from "@/lib/sales-types";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged } from "@/lib/types";
+import { lazyModal } from "@/lib/lazy-modal";
+
+const ConvertModal = lazyModal(() => import("./ConvertModal").then((m) => m.ConvertModal));
+const DuplicatesNotice = lazyModal(() => import("./DuplicatesNotice").then((m) => m.DuplicatesNotice));
+const ImportWizard = lazyModal(() => import("./ImportWizard").then((m) => m.ImportWizard));
+const LeadFormModal = lazyModal(() => import("./LeadFormModal").then((m) => m.LeadFormModal));
 
 const PAGE_SIZE = 25;
 const OPEN_STATUSES = LEAD_STATUSES.filter((s) => s !== "записан");
