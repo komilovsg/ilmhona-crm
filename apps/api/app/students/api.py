@@ -23,6 +23,7 @@ from app.core.versioning import Version, check_version
 from app.education.errors import STUDENT_IN_USE
 from app.education.scope import branch_for_write, cohort_filters, student_filters, writer
 from app.export import MAX_ROWS, Col, Sheet, check_cap, workbook_response, xlsx_response
+from app.leads.hygiene import ManualPhone
 from app.metrics import student_status_expr, student_statuses
 from app.models import Branch, Cohort, Course, Enrollment, Student
 from app.payments.api import PAYMENT_COLUMNS, can_view_payments, student_payment_rows
@@ -35,7 +36,6 @@ View = Annotated[Principal, require("students", "view")]
 Change = Annotated[Principal, writer("students")]
 
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
-Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
 Gender = Annotated[str, StringConstraints(pattern=r"^(male|female)$")]
 
 
@@ -46,7 +46,7 @@ class Strict(BaseModel):
 class StudentCreate(Strict):
     full_name: Name
     gender: Gender | None = None
-    phone: Phone | None = None
+    phone: ManualPhone = None
     branch_id: uuid.UUID | None = None
 
 
@@ -55,7 +55,7 @@ class StudentUpdate(Strict):
 
     full_name: Name | None = None
     gender: Gender | None = None
-    phone: Phone | None = None
+    phone: ManualPhone = None
     # a manager clears the import's «check» flag (false); the reason goes with it
     needs_review: bool | None = None
 

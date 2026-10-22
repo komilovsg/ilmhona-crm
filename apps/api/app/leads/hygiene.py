@@ -6,6 +6,10 @@ it; `normalise_phone` turns Tajik numbers into +992XXXXXXXXX. Pure functions, no
 import re
 import unicodedata
 from dataclasses import dataclass
+from typing import Annotated
+
+from pydantic import AfterValidator, StringConstraints
+from pydantic_core import PydanticCustomError
 
 MAX_WORDS = 4
 _URL = re.compile(r"(https?://|www\.|\b[\w-]+\.(com|ru|tj|uz|net|org|io|me|info|biz)\b)", re.I)
@@ -96,6 +100,20 @@ def phone_plausible(raw: str | None) -> bool:
         return True
     digits = _NON_DIGITS.sub("", text)
     return bool(re.fullmatch(r"[+\d()\-.\s]+", text)) and 7 <= len(digits) <= 15
+
+
+def _manual_phone(value: str | None) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    if not phone_plausible(text):
+        raise PydanticCustomError("invalid_phone", "invalid phone")
+    return normalise_phone(text) or text
+
+
+# A phone typed by hand (forms): rejected when it is not a number, Tajik ones become +992XXXXXXXXX.
+# Importers do not use it: a bad phone there goes to needs_review.
+ManualPhone = Annotated[str | None, StringConstraints(max_length=40), AfterValidator(_manual_phone)]
 
 
 def phone_key(value: str | None) -> str | None:

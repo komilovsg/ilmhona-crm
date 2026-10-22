@@ -103,7 +103,7 @@ def test_bug_15_phones_are_normalised() -> None:
 
 async def test_phone_is_normalised_and_the_raw_one_kept(admin: httpx.AsyncClient) -> None:
     a = await make_lead(admin, "Анна", phone="90 123 45 67")
-    assert (a["phone"], a["phone_raw"]) == ("+992901234567", "90 123 45 67")
+    assert (a["phone"], a["phone_raw"]) == ("+992901234567", "+992901234567")
     b = await make_lead(admin, "Борис", phone="+7 495 123 45 67")
     assert (b["phone"], b["phone_raw"]) == ("+7 495 123 45 67", "+7 495 123 45 67")
     c = await make_lead(admin, "Вера")
@@ -590,16 +590,56 @@ async def test_audit_sentences(admin: httpx.AsyncClient) -> None:
     assert sentence(Entry("Курбон", "lead.delete", "lead", "Анна", {})) == "Курбон: удалён лид Анна"
 
 
-async def test_implausible_phone_goes_to_review(admin: httpx.AsyncClient) -> None:
+async def test_phone_rejected_on_lead_create_and_update(admin: httpx.AsyncClient) -> None:
+    body = {"full_name": "Анна Каримова", "branch_id": str(await branch_id("Душанбе"))}
     for bad in ("abc", "12", "+7"):
-        assert (await make_lead(admin, "Анна Каримова", phone=bad))["needs_review"] is True, bad
-    assert (await make_lead(admin, "Анна Каримова", phone="+7 495 123 45 67"))[
-        "needs_review"
-    ] is False
-    assert (await make_lead(admin, "Анна Каримова", phone="901234567"))["needs_review"] is False
-    good = await make_lead(admin, "Борис Каримов", phone="901234567")
-    r = await admin.patch(f"{L}/{good['id']}", json={"phone": "12"})
-    assert r.json()["needs_review"] is True
+        r = await admin.post(L, json={**body, "phone": bad})
+        assert r.status_code == 422, bad
+        assert r.json()["errors"][0]["loc"] == ["body", "phone"]
+        assert r.json()["errors"][0]["code"] == "invalid_phone"
+    good = await make_lead(admin, "Борис Каримов", phone="90 123 4567")
+    assert good["phone"] == "+992901234567"
+    assert (await admin.patch(f"{L}/{good['id']}", json={"phone": "12"})).status_code == 422
+    r = await admin.patch(f"{L}/{good['id']}", json={"phone": "+7 916 123-45-67"})
+    assert r.json()["phone"] == "+7 916 123-45-67"
+    old = await make_lead(admin, "Вера Каримова")
+    await sql("UPDATE lead SET phone = 'abc', phone_raw = 'abc' WHERE id = :i", i=old["id"])
+    r = await admin.get(f"{L}/{old['id']}")  # an old bad phone stays editable when not sent
+    r = await admin.patch(
+        f"{L}/{old['id']}",
+        json={"comment": "позвонить"},
+        headers={"X-Record-Version": str(r.json()["version"])},
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_phone_rejected_on_student_create(admin: httpx.AsyncClient) -> None:
+    S = "/api/v1/students"
+    body = {"full_name": "Студент Тест", "branch_id": str(await branch_id("Душанбе"))}
+    r = await admin.post(S, json={**body, "phone": "abc"})
+    assert r.status_code == 422
+    assert r.json()["errors"][0]["code"] == "invalid_phone"
+    r = await admin.post(S, json={**body, "phone": "90 123 4567"})
+    assert r.status_code == 201, r.text
+    assert r.json()["phone"] == "+992901234567"
+    r = await admin.post(S, json={**body, "phone": "  "})
+    assert r.json()["phone"] is None
+
+
+async def test_422_carries_limits_in_ctx(admin: httpx.AsyncClient) -> None:
+    r = await admin.post(
+        "/api/v1/students",
+        json={"full_name": "я" * 250, "branch_id": str(await branch_id("Душанбе"))},
+    )
+    err = r.json()["errors"][0]
+    assert (err["loc"][-1], err["code"], err["ctx"]) == (
+        "full_name",
+        "string_too_long",
+        {"max_length": 200},
+    )
+    r = await admin.post("/api/v1/students", json={})
+    assert all("ctx" not in e for e in r.json()["errors"] if e["code"] == "missing")
+
     table = [
         ["full_name", "phone_number"],
         ["Анна Каримова", "abc"],
@@ -608,4 +648,7 @@ async def test_implausible_phone_goes_to_review(admin: httpx.AsyncClient) -> Non
     r = await _post(
         admin, "/import/preview", csv_bytes(table), branch_id=str(await branch_id("Душанбе"))
     )
-    assert [x["needs_review"] for x in r.json()["rows"]] == [True, False]
+    assert [x["needs_review"] for x in r.json()["rows"]] == [
+        True,
+        False,
+    ]  # importers still accept it
