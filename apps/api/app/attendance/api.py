@@ -372,7 +372,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "end": _hm(le.ends_at),
                 "cancelled": le.cancelled,
                 "held": not le.cancelled and le.starts_at <= now,
-                # the server stays the authority (`_writable`); this only says whether to offer a click
+                # the server stays the authority (`_writable`); this only offers the click
                 "writable": not le.cancelled
                 and cohort.status != st.CANCELLED
                 and le.lesson_date <= st.today(),
