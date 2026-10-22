@@ -144,7 +144,7 @@ async def test_apply_writes_marks_with_the_reason_audits_and_is_idempotent(
         if "импорт посещаемости" in e["text"]
     ]
     assert sentences == [
-        f"User root: импорт посещаемости {cohort['code']} — 3 отметок, 0 уроков добавлено"
+        f"User root: импорт посещаемости {cohort['code']} — 3 отметки, 0 уроков добавлено"
     ]
     # second run: everything is «same», nothing written, nothing audited again
     r = await send(admin, cohort, "apply", data)
@@ -214,7 +214,7 @@ async def test_missing_past_lessons_are_created_with_the_cohort_time_and_room(
     )
     assert [(m[1], m[2], m[3]) for m in made] == [("10:00", "11:30", True)] * 2
     entries = (await admin.get("/api/v1/audit", params={"page_size": 50})).json()["items"]
-    assert any("4 отметок, 2 уроков добавлено" in e["text"] for e in entries)
+    assert any("4 отметки, 2 урока добавлено" in e["text"] for e in entries)
     # idempotent: no second copy of the lessons
     r = await send(admin, cohort, "apply", data)
     assert (r.json()["marks_added"], r.json()["lessons_created"]) == (0, 0)

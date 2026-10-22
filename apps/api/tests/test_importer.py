@@ -94,7 +94,7 @@ async def test_apply_writes_an_audit_entry_dry_run_does_not(snapshot: dict[str, 
     text = sentence(
         Entry(actor=None, action="import.apply", entity="import", label=None, diff=diff)
     )
-    assert "перенос из старой системы" in text and "студентов 9" in text
+    assert "перенос из старой системы" in text and "9 студентов" in text
 
 
 async def test_error_midway_rolls_everything_back(

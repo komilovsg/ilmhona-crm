@@ -221,7 +221,7 @@ async def test_deleting_an_enrollment_names_the_lost_marks_and_grade(
     assert (await admin.delete(f"{E}/{e}")).status_code == 204
     log = (await admin.get("/api/v1/audit", params={"action": "enrollment.delete"})).json()
     text = log["items"][0]["text"]
-    assert "убран из потока" in text and "отметок посещаемости: 1" in text and "оценки" in text
+    assert "убран из потока" in text and "1 отметка посещаемости" in text and "оценки" in text
 
 
 # ---- lists and Excel ---------------------------------------------------------------------
