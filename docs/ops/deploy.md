@@ -29,14 +29,14 @@ every 2 h, 21:00-07:59 Dushanbe     uptime      same check; a non-200 fails the 
 ```
 
 All workflows have the least `permissions:` (`contents: read`, or none; `deploy-api` also reads
-`deployments` and `statuses`).
+`statuses`).
 
 ### Web before API
 
 Vercel can be rate-limited (Hobby: 100 deployments a day), and an API deployed without its front
-breaks saves. So `deploy-api` first polls the GitHub deployments of the commit (environment
-`Production`, created by Vercel) every 20 s: `success` lets the migration and the API deploy go on,
-`failure`/`error` fails the job («Vercel не выкатил фронт — API не выкатываем»), 20 minutes without a
+breaks saves. So `deploy-api` first polls the commit status with context `Vercel` (the Vercel integration reports
+there, not as GitHub Deployments; `.github/scripts/wait-vercel.sh`) every 20 s: `success` lets the migration and the API deploy go on,
+`failure`/`error` fails the job («Vercel не выкатил фронт — API не выкатываем» plus Vercel's description, e.g. the rate limit), 20 minutes without a
 result fails it too. After the API is live the job reads `<WEB_URL>/version` (repo variable `WEB_URL`,
 default `https://ilmhona-crm.vercel.app`; the route returns `VERCEL_GIT_COMMIT_SHA`, public, no
 secrets) and fails when it differs from the API's sha. `apps/web/vercel.json` turns off preview

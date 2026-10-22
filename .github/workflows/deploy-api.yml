@@ -15,7 +15,6 @@ concurrency:
 
 permissions:
   contents: read
-  deployments: read
   statuses: read
 
 jobs:
@@ -41,7 +40,7 @@ jobs:
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
-  # The API goes out only after Vercel's production deployment of the SAME commit succeeded: a
+  # The API goes out only after Vercel's commit status (context «Vercel») of the SAME commit is success: a
   # rate-limited Vercel with a deployed API breaks the app (new API, old front).
   web:
     needs: latest
@@ -49,32 +48,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: wait for the Vercel production deployment of this commit
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      - name: wait for Vercel's commit status of this commit
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          deadline=$((SECONDS + 1200))
-          while :; do
-            state=""
-            for id in $(gh api "repos/$GITHUB_REPOSITORY/deployments?sha=$SHA&environment=Production" --jq '.[].id'); do
-              s=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses" --jq '.[0].state // empty')
-              case "$s" in
-                success) state=success; break ;;
-                failure|error) state=failed ;;
-              esac
-            done
-            if [ "$state" = success ]; then echo "Vercel production deployment of $SHA succeeded"; exit 0; fi
-            if [ "$state" = failed ]; then
-              echo "::error::Vercel не выкатил фронт — API не выкатываем"
-              exit 1
-            fi
-            if [ "$SECONDS" -ge "$deadline" ]; then
-              echo "::error::Vercel не выкатил фронт за 20 минут — API не выкатываем"
-              exit 1
-            fi
-            sleep 20
-          done
+        run: .github/scripts/wait-vercel.sh
 
   migrate:
     needs: [latest, web]
