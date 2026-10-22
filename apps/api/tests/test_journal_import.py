@@ -8,8 +8,8 @@ import httpx
 import pytest
 
 from app.cohorts.status import today
-from tests.conftest import SignedIn, make_role, sql
-from tests.edu import C, make_cohort, make_course
+from tests.conftest import SignedIn, make_role, make_user, sql
+from tests.edu import C, make_cohort, make_course, make_room
 from tests.journal_fixture import journal_xlsx
 from tests.test_attendance import enroll, mark, past_cohort
 
@@ -294,6 +294,39 @@ async def test_a_busy_room_skips_the_lesson_with_the_reason(admin: httpx.AsyncCl
     prev = (await send(admin, cohort, "preview", data)).json()
     assert prev["dates"][1]["status"] == "conflict"
     assert other["code"] in prev["dates"][1]["reason"]
+    r = await send(admin, cohort, "apply", data)
+    assert (r.json()["marks_added"], r.json()["lessons_created"]) == (2, 0)
+    assert r.json()["skipped_lessons"][0]["status"] == "conflict"
+
+
+async def test_a_busy_instructor_shows_as_conflict_in_the_preview(
+    admin: httpx.AsyncClient,
+) -> None:
+    ins = str(await make_user("ins", "instructor"))
+    cohort, _ = await past_cohort(admin, instructor_id=ins)
+    await enroll(admin, cohort, "Каримов Али")
+    ds = await days(admin, cohort)
+    await sql(
+        "DELETE FROM lesson WHERE cohort_id = :c AND lesson_date IN (:a, :b)",
+        c=cohort["id"],
+        a=ds[1],
+        b=ds[1] + timedelta(days=7),
+    )
+    # the same instructor teaches another cohort, in another room, at that time on that day
+    other = await make_cohort(
+        admin,
+        await make_course("Другой"),
+        await make_room(name="R-other"),
+        start=ds[1],
+        weeks=1,
+        weekdays=[ds[1].isoweekday()],
+        instructor_id=ins,
+    )
+    data = journal_xlsx(short(ds[:3]), [("Каримов Али", ["б", "б", "б"], False)])
+    prev = (await send(admin, cohort, "preview", data)).json()
+    assert prev["dates"][1]["status"] == "conflict"
+    assert other["code"] in prev["dates"][1]["reason"]
+    assert "инструктор" in prev["dates"][1]["reason"]
     r = await send(admin, cohort, "apply", data)
     assert (r.json()["marks_added"], r.json()["lessons_created"]) == (2, 0)
     assert r.json()["skipped_lessons"][0]["status"] == "conflict"

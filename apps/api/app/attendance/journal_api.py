@@ -33,10 +33,10 @@ from app.attendance import journal as jr
 from app.audit.log import record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
-from app.cohorts.schedule import check_room_free, local_dt
+from app.cohorts.schedule import check_instructor_free, check_room_free, local_dt
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
-from app.education.errors import COHORT_CLOSED
+from app.education.errors import COHORT_CLOSED, ROOM_BUSY
 from app.education.scope import check_cohort_visible, is_instructor
 from app.export import neutralise
 from app.leads.errors import IMPORT_TOO_LARGE, IMPORT_UNREADABLE
@@ -287,16 +287,21 @@ async def build_plan(
         if not cells:
             dp.status, dp.reason = "no_lesson", "нечего записывать"
             continue
+        window = [(local_dt(dp.day, cohort.start_time), local_dt(dp.day, cohort.end_time))]
         try:
-            await check_room_free(
-                db,
-                cohort.room_id,
-                [(local_dt(dp.day, cohort.start_time), local_dt(dp.day, cohort.end_time))],
+            await check_room_free(db, cohort.room_id, window)
+            await check_instructor_free(
+                db, cohort.instructor_id, window, branch_id=cohort.branch_id
             )
         except DomainError as busy:
             dp.status = "conflict"
             dp.conflict = dict(busy.params)
-            dp.reason = f"аудитория занята потоком {busy.params.get('cohort')}"
+            who = busy.params.get("cohort")
+            dp.reason = (
+                f"аудитория занята потоком {who}"
+                if busy.error is ROOM_BUSY
+                else f"у инструктора в это время поток {who}"
+            )
             for c in cells:
                 c.plan, c.reason = "skip_no_lesson", dp.reason
 
