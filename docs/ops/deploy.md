@@ -22,7 +22,8 @@ push to main -> ci (green) -> deploy-api: wait for Vercel production deployment 
                                           -> migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
                                           -> check the web's /version sha equals the api sha
                            -> Vercel builds and deploys apps/web by itself (git integration; only main, see apps/web/vercel.json)
-every 10 min, 08:00-20:59 Dushanbe  keepalive   curl /api/health through the Vercel URL
+every 5 min, 07:00-21:59 Dushanbe   cron-job.org  GET /api/health through the Vercel URL (the real keepalive, outside GitHub)
+every 10 min, 08:00-20:59 Dushanbe  keepalive   same; backup only: GitHub skips most scheduled runs (5 a day seen)
 every 2 h, 21:00-07:59 Dushanbe     uptime      same check; a non-200 fails the run (e-mail), see monitoring.md
 00:30 Dushanbe (19:30 UTC)          daily       python -m app.cli daily (as ilm_app)
 01:30 Dushanbe (20:30 UTC)          backup      pg_dump -> age -> ilmhona-backups, last 30 kept
@@ -113,8 +114,18 @@ migration. Never edit a migration that already ran on Neon.
 `autoDeploy: false`: Render deploys only when `deploy-api` posts the hook with `&ref=<sha>`.
 `GET /api/health` returns `{"status":"ok","version":"<git sha>"}` (`RENDER_GIT_COMMIT`); the
 workflow waits (up to 20 min) until the version equals the commit. Free Render sleeps after 15
-minutes without traffic; `keepalive` keeps it awake 08:00-20:59 Asia/Dushanbe, outside that the
-first visitor waits for a cold start (about a minute).
+minutes without traffic, and a cold start (about 30 s) outlasts the Vercel proxy: the first
+request after a sleep gets **502**. GitHub's `keepalive` cron is not enough (it ran 5 times in a
+day instead of every 10 min), so an external pinger keeps the API awake:
+
+- cron-job.org (free account of the owner), job «ilmhona keepalive»: `GET
+  https://ilmhona-crm.vercel.app/api/health`, every 5 min, hours 07-21, timezone Asia/Dushanbe,
+  timeout 60 s, notify on failure.
+- Working hours only, on purpose: free Render gives 750 instance hours a month per workspace and
+  `my-hrm-api` is free Render too. 15 h x 31 = 465 h for ilmhona leaves the rest to my-hrm; two
+  services awake 24/7 (1 488 h) would get suspended mid-month. Widen the window only after moving
+  to a paid plan.
+- Outside the window the first visitor still waits for a cold start (a 502 once, then it works).
 
 ## Connections, compression, image
 
