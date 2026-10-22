@@ -21,6 +21,7 @@ Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
 push to main -> ci (green) -> deploy-api: migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
                            -> Vercel builds and deploys apps/web by itself (git integration)
 every 10 min, 08:00-20:59 Dushanbe  keepalive   curl /api/health through the Vercel URL
+every 2 h, 21:00-07:59 Dushanbe     uptime      same check; a non-200 fails the run (e-mail), see monitoring.md
 00:30 Dushanbe (19:30 UTC)          daily       python -m app.cli daily (as ilm_app)
 01:30 Dushanbe (20:30 UTC)          backup      pg_dump -> age -> ilmhona-backups, last 30 kept
 ```

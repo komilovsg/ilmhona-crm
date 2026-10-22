@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const API_URL = process.env.API_URL ?? "http://localhost:8200";
 
 const nextConfig: NextConfig = {
+  // Error-monitoring release = the deployed commit (same sha for browser and server events).
+  env: { NEXT_PUBLIC_SENTRY_RELEASE: process.env.VERCEL_GIT_COMMIT_SHA ?? "" },
   // The API sits behind the web origin, so the httpOnly cookies are first-party.
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${API_URL}/api/:path*` }];
@@ -33,4 +35,18 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Source maps go to Sentry only when SENTRY_AUTH_TOKEN is set at build time (Vercel env, never in
+// the repo), and the uploaded maps are deleted from the build output: they are never served.
+export default async function config(): Promise<NextConfig> {
+  if (!process.env.SENTRY_AUTH_TOKEN) return nextConfig;
+  const { withSentryConfig } = await import("@sentry/nextjs/config");
+  return withSentryConfig(nextConfig, {
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+    release: { name: process.env.VERCEL_GIT_COMMIT_SHA },
+    sourcemaps: { deleteSourcemapsAfterUpload: true },
+    telemetry: false,
+    silent: true,
+  });
+}

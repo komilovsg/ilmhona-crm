@@ -19,6 +19,8 @@ engine = create_async_engine(
     max_overflow=settings.db_max_overflow,
     pool_recycle=settings.db_pool_recycle,
     pool_timeout=15,
+    # bound values (names, phones, amounts) stay out of error messages, logs and Sentry
+    hide_parameters=True,
 )
 sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
 

@@ -1,0 +1,26 @@
+# Night uptime check (docs/ops/monitoring.md). keepalive.yml pings every 10 minutes from 03:00 to
+# 15:59 UTC and keeps the free Render API awake; this one covers the rest of the day with a
+# check every 2 hours (00, 02, 16, 18, 20, 22 UTC). It wakes the API if it sleeps (a cold start
+# is about a minute), and the run FAILS when /api/health through Vercel is not a plain 200
+# within 90 seconds: GitHub then emails the repository owner about the failed workflow.
+name: uptime
+
+on:
+  schedule:
+    - cron: "0 0,2,16,18,20,22 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: health through the web proxy must be 200
+        env:
+          URL: ${{ vars.WEB_HEALTH_URL || 'https://ilmhona-crm.vercel.app/api/health' }}
+        run: |
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 "$URL" || true)
+          echo "GET $URL -> ${code:-no answer}"
+          [ "$code" = "200" ]

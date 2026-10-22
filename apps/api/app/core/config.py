@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # The commit this build runs: Render sets it; /api/health reports it so the deploy workflow
     # can wait until the new commit serves.
     render_git_commit: str = ""
+    # Error monitoring (docs/ops/monitoring.md): empty = Sentry stays off (development, tests).
+    sentry_dsn: str = ""
     # Shared secret the web proxy sends in X-Proxy-Secret (app/core/proxy.py). Comma-separated:
     # two values are accepted while it is rotated. Empty = no check (local development).
     proxy_shared_secret: str = ""
