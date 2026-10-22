@@ -372,6 +372,10 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "end": _hm(le.ends_at),
                 "cancelled": le.cancelled,
                 "held": not le.cancelled and le.starts_at <= now,
+                # the server stays the authority (`_writable`); this only offers the click
+                "writable": not le.cancelled
+                and cohort.status != st.CANCELLED
+                and le.lesson_date <= st.today(),
             }
             for le in lessons
         ],
@@ -382,6 +386,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "student_name": s.full_name,
                 "status": e.status,
                 "enrolled_at": e.enrolled_at,
+                "enrolled_on": e.enrolled_at.astimezone(st.TZ).date(),
                 "marks": cells.get(e.id, {}),
                 **stats[e.id],
             }

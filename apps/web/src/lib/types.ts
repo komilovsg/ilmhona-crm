@@ -265,7 +265,7 @@ export type AttendanceStats = {
   score: number;
 };
 
-export type GridLessonCol = { id: string; date: string; start: string; end: string; cancelled: boolean; held: boolean };
+export type GridLessonCol = { id: string; date: string; start: string; end: string; cancelled: boolean; held: boolean; writable: boolean };
 
 export type GridStudent = AttendanceStats & {
   enrollment_id: string;
@@ -273,6 +273,7 @@ export type GridStudent = AttendanceStats & {
   student_name: string;
   status: string;
   enrolled_at: string;
+  enrolled_on: string;
   marks: Record<string, { present: boolean; reason: string | null }>;
 };
 

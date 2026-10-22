@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import clsx from "clsx";
 
@@ -11,10 +11,27 @@ import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
+import { LoadingButton } from "@/components/LoadingButton";
+import { Segmented } from "@/components/Segmented";
 import { PersonStatus } from "@/components/StatusChip";
+import { useRefreshAttendance } from "@/hooks/attendance";
 import { api } from "@/lib/api";
 import { lessonProgress, markedLabel, markState, percentLabel } from "@/lib/attendance";
-import { dayMonth, dayTitle, todayIso } from "@/lib/education";
+import {
+  ALL_MONTHS,
+  cellMarkable,
+  defaultMonth,
+  lessonsOfMonth,
+  markLabel,
+  monthLabel,
+  monthsOf,
+  nextPresent,
+  withMark,
+  type Mark,
+} from "@/lib/attendance-grid";
+import { useBrowserValue } from "@/lib/client-store";
+import { dayMonth, dayTitle, fullDate, todayIso } from "@/lib/education";
+import { notify, notifyError } from "@/lib/toast";
 import type { AttendanceGrid, GridStudent } from "@/lib/types";
 
 const ImportJournal = dynamic(() => import("./ImportJournal").then((m) => m.ImportJournal));
@@ -57,6 +74,76 @@ function Cell({ student, lesson }: { student: GridStudent; lesson: AttendanceGri
     );
 
   return <span className={clsx(base, "text-default-300")}>·</span>;
+}
+
+type Col = AttendanceGrid["lessons"][number];
+
+const CELL = "mx-auto flex h-7 w-7 items-center justify-center rounded-md text-sm font-semibold";
+
+/** A cell of the journal in «Отметка» mode: same box as `Cell`, but a button. */
+function MarkCell({
+  student,
+  lesson,
+  busy,
+  onToggle,
+}: {
+  student: GridStudent;
+  lesson: Col;
+  busy: boolean;
+  onToggle: () => void;
+}) {
+  const mark = student.marks[lesson.id];
+
+  return (
+    <button
+      aria-busy={busy}
+      aria-label={`${student.student_name}, ${fullDate(lesson.date)}: ${markLabel(mark?.present)}`}
+      className={clsx(
+        CELL,
+        "transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
+        busy && "opacity-60",
+        mark?.present === true && "bg-success/15 text-success-700 dark:text-success",
+        mark?.present === false && "bg-danger/15 text-danger",
+        mark === undefined && "border border-dashed border-default-400 text-default-400 hover:bg-default-100",
+      )}
+      title={mark?.present === false ? (mark.reason ?? undefined) : undefined}
+      type="button"
+      onClick={onToggle}
+    >
+      {mark?.present === true && <Icon name="check" size={16} strokeWidth={2.6} />}
+      {mark?.present === false && <Icon name="x" size={16} strokeWidth={2.6} />}
+      {mark === undefined && "·"}
+    </button>
+  );
+}
+
+type View = "view" | "mark";
+const VIEW_KEY = "attendance-view";
+
+const VIEW_EVENT = "attendance-view";
+
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "mark" ? "mark" : "view";
+  } catch {
+    return "view"; // storage blocked: the page works without it
+  }
+}
+
+function useViewMode(): [View, (v: View) => void] {
+  const view = useBrowserValue<View>(readView, "view", VIEW_EVENT);
+
+  return [
+    view,
+    (v) => {
+      try {
+        localStorage.setItem(VIEW_KEY, v);
+      } catch {
+        /* ignore */
+      }
+      window.dispatchEvent(new Event(VIEW_EVENT));
+    },
+  ];
 }
 
 function Unmarked({ n }: { n: number }) {
@@ -111,7 +198,79 @@ function Grid({
   today: string;
   onImport?: () => void;
 }) {
-  const { lessons, students } = grid;
+  const queryClient = useQueryClient();
+  const refresh = useRefreshAttendance();
+  const [storedView, setView] = useViewMode();
+  const [picked, setPicked] = useState<string | null>(null);
+  const months = monthsOf(grid.lessons);
+  const month = picked && (picked === ALL_MONTHS || months.includes(picked)) ? picked : defaultMonth(grid.lessons, today);
+  const { students } = grid;
+  const lessons = lessonsOfMonth(grid.lessons, month);
+  const marking = canMark && storedView === "mark";
+  const inflight = useRef(new Set<string>());
+  const [pending, setPending] = useState<Set<string>>(new Set());
+  const [bulk, setBulk] = useState<string | null>(null);
+  const gridKey = ["grid", cohortId];
+
+  const settle = () => {
+    // refetch once nothing is in flight, so a refetch never overwrites a pending optimistic cell
+    if (inflight.current.size > 0) return;
+    void refresh();
+    void queryClient.invalidateQueries({ queryKey: ["lesson-attendance"] });
+  };
+
+  const patch = (enrollmentId: string, lessonId: string, mark: Mark | undefined) =>
+    queryClient.setQueryData<AttendanceGrid>(gridKey, (old) =>
+      old
+        ? {
+            ...old,
+            students: old.students.map((s) =>
+              s.enrollment_id === enrollmentId ? { ...s, marks: withMark(s.marks, lessonId, mark) } : s,
+            ),
+          }
+        : old,
+    );
+
+  const toggle = async (student: GridStudent, lesson: Col) => {
+    const key = `${lesson.id}:${student.enrollment_id}`;
+
+    if (inflight.current.has(key)) return;
+    inflight.current.add(key);
+    setPending(new Set(inflight.current));
+    const prev = student.marks[lesson.id];
+    const present = nextPresent(prev?.present);
+
+    await queryClient.cancelQueries({ queryKey: gridKey });
+    patch(student.enrollment_id, lesson.id, { present, reason: null });
+    try {
+      await api(`/api/v1/lessons/${lesson.id}/attendance/${student.enrollment_id}`, {
+        method: "PUT",
+        body: { present, reason: null },
+      });
+    } catch (e) {
+      patch(student.enrollment_id, lesson.id, prev);
+      notifyError(e);
+    } finally {
+      inflight.current.delete(key);
+      setPending(new Set(inflight.current));
+      settle();
+    }
+  };
+
+  const allPresent = async (lesson: Col) => {
+    if (bulk) return;
+    setBulk(lesson.id);
+    try {
+      await api(`/api/v1/lessons/${lesson.id}/attendance/all-present`, { method: "POST" });
+      notify("Все отмечены присутствующими");
+    } catch (e) {
+      notifyError(e);
+    } finally {
+      setBulk(null);
+      settle();
+    }
+  };
+
   const progress = lessonProgress(grid, (iso) => todayIso(new Date(iso)));
   const header = (l: AttendanceGrid["lessons"][number]) => (
     <>
@@ -133,6 +292,26 @@ function Grid({
         </div>
       </div>
 
+      <div className="mb-3 hidden flex-wrap items-center gap-3 md:flex">
+        <Segmented
+          label="Месяц"
+          options={[...months.map((m) => ({ key: m, label: monthLabel(m) })), { key: ALL_MONTHS, label: "Все" }]}
+          value={month}
+          onChange={setPicked}
+        />
+        {canMark && (
+          <Segmented
+            label="Режим таблицы"
+            options={[
+              { key: "view", label: "Просмотр" },
+              { key: "mark", label: "Отметка" },
+            ]}
+            value={storedView}
+            onChange={setView}
+          />
+        )}
+      </div>
+
       <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="text-xs text-default-500">
@@ -144,7 +323,7 @@ function Grid({
                 <th
                   key={l.id}
                   className={clsx(
-                    "border-b border-divider px-1 py-2 text-center text-xs tabular-nums",
+                    "min-w-14 border-b border-divider px-1 py-2 text-center text-xs tabular-nums",
                     l.date === today && "bg-primary/10",
                     l.cancelled && "line-through opacity-60",
                   )}
@@ -160,6 +339,20 @@ function Grid({
                   ) : (
                     header(l)
                   )}
+                  <div className="mt-1 flex h-6 items-center justify-center">
+                    {marking && l.writable && (
+                      <LoadingButton
+                        aria-label={`Все присутствовали ${dayTitle(l.date)}`}
+                        className="h-6 min-w-0 px-1.5 text-xs"
+                        isLoading={bulk === l.id}
+                        size="sm"
+                        variant="flat"
+                        onPress={() => void allPresent(l)}
+                      >
+                        Все ✓
+                      </LoadingButton>
+                    )}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -185,7 +378,16 @@ function Grid({
                 </td>
                 {lessons.map((l) => (
                   <td key={l.id} className={clsx("border-b border-divider px-1 py-2", l.date === today && "bg-primary/5")}>
-                    <Cell lesson={l} student={s} />
+                    {marking && cellMarkable(l, s) ? (
+                      <MarkCell
+                        busy={pending.has(`${l.id}:${s.enrollment_id}`)}
+                        lesson={l}
+                        student={s}
+                        onToggle={() => void toggle(s, l)}
+                      />
+                    ) : (
+                      <Cell lesson={l} student={s} />
+                    )}
                   </td>
                 ))}
               </tr>
@@ -196,7 +398,7 @@ function Grid({
 
       {/* phone: the list of lessons; a tap opens the mark screen (one lesson per screen, #23) */}
       <ul data-rows className="space-y-2 md:hidden">
-        {lessons.map((l) => {
+        {grid.lessons.map((l) => {
           const p = progress[l.id] ?? { marked: 0, total: 0 };
           const state = markState(p.marked, p.total);
           const inner = (
