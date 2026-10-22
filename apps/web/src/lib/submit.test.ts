@@ -27,3 +27,14 @@ test("a failed request frees the guard", async () => {
   await submit();
   assert.equal(calls, 2);
 });
+
+test("a double click on apply starts one upload", async () => {
+  let uploads = 0;
+  const apply = singleFlight(async () => {
+    uploads++;
+    await new Promise((r) => setTimeout(r, 5));
+  });
+
+  await Promise.all([apply(), apply()]);
+  assert.equal(uploads, 1);
+});

@@ -319,6 +319,11 @@ def _plural(n: int, one: str, few: str, many: str) -> str:
     return many
 
 
+def _count(n: int, one: str, few: str, many: str) -> str:
+    """«1 урок», «2 урока», «5 уроков»: the one place a number meets its noun."""
+    return f"{n} {_plural(n, one, few, many)}"
+
+
 def _tail(label: str | None) -> str:
     return f" {label}" if label else ""
 
@@ -386,12 +391,12 @@ def sentence(
 
     if a == "import.apply":
         counts = [
-            f"{what} {_pair(e.diff.get(key))[1]}"
-            for key, what in (
-                ("student", "студентов"),
-                ("enrollment", "зачислений"),
-                ("payment", "оплат"),
-                ("lead", "лидов"),
+            f"{_count(_pair(e.diff.get(key))[1], *forms)}"
+            for key, forms in (
+                ("student", ("студент", "студента", "студентов")),
+                ("enrollment", ("зачисление", "зачисления", "зачислений")),
+                ("payment", ("оплата", "оплаты", "оплат")),
+                ("lead", ("лид", "лида", "лидов")),
             )
             if _pair(e.diff.get(key))[1]
         ]
@@ -405,7 +410,7 @@ def sentence(
         lost = []
         marks = _pair(e.diff.get("lost_marks"))[0]
         if marks:
-            lost.append(f"отметок посещаемости: {marks}")
+            lost.append(f"{_count(marks, 'отметка', 'отметки', 'отметок')} посещаемости")
         if _pair(e.diff.get("lost_grade"))[0]:
             lost.append("оценки")
         if cert := _pair(e.diff.get("lost_certificate"))[0]:
@@ -468,7 +473,11 @@ def sentence(
         _, over = _pair(e.diff.get("overwritten"))
         tail = f", перезаписано: {over}" if over else ""
         head = f"{who}: импорт посещаемости {lab}"
-        return f"{head} — {marks or 0} отметок, {lessons or 0} уроков добавлено{tail}"
+        return (
+            f"{head} — {_count(marks or 0, 'отметка', 'отметки', 'отметок')}, "
+            f"{_count(lessons or 0, 'урок', 'урока', 'уроков')} "
+            f"{_plural(lessons or 0, 'добавлен', 'добавлено', 'добавлено')}{tail}"
+        )
     if a == "attendance.mark_all":
         code, _, day = (lab or "").partition(", ")
         _, n = _pair(e.diff.get("marked"))

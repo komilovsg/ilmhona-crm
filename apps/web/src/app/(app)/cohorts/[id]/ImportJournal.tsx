@@ -15,6 +15,7 @@ import { useRefreshAttendance } from "@/hooks/attendance";
 import { messageOf, uploadCsv } from "@/lib/api";
 import { fullDate } from "@/lib/education";
 import { dateStatusLabel, marksToWrite, resultText, skippedChips, type JournalPreview, type JournalResult } from "@/lib/journal-import";
+import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -87,6 +88,8 @@ export function ImportJournal({ cohortId, onClose }: { cohortId: string; onClose
     onError: (e) => setError(messageOf(e)),
   });
 
+  const submit = useSubmit(() => apply.mutateAsync(), !preview);
+
   const again = (next: Settings, f: File | null = file) => {
     setSettings(next);
     if (f) run.mutate({ file: f, settings: next });
@@ -115,7 +118,7 @@ export function ImportJournal({ cohortId, onClose }: { cohortId: string; onClose
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <LoadingButton color="primary" isDisabled={!preview || writes === 0} isLoading={apply.isPending} onPress={() => apply.mutate()}>
+          <LoadingButton color="primary" isDisabled={!preview || writes === 0} isLoading={apply.isPending} onPress={() => submit()}>
             {preview ? `Загрузить отметок: ${writes}` : "Загрузить"}
           </LoadingButton>
         </>

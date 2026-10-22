@@ -1,3 +1,5 @@
+import { fullDate } from "./education.ts";
+
 // One Russian text per API error code. tests/test_error_registry.py (API) keeps this list equal
 // to the codes the API defines: add the text here when you define a code there.
 // Keep one `code: "text",` per line — that test reads this file.
@@ -78,6 +80,8 @@ export const apiErrors: Record<string, string> = {
   employment_enrollment_mismatch: "Это зачисление другого студента.",
 };
 
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 // Raised by the browser side only (no response from the API).
 const clientErrors: Record<string, string> = {
   network_error: "Нет связи с сервером. Проверьте интернет.",
@@ -87,5 +91,10 @@ const clientErrors: Record<string, string> = {
 export function errorText(code: string | undefined, params?: Record<string, unknown>): string {
   const text = (code && (apiErrors[code] ?? clientErrors[code])) || apiErrors.internal_error;
 
-  return text.replace(/\{(\w+)\}/g, (_, key: string) => String(params?.[key] ?? ""));
+  return text.replace(/\{(\w+)\}/g, (_, key: string) => {
+    const value = params?.[key];
+
+    // a day arrives as ISO (2026-11-17), people read 17.11.2026
+    return typeof value === "string" && ISO_DAY.test(value) ? fullDate(value) : String(value ?? "");
+  });
 }
