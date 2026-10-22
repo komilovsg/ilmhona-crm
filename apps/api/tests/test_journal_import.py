@@ -1,9 +1,11 @@
 """Import of a teacher's journal into a cohort's attendance (preview + apply) on an invented file."""
 
+import time
 from datetime import date, timedelta
 from typing import Any
 
 import httpx
+import pytest
 
 from app.cohorts.status import today
 from tests.conftest import SignedIn, make_role, sql
@@ -370,3 +372,118 @@ async def test_caps_and_formula_safety(admin: httpx.AsyncClient) -> None:
     assert body["counts"]["add"] == 1 and body["counts"]["unknown"] == 0
     assert await marks_in_db() == {}
     _ = e
+
+
+async def test_a_slow_parse_is_cut_off(
+    admin: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.attendance import journal as jr
+
+    cohort, _ = await past_cohort(admin)
+    real = jr.read_journal
+
+    def slow(*a: Any, **k: Any) -> Any:
+        time.sleep(1.5)
+        return real(*a, **k)
+
+    monkeypatch.setattr(jr, "read_journal", slow)
+    monkeypatch.setattr(jr, "PARSE_SECONDS", 0.3)
+    r = await send(admin, cohort, "preview", b"x")
+    assert (r.status_code, r.json()["code"]) == (422, "import_unreadable")
+
+
+async def test_name_matching_runs_off_the_event_loop(
+    admin: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Matching 2000 names is seconds of CPU: never on the loop that serves everybody."""
+    import threading
+
+    from app.attendance import journal as jr
+
+    cohort, _ = await past_cohort(admin)
+    await enroll(admin, cohort, "Каримов Али")
+    ds = await days(admin, cohort)
+    real, threads = jr.match_names, []
+
+    def spy(*a: Any, **k: Any) -> Any:
+        threads.append(threading.current_thread() is threading.main_thread())
+        return real(*a, **k)
+
+    monkeypatch.setattr(jr, "match_names", spy)
+    data = journal_xlsx(short(ds[:1]), [("Каримов Али", ["б"], False)])
+    assert (await send(admin, cohort, "preview", data)).status_code == 200
+    assert threads == [False]
+
+
+# ---- lesson creation -------------------------------------------------------------------------
+
+
+async def test_only_who_may_add_lessons_gets_lessons_created(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    cohort, _ = await past_cohort(admin, instructor_id=me)
+    await enroll(admin, cohort, "Каримов Али")
+    ds = await days(admin, cohort)
+    await sql(
+        "DELETE FROM lesson WHERE cohort_id = :c AND lesson_date = :a", c=cohort["id"], a=ds[1]
+    )
+    data = journal_xlsx(short(ds[:3]), [("Каримов Али", ["б", "б", "н"], False)])
+    marker = await login_as("marker", await make_role("Отметки", {"attendance": "change"}))
+    for who in (ins, marker):  # attendance rights only: an instructor never adds lessons (#24)
+        prev = (await send(who, cohort, "preview", data)).json()
+        assert prev["dates"][1]["status"] == "no_lesson"
+        assert prev["counts"]["lessons_to_create"] == 0
+        r = await send(who, cohort, "apply", data)
+        assert (r.status_code, r.json()["lessons_created"]) == (200, 0)
+    assert len(await days(admin, cohort)) == 8
+    assert len(await marks_in_db()) == 2
+    r = await send(admin, cohort, "apply", data)
+    assert (r.json()["marks_added"], r.json()["lessons_created"]) == (1, 1)
+
+
+async def test_a_lesson_the_database_refuses_is_skipped_with_the_reason(
+    admin: httpx.AsyncClient,
+) -> None:
+    """The instructor and room EXCLUDE constraints may refuse a lesson the plan let through (a
+    race, or the instructor rule): that day is skipped, the rest is written, no 500."""
+    cohort, _ = await past_cohort(admin)
+    await enroll(admin, cohort, "Каримов Али")
+    ds = await days(admin, cohort)
+    await sql(
+        "DELETE FROM lesson WHERE cohort_id = :c AND lesson_date IN (:a, :b)",
+        c=cohort["id"],
+        a=ds[1],
+        b=ds[2],
+    )
+    await sql(
+        f"""CREATE FUNCTION test_refuse_lesson() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.lesson_date = DATE '{ds[1]}' THEN RAISE EXCEPTION 'busy'
+            USING ERRCODE = 'exclusion_violation', CONSTRAINT = 'lesson_instructor_no_overlap';
+          END IF;
+          IF NEW.lesson_date = DATE '{ds[2]}' THEN RAISE EXCEPTION 'busy'
+            USING ERRCODE = 'exclusion_violation', CONSTRAINT = 'lesson_room_no_overlap';
+          END IF;
+          RETURN NEW;
+        END $$"""
+    )
+    await sql(
+        "CREATE TRIGGER test_refuse_lesson BEFORE INSERT ON lesson "
+        "FOR EACH ROW EXECUTE FUNCTION test_refuse_lesson()"
+    )
+    try:
+        data = journal_xlsx(short(ds[:4]), [("Каримов Али", ["б", "б", "н", "б"], False)])
+        r = await send(admin, cohort, "apply", data)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert (body["marks_added"], body["lessons_created"]) == (2, 0)
+        skipped = {s["date"]: s for s in body["skipped_lessons"]}
+        assert skipped[ds[1].isoformat()]["status"] == "conflict"
+        assert "инструктор" in skipped[ds[1].isoformat()]["reason"]
+        assert "аудитория" in skipped[ds[2].isoformat()]["reason"]
+        assert body["counts"]["skip_no_lesson"] == 2
+    finally:
+        await sql("DROP TRIGGER test_refuse_lesson ON lesson")
+        await sql("DROP FUNCTION test_refuse_lesson()")

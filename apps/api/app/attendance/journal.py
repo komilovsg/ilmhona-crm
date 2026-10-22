@@ -13,6 +13,7 @@ and nothing from it is stored except the marks we match to enrollments.
 import csv
 import re
 import zipfile
+import zlib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -28,6 +29,7 @@ MAX_ROWS = 2000
 MAX_COLS = 200
 MAX_SHEETS = 12
 MAX_UNZIPPED = 40 * 1024 * 1024
+PARSE_SECONDS = 20.0  # the whole read of one file, in a worker thread
 HEADER_SCAN_ROWS = 40
 STRIKE_COLS = 8  # names sit in the first columns: strikes are looked up there only
 MAX_TEXT = 200
@@ -129,13 +131,23 @@ def _read_csv(data: bytes) -> Table:
 
 
 def _check_zip(data: bytes) -> None:
-    """Refuse a zip bomb before the XML parser sees it."""
+    """Refuse a zip bomb before the XML parser sees it. The headers' sizes can lie, so every
+    entry is inflated in small chunks and the real bytes are counted (cheap: at most
+    MAX_UNZIPPED)."""
     try:
         with zipfile.ZipFile(BytesIO(data)) as z:
             infos = z.infolist()
             if len(infos) > 400 or sum(i.file_size for i in infos) > MAX_UNZIPPED:
                 raise DomainError(IMPORT_UNREADABLE)
-    except zipfile.BadZipFile:
+            total = 0
+            for info in infos:
+                with z.open(info) as part:
+                    while chunk := part.read(64 * 1024):
+                        total += len(chunk)
+                        if total > MAX_UNZIPPED:
+                            raise DomainError(IMPORT_UNREADABLE)
+    except zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError, RuntimeError, OSError:
+        # broken, encrypted or an unknown compression: not a journal
         raise DomainError(IMPORT_UNREADABLE) from None
 
 
@@ -144,33 +156,40 @@ def _read_xlsx(data: bytes, only: str | None) -> tuple[list[str], list[Table]]:
 
     _check_zip(data)
     try:
-        wb = load_workbook(BytesIO(data), data_only=True, read_only=False)
+        # read_only streams the rows and never expands merged ranges (one «A1:ZZ99999» merge
+        # would otherwise make millions of cells)
+        wb = load_workbook(BytesIO(data), data_only=True, read_only=True)
     except Exception:  # noqa: BLE001 - any parser failure is «not a readable file»
         raise DomainError(IMPORT_UNREADABLE) from None
-    names = list(wb.sheetnames)[:MAX_SHEETS]
-    tables = []
-    for name in names:
-        if only is not None and name != only:
-            continue
-        ws = wb[name]
-        rows: list[list[Cell]] = []
-        struck: set[tuple[int, int]] = set()
-        for r, cells in enumerate(
-            ws.iter_rows(min_row=1, max_row=MAX_ROWS + 1, max_col=MAX_COLS), start=0
-        ):
-            row: list[Cell] = []
-            for c, cell in enumerate(cells):
-                value = _norm_cell(cell.value)
-                row.append(value)
-                if c < STRIKE_COLS and isinstance(value, str) and cell.font and cell.font.strike:
-                    struck.add((r, c))
-            rows.append(row)
-        rows = _trim(rows)
-        if len(rows) > MAX_ROWS:
-            raise DomainError(IMPORT_TOO_MANY_ROWS, limit=MAX_ROWS)
-        tables.append(Table(name, rows, struck))
-    wb.close()
+    try:
+        names = list(wb.sheetnames)[:MAX_SHEETS]
+        tables = [_sheet(wb[n], n) for n in names if only is None or n == only]
+    except DomainError:
+        raise
+    except Exception:  # noqa: BLE001 - rows are parsed lazily: a broken sheet fails here
+        raise DomainError(IMPORT_UNREADABLE) from None
+    finally:
+        wb.close()
     return names, tables
+
+
+def _sheet(ws: Any, name: str) -> Table:
+    rows: list[list[Cell]] = []
+    struck: set[tuple[int, int]] = set()
+    for r, cells in enumerate(
+        ws.iter_rows(min_row=1, max_row=MAX_ROWS + 1, max_col=MAX_COLS), start=0
+    ):
+        row: list[Cell] = []
+        for c, cell in enumerate(cells):
+            value = _norm_cell(cell.value)
+            row.append(value)
+            if c < STRIKE_COLS and isinstance(value, str) and cell.font and cell.font.strike:
+                struck.add((r, c))
+        rows.append(row)
+    rows = _trim(rows)
+    if len(rows) > MAX_ROWS:
+        raise DomainError(IMPORT_TOO_MANY_ROWS, limit=MAX_ROWS)
+    return Table(name, rows, struck)
 
 
 # ---- header row, name column ----------------------------------------------------------------

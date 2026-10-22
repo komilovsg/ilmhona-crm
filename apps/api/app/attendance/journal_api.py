@@ -16,6 +16,7 @@ Rules (see `journal.py` for the file itself):
 - rights: attendance `change` and the cohort in scope (an instructor: their own cohort only).
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import date
@@ -25,6 +26,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.attendance import journal as jr
@@ -35,11 +37,12 @@ from app.cohorts.schedule import check_room_free, local_dt
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.education.errors import COHORT_CLOSED
-from app.education.scope import check_cohort_visible
+from app.education.scope import check_cohort_visible, is_instructor
 from app.export import neutralise
-from app.leads.errors import IMPORT_TOO_LARGE
+from app.leads.errors import IMPORT_TOO_LARGE, IMPORT_UNREADABLE
 from app.metrics.attendance import EXPELLED
 from app.models import Attendance, Cohort, Enrollment, Lesson, Student
+from app.permissions import allows
 
 router = APIRouter(
     prefix="/api/v1", tags=["attendance"], dependencies=[Depends(require_csrf_header)]
@@ -48,6 +51,13 @@ Change = Annotated[Principal, require("attendance", "change")]
 
 MAX_CELLS = 4000  # cells listed in the preview answer; the counts always cover all of them
 MAX_DIFFER = 300
+# a lesson the database refuses at insert (a race past the plan's check, or the instructor
+# double-booking rule): that day is skipped with the reason instead of failing the import
+REFUSED = {
+    "lesson_room_no_overlap": "аудитория занята в это время",
+    "lesson_instructor_no_overlap": "у инструктора в это время другой урок",
+}
+NO_RIGHT_TO_ADD = "урока нет, добавлять уроки может только менеджер потоков"
 
 
 @dataclass(frozen=True)
@@ -126,11 +136,22 @@ def _expected(kind: str) -> tuple[bool, str | None]:
     return False, jr.EXCUSED_REASON if kind == jr.EXCUSED else None
 
 
-async def build_plan(db: AsyncSession, cohort: Cohort, data: bytes, opts: Options) -> Plan:
-    j = await run_in_threadpool(jr.read_journal, data, sheet=opts.sheet, row=opts.row, col=opts.col)
-    plan = Plan(j, opts)
-    today = st.today()
+def _read_and_match(
+    data: bytes, opts: Options, people: list[jr.Person]
+) -> tuple[jr.Journal, list[jr.JournalRow], list[jr.Match]]:
+    j = jr.read_journal(data, sheet=opts.sheet, row=opts.row, col=opts.col)
+    jrows = jr.journal_rows(j)
+    return j, jrows, jr.match_names([r.name for r in jrows], people)
 
+
+def may_add_lessons(p: Principal) -> bool:
+    """The rule of `POST /cohorts/{id}/lessons`: cohorts `change`, never an instructor (#24)."""
+    return allows(p.level("cohorts"), "change") and not is_instructor(p)
+
+
+async def build_plan(
+    db: AsyncSession, cohort: Cohort, data: bytes, opts: Options, *, may_add: bool
+) -> Plan:
     enrollments = (
         await db.execute(
             select(Enrollment, Student.full_name)
@@ -140,6 +161,16 @@ async def build_plan(db: AsyncSession, cohort: Cohort, data: bytes, opts: Option
         )
     ).all()
     by_id = {e.id: (e, name) for e, name in enrollments}
+    people = [jr.Person(e.id, name) for e, name in enrollments]
+    # reading and name matching are CPU work (seconds on a big file): a worker thread with a
+    # deadline, never the event loop. On timeout the thread runs on, the request is let go.
+    work = run_in_threadpool(_read_and_match, data, opts, people)
+    try:
+        j, jrows, matches = await asyncio.wait_for(work, jr.PARSE_SECONDS)
+    except TimeoutError:
+        raise DomainError(IMPORT_UNREADABLE) from None
+    plan = Plan(j, opts)
+    today = st.today()
     lessons = (
         (
             await db.execute(
@@ -185,6 +216,8 @@ async def build_plan(db: AsyncSession, cohort: Cohort, data: bytes, opts: Option
             dp.status, dp.reason = "cancelled", "урок отменён"
         elif not opts.create_lessons:
             dp.status, dp.reason = "no_lesson", "урока нет, создание выключено"
+        elif not may_add:
+            dp.status, dp.reason = "no_lesson", NO_RIGHT_TO_ADD
         elif not cohort.start_date <= day <= cohort.end_date:
             dp.status, dp.reason = "outside", "вне дат потока"
         else:
@@ -193,9 +226,6 @@ async def build_plan(db: AsyncSession, cohort: Cohort, data: bytes, opts: Option
         date_of[col] = dp
 
     # names -> enrollments
-    jrows = jr.journal_rows(j)
-    people = [jr.Person(e.id, name) for e, name in enrollments]
-    matches = jr.match_names([r.name for r in jrows], people)
     matched_ids: set[uuid.UUID] = set()
     for r, m in zip(jrows, matches, strict=True):
         shown = neutralise(r.name)
@@ -328,7 +358,11 @@ async def import_preview(
     """What an import would do. Nothing is written."""
     cohort = await _cohort(db, p, cohort_id)
     plan = await build_plan(
-        db, cohort, await _read_body(request), _opts(sheet, row, col, create_lessons, overwrite)
+        db,
+        cohort,
+        await _read_body(request),
+        _opts(sheet, row, col, create_lessons, overwrite),
+        may_add=may_add_lessons(p),
     )
     j = plan.journal
     names = {r["enrollment_id"]: r["student_name"] for r in plan.rows}
@@ -402,10 +436,12 @@ async def import_apply(
     lessons first. One transaction; a second run finds everything `same` and writes nothing."""
     cohort = await _cohort(db, p, cohort_id)
     plan = await build_plan(
-        db, cohort, await _read_body(request), _opts(sheet, row, col, create_lessons, overwrite)
+        db,
+        cohort,
+        await _read_body(request),
+        _opts(sheet, row, col, create_lessons, overwrite),
+        may_add=may_add_lessons(p),
     )
-    counts = _counts(plan)
-
     created = 0
     for dp in plan.dates:
         if dp.status != "create":
@@ -418,10 +454,22 @@ async def import_apply(
             ends_at=local_dt(dp.day, cohort.end_time),
             source="manual",
         )
-        db.add(lesson)
-        await db.flush()  # room_busy from the database if somebody took the slot meanwhile
+        try:
+            async with db.begin_nested():
+                db.add(lesson)
+                await db.flush()
+        except IntegrityError as exc:
+            constraint = getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None)
+            if constraint not in REFUSED:
+                raise
+            dp.status, dp.reason = "conflict", REFUSED[constraint]
+            for c in plan.cells:
+                if c.date_plan is dp and c.plan == "add":
+                    c.plan, c.reason = "skip_no_lesson", dp.reason
+            continue
         dp.lesson = lesson
         created += 1
+    counts = _counts(plan)
 
     def values(c: CellPlan) -> dict[str, Any]:
         present, reason = _expected(c.kind)

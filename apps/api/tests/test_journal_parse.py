@@ -1,6 +1,9 @@
 """The journal reader: header row, name column, year inference, name matching (no database use)."""
 
 import csv
+import struct
+import time
+import zipfile
 from datetime import date
 from io import BytesIO, StringIO
 from typing import Any
@@ -157,3 +160,86 @@ def test_unreadable_and_oversized() -> None:
     with pytest.raises(DomainError) as e:
         jr.read_journal(buf.getvalue())
     assert e.value.error.code == "import_too_many_rows"
+
+
+# ---- hostile files ---------------------------------------------------------------------------
+
+
+def _small_journal(merge: str | None = None) -> bytes:
+    wb = Workbook()
+    ws: Any = wb.active
+    ws.append(["ФИО", *D])
+    ws.append(["Каримов Али", "б", "н", "у"])
+    if merge:
+        ws.merge_cells(merge)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def _rezip(data: bytes, patch: dict[str, bytes], *, lie: bool = False) -> bytes:
+    """Rewrite some parts of an xlsx; `lie` claims 1000 bytes for every patched part in the zip
+    headers (a zip bomb that hides its real size)."""
+    src = zipfile.ZipFile(BytesIO(data))
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
+        for info in src.infolist():
+            z.writestr(info.filename, patch.get(info.filename, src.read(info.filename)))
+    raw = bytearray(out.getvalue())
+    if lie:
+        for name in patch:
+            at = 0
+            while (at := raw.find(name.encode(), at + 1)) > 0:
+                if raw[at - 30 : at - 26] == b"PK\x03\x04":
+                    struct.pack_into("<I", raw, at - 30 + 22, 1000)
+                if raw[at - 46 : at - 42] == b"PK\x01\x02":
+                    struct.pack_into("<I", raw, at - 46 + 24, 1000)
+    return bytes(raw)
+
+
+def test_zip_bomb_with_lying_sizes_is_refused_before_the_parser() -> None:
+    data = _small_journal()
+    styles = zipfile.ZipFile(BytesIO(data)).read("xl/styles.xml")
+    k = styles.index(b">") + 1
+    padded = styles[:k] + b" " * (jr.MAX_UNZIPPED + 1) + styles[k:]
+    bomb = _rezip(data, {"xl/styles.xml": padded}, lie=True)
+    assert len(bomb) < jr.MAX_BYTES
+    with pytest.raises(DomainError) as e:
+        jr._check_zip(bomb)  # the real size is counted, not the declared one
+    assert e.value.error.code == "import_unreadable"
+
+
+def test_merged_cell_bomb_is_ignored_and_cheap() -> None:
+    data = _small_journal("E1:ZZ5000")  # ~3.5 million cells in one merge, a 6 KB file
+    started = time.monotonic()
+    j = jr.read_journal(data)
+    assert time.monotonic() - started < 3
+    assert [r.name for r in jr.journal_rows(j)] == ["Каримов Али"]
+
+
+_LAUGHS = "".join(
+    f'<!ENTITY {b} "{("&" + a + ";") * 10}">' for a, b in zip("abcdefg", "bcdefgh", strict=True)
+)
+
+
+@pytest.mark.parametrize(
+    "doctype",
+    [
+        f'<!DOCTYPE x [<!ENTITY a "aaaaaaaaaa">{_LAUGHS}]>',  # billion laughs
+        '<!DOCTYPE x [<!ENTITY h SYSTEM "file:///etc/passwd">]>',  # external entity
+    ],
+)
+def test_xml_entities_are_never_expanded(doctype: str) -> None:
+    data = _small_journal()
+    sheet = zipfile.ZipFile(BytesIO(data)).read("xl/worksheets/sheet1.xml").decode()
+    assert sheet.startswith("<worksheet")  # no xml declaration: the doctype goes first
+    cell = '<row r="100"><c r="A100" t="inlineStr"><is><t>&h;</t></is></c></row>'
+    sheet = sheet.replace("</sheetData>", f"{cell}</sheetData>", 1)
+    evil = _rezip(data, {"xl/worksheets/sheet1.xml": f"{doctype}{sheet}".encode()})
+    try:
+        j = jr.read_journal(evil)
+    except DomainError as e:
+        assert e.error.code == "import_unreadable"
+        return
+    text = repr(j.table.rows)
+    assert "root:" not in text and "aaaaaaaaaa" not in text
