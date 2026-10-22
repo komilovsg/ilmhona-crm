@@ -65,7 +65,11 @@ export function LessonsTab({ cohort, canChange }: { cohort: CohortRow; canChange
       />
     );
   const state = (l: LessonRow) =>
-    l.cancelled ? (
+    !l.cancelled && l.instructor_conflict ? (
+      <Chip color="warning" size="sm" title="В это время у инструктора другой урок (старые данные): перенесите или отмените один из них" variant="flat">
+        Проверить: конфликт инструктора
+      </Chip>
+    ) : l.cancelled ? (
       <Chip color="danger" size="sm" variant="flat">
         отменён
       </Chip>

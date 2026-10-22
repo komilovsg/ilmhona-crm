@@ -11,6 +11,11 @@ COHORT_IN_USE = errors.define("cohort_in_use", 409, "Cohort has enrollments")
 STUDENT_IN_USE = errors.define("student_in_use", 409, "Student has enrollments")
 # params: cohort (code of the cohort that holds the room), date, start, end
 ROOM_BUSY = errors.define("room_busy", 409, "Room is busy at that time (#7)")
+# params: cohort (code, or «другого филиала» for a cohort the user's branch does not hold), date,
+# start, end
+INSTRUCTOR_BUSY = errors.define(
+    "instructor_busy", 409, "Instructor has another lesson at that time"
+)
 ALREADY_ENROLLED = errors.define("already_enrolled", 409, "Student is already in the cohort (#4)")
 COHORT_FULL = errors.define("cohort_full", 409, "Cohort is full")
 COHORT_CLOSED = errors.define("cohort_closed", 409, "Cohort is finished or cancelled")
@@ -33,6 +38,7 @@ errors.on_constraint("grade_final_check", VALIDATION_FAILED)
 errors.on_constraint("room_branch_name_key", ROOM_NAME_TAKEN)
 errors.on_constraint("course_name_key", COURSE_NAME_TAKEN)
 errors.on_constraint("lesson_room_no_overlap", ROOM_BUSY)
+errors.on_constraint("lesson_instructor_no_overlap", INSTRUCTOR_BUSY)
 errors.on_constraint("enrollment_cohort_student_key", ALREADY_ENROLLED)
 errors.on_constraint("cohort_room_branch_fkey", ROOM_BRANCH_MISMATCH)
 # Pydantic rejects these first; the database is the last line when something bypasses the API.

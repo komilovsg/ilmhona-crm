@@ -106,6 +106,8 @@ export type CohortRow = {
   price_month: string;
   status: string;
   fill: Fill;
+  /** detail only: lessons that came overlapping another lesson of the instructor (old data) */
+  instructor_conflicts?: number;
 };
 
 export type LessonRow = {
@@ -118,6 +120,7 @@ export type LessonRow = {
   start: string;
   end: string;
   cancelled: boolean;
+  instructor_conflict?: boolean;
 };
 
 export type EnrollmentRow = {

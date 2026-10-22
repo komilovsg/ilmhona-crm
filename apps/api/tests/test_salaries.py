@@ -137,7 +137,9 @@ async def test_schedule_is_every_month_the_cohort_runs_times_the_rate(
     assert states[add_months(this_month(), 1).isoformat()] == "запланировано"
     # a cohort without an instructor, and a cancelled one, have no schedule
     await running_cohort(admin, name="B")
-    cancelled = await running_cohort(admin, name="C", instructor_id=str(uid))
+    cancelled = await running_cohort(
+        admin, name="C", instructor_id=str(uid), start_time="12:00", end_time="13:30"
+    )
     await admin.post(f"/api/v1/cohorts/{cancelled['id']}/cancel")
     assert len((await admin.get(S, params={"month": "all"})).json()["items"]) == months
 

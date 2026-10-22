@@ -41,6 +41,7 @@ export const apiErrors: Record<string, string> = {
   cohort_in_use: "В потоке есть студенты. Сначала уберите их или отмените поток.",
   student_in_use: "Студент зачислен в потоки. Удалить нельзя.",
   room_busy: "Аудитория занята потоком {cohort}: {date}, {start}–{end}.",
+  instructor_busy: "Инструктор в это время ведёт урок: поток {cohort}, {date}, {start}–{end}.",
   already_enrolled: "Студент уже зачислен в этот поток.",
   cohort_full: "В потоке нет свободных мест.",
   cohort_closed: "Поток завершён или отменён, изменить его нельзя.",
