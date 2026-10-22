@@ -52,6 +52,8 @@ export const apiErrors: Record<string, string> = {
   room_branch_mismatch: "Аудитория из другого филиала.",
   student_branch_mismatch: "Студент из другого филиала.",
   payment_month_invalid: "В потоке {months} мес.: такого месяца нет.",
+  month_already_paid: "Месяц {month_no} уже оплачен: {paid} TJS.",
+  month_overpaid: "За месяц {month_no} осталось оплатить {remaining} TJS.",
   payment_confirmed: "Подтверждённую оплату нельзя менять или удалять. Сначала снимите подтверждение.",
   idempotency_key_reused: "Эта оплата уже сохранена с другими данными. Обновите форму и повторите.",
   enrollment_has_payments: "У зачисления есть оплаты. Убрать студента из потока нельзя.",

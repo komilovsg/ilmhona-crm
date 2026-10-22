@@ -12,6 +12,7 @@ import { useMenu } from "@/components/useMenu";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { MonthStates } from "@/components/MonthStates";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { ReviewChip } from "@/components/ReviewChip";
@@ -21,7 +22,6 @@ import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
 import { ENROLLMENT_STATUSES, formatPrice } from "@/lib/education";
-import { paidMonthsLabel } from "@/lib/money";
 import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -141,7 +141,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     return m ? (
       <>
         <span className="font-medium">{formatPrice(m.paid)}</span>
-        <span className="block text-xs text-default-500">{paidMonthsLabel(m.paid_months, money.data?.months ?? 0)}</span>
+        <MonthStates className="mt-1" states={m.month_states ?? []} />
       </>
     ) : (
       "—"

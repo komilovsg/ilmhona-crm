@@ -4,6 +4,12 @@ from app.core.errors import VALIDATION_FAILED, errors
 PAYMENT_MONTH_INVALID = errors.define(
     "payment_month_invalid", 422, "Month is outside the months of the cohort"
 )
+# params of both: month_no, price, paid (entered: pending + confirmed), remaining (price - paid),
+# payments [{amount, status, created_by, created_at}] already entered for that month
+MONTH_ALREADY_PAID = errors.define("month_already_paid", 409, "The month is already paid in full")
+MONTH_OVERPAID = errors.define(
+    "month_overpaid", 409, "The amount is more than what is left to pay for the month"
+)
 PAYMENT_CONFIRMED = errors.define(
     "payment_confirmed", 409, "A confirmed payment cannot be changed or deleted: unconfirm it"
 )

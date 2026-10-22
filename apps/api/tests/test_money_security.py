@@ -75,6 +75,7 @@ async def test_money_amounts_reject_nan_infinity_huge_and_fractions(
         r = await admin.patch(f"{I}/{uid}", json={"default_rate": bad})
         assert r.status_code == 422, (bad, r.text)
     # the biggest amount that fits is kept to the cent, and sums do not round
+    await sql("UPDATE cohort SET price_month = 9999999999.99 WHERE id = :i", i=cohort["id"])
     big = await pay(admin, e, month=2, amount="9999999999.99", confirm=True)
     small = await pay(admin, e, month=3, amount="0.01", confirm=True)
     assert (big["amount"], small["amount"]) == ("9999999999.99", "0.01")
@@ -179,7 +180,7 @@ async def test_payment_picker_and_debtors_hide_the_other_branch(
 async def test_confirm_needs_the_version_the_confirmer_saw(admin: httpx.AsyncClient) -> None:
     """Confirming is a money decision on what the confirmer saw: an amount edited meanwhile must
     not be confirmed blindly (#25)."""
-    cohort = await running_cohort(admin)
+    cohort = await running_cohort(admin, price=5000)
     e = await enroll(admin, cohort)
     payment = await pay(admin, e, amount=500)
     seen = payment["version"]
@@ -256,15 +257,15 @@ async def test_idempotency_key_of_another_user_or_branch_leaks_nothing(
     istar = await running_cohort(admin, name="I", branch="Истаравшан")
     ed = await enroll(admin, dushanbe, "Свой")
     ei = await enroll(admin, istar, "Чужой", branch="Истаравшан")
-    theirs = _body(ei, amount="777")
+    theirs = _body(ei, amount="377")
     assert (await admin.post(P, json=theirs)).status_code == 201
     anna = await login_as("anna", await manager_role(), branch="Душанбе")
     # her own enrollment with the other branch's key: no payment of theirs comes back
     r = await anna.post(P, json={**theirs, "enrollment_id": ed})
-    assert r.status_code in (404, 409) and "Чужой" not in r.text and "777" not in r.text
+    assert r.status_code in (404, 409) and "Чужой" not in r.text and "377" not in r.text
     # the same body as theirs: 404 as if it did not exist
     r = await anna.post(P, json=theirs)
-    assert r.status_code == 404 and "777" not in r.text
+    assert r.status_code == 404 and "377" not in r.text
     assert (await sql("SELECT count(*) FROM payment"))[0][0] == 1
 
 

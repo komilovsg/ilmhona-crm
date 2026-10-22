@@ -1,4 +1,5 @@
 // API shapes of the money screens (stage 2).
+import type { MonthState } from "./payment-month";
 import type { Paged } from "./types";
 
 /** Amounts arrive as strings («500.00») from lists and as numbers inside a 409's `current`. */
@@ -52,6 +53,9 @@ export type DebtorRow = {
   paid_months: number[];
   expected: Money;
   debt: Money;
+  month_states: MonthState[];
+  /** Started months not covered yet and what is left of each. */
+  due_months: { month_no: number; remaining: Money }[];
 };
 
 export type DebtorsPage = Paged<DebtorRow> & { total_debt: Money };
@@ -67,10 +71,13 @@ export type EnrollmentOption = {
   price_month: Money;
   months: number;
   next_month: number;
+  /** Months whose pending + confirmed payments reach the price: they take no more payments. */
+  full_months: number[];
   paid: Money;
   paid_months: number[];
   expected: Money;
   debt: Money;
+  month_states: MonthState[];
 };
 
 export type CohortPayments = {
@@ -80,7 +87,20 @@ export type CohortPayments = {
   enrolled: number;
   /** Enrolled students with a confirmed payment (#5: never more than `enrolled`). */
   payers: number;
-  items: { enrollment_id: string; paid: Money; paid_months: number[]; expected: Money; debt: Money }[];
+  items: { enrollment_id: string; paid: Money; paid_months: number[]; expected: Money; debt: Money; month_states: MonthState[] }[];
+};
+
+/** `GET /payments/enrollment/{id}`: one enrollment's money (the student's card). */
+export type EnrollmentPayments = {
+  enrollment_id: string;
+  months: number;
+  price_month: Money;
+  paid: Money;
+  paid_months: number[];
+  expected: Money;
+  debt: Money;
+  month_states: MonthState[];
+  due_months: { month_no: number; remaining: Money }[];
 };
 
 export type InstructorCard = {

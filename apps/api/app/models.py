@@ -314,6 +314,19 @@ class Payment(Versioned, Legacy, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
+class PaymentHold(Base):
+    """«Someone is entering a payment for this month right now» (UX only: the payment rule does
+    not depend on it). Expires by itself; the form refreshes it while open."""
+
+    __tablename__ = "payment_hold"
+    enrollment_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
+    )
+    month_no: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE"))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class InstructorPayout(Versioned, Legacy, Base):
     """What was actually paid to an instructor for a cohort's month (#9): profit is computed from
     these rows, never from the schedule."""

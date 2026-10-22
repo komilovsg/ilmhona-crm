@@ -270,6 +270,9 @@ def _money(value: Any) -> str:
     return f"{whole},{kopecks}" if kopecks else whole
 
 
+money_text = _money  # the one money formatter (audit sentences, payment notes)
+
+
 def _pair(change: Any) -> tuple[Any, Any]:
     if isinstance(change, list) and len(change) == 2:
         return change[0], change[1]

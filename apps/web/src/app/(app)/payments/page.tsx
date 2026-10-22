@@ -13,6 +13,7 @@ import { Input } from "@heroui/input";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { MonthStates } from "@/components/MonthStates";
 import { LoadingButton } from "@/components/LoadingButton";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
@@ -27,8 +28,9 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { formatPrice, fullDate, todayIso } from "@/lib/education";
 import { telHref } from "@/lib/format";
-import { methodLabel, monthOf, monthOptions, paidMonthsLabel, PAYMENT_METHODS, PAYMENT_STATUSES, paymentTone } from "@/lib/money";
+import { methodLabel, monthOf, monthOptions, PAYMENT_METHODS, PAYMENT_STATUSES, paymentTone } from "@/lib/money";
 import type { DebtorRow, DebtorsPage, PaymentRow, PaymentsPage } from "@/lib/money-types";
+import { dueText } from "@/lib/payment-month";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import { useOverlayMotion } from "@/lib/motion";
@@ -237,7 +239,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
             <tr>
               <th className="px-4 py-3 font-medium">Студент</th>
               <th className="px-4 py-3 font-medium">Поток</th>
-              <th className="px-4 py-3 font-medium">Оплачено месяцев</th>
+              <th className="px-4 py-3 font-medium">Месяцы</th>
               <th className="px-4 py-3 font-medium">Должен был</th>
               <th className="px-4 py-3 font-medium">Оплачено</th>
               <th className="px-4 py-3 font-medium">Долг</th>
@@ -261,7 +263,10 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
                   </Link>
                   <div className="text-xs text-default-500">{d.course_name}</div>
                 </td>
-                <td className="px-4 py-3">{paidMonthsLabel(d.paid_months, d.months)}</td>
+                <td className="px-4 py-3">
+                  <MonthStates states={d.month_states ?? []} />
+                  {d.due_months?.length > 0 && <div className="mt-0.5 text-xs text-danger">Осталось: {dueText(d.due_months)}</div>}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3">{formatPrice(d.expected)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{formatPrice(d.paid)}</td>
                 <td className="whitespace-nowrap px-4 py-3 font-semibold text-danger">{formatPrice(d.debt)}</td>
@@ -281,8 +286,10 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
               <span className="shrink-0 font-semibold text-danger">{formatPrice(d.debt)}</span>
             </div>
             <div className="mt-1 text-sm text-default-500">
-              {d.cohort_code} · оплачено: {paidMonthsLabel(d.paid_months, d.months)}
+              {d.cohort_code}
             </div>
+            <MonthStates className="mt-1" states={d.month_states ?? []} />
+            {d.due_months?.length > 0 && <div className="mt-0.5 text-xs text-danger">Осталось: {dueText(d.due_months)}</div>}
             <div className="mt-1 text-sm">
               <Phone value={d.phone} />
             </div>

@@ -39,7 +39,7 @@
 | `enrollment` | cohort_id, student_id, status активный/завершил/выпускник/отчислен, enrolled_at; **unique(cohort_id, student_id)** (#4) |
 | `attendance` | lesson_id, enrollment_id, present bool, reason; PK(lesson_id, enrollment_id) |
 | `grade` | enrollment_id PK, homework 0–40, final 0–40 (check). Посещ. 20 = 20 × present / проведённые уроки (#12). Итог ≥ 70 → выпускник |
-| `payment` | enrollment_id NOT NULL (#5), month_no 1–N, amount > 0, method alif/payvand/наличные, paid_at, status ожидает/подтверждено, confirmed_by |
+| `payment` | enrollment_id NOT NULL (#5), month_no 1–N, amount > 0, method alif/payvand/наличные, paid_at, status ожидает/подтверждено, confirmed_by. Месяц принимает оплаты (ожидает + подтверждено) не больше цены потока: сверх — 409 `month_already_paid` / `month_overpaid` с тем, кто уже оплатил; create/edit блокируют строку зачисления. Частичная оплата получает заметку «Частичная оплата. Осталось оплатить X TJS». `payment_hold` (enrollment, month, user, expires_at, TTL 120 с, одна на пользователя) — только подсказка «X сейчас вносит оплату» |
 | `campaign` | course_id, branch_id, platform, start_date, end_date, budget, status |
 | `employment` | student_id, enrollment_id null, organization, employed_at — единственное место (#13) |
 | `instructor_rate` | cohort_id, amount_per_month |

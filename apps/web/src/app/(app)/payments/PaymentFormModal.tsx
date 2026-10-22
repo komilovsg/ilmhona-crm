@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
@@ -10,14 +10,30 @@ import { AppModal } from "@/components/AppModal";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { Icon } from "@/components/Icon";
 import { LoadingButton } from "@/components/LoadingButton";
+import { Segmented } from "@/components/Segmented";
 import { Bone } from "@/components/Skeletons";
 import { SelectField } from "@/components/SelectField";
 import { useRefreshMoney } from "@/hooks/money";
+import { usePaymentMonth } from "@/hooks/payment-month";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { formatPrice, MAX_DATE, MIN_DATE, todayIso } from "@/lib/education";
-import { amountText, methodLabel, newKey, PAYMENT_METHODS, paidMonthsLabel, validAmount } from "@/lib/money";
+import { amountText, methodLabel, newKey, PAYMENT_METHODS, validAmount } from "@/lib/money";
 import type { EnrollmentOption, PaymentRow } from "@/lib/money-types";
+import {
+  defaultMonth,
+  holdText,
+  monthConflictText,
+  monthOptionLabel,
+  nextOpenMonth,
+  paidCountLabel,
+  paidText,
+  partialAmountOk,
+  statusText,
+  tjs,
+  type MonthStatus,
+  whenText,
+} from "@/lib/payment-month";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 
@@ -37,8 +53,8 @@ function OptionButton({
         <span className="min-w-0 truncate font-medium">{o.student_name}</span>
         <span className="shrink-0 text-xs font-medium text-brand-text">{o.cohort_code}</span>
       </span>
-      <span className="mt-0.5 block truncate text-xs text-default-500">
-        {o.course_name} · {formatPrice(o.price_month)}/мес · оплачено: {paidMonthsLabel(o.paid_months, o.months)}
+      <span className="mt-0.5 block text-xs text-default-500">
+        {o.course_name} · {formatPrice(o.price_month)}/мес · оплачено: {paidCountLabel(o.month_states ?? [], o.months)}
         {Number(o.debt) > 0 ? ` · долг ${formatPrice(o.debt)}` : ""}
       </span>
     </>
@@ -58,6 +74,53 @@ function OptionButton({
     >
       {body}
     </button>
+  );
+}
+
+function Banner({ tone, children }: { tone: "warning" | "danger" | "default"; children: ReactNode }) {
+  return (
+    <div
+      className={clsx(
+        "rounded-xl px-3 py-2 text-sm",
+        tone === "danger" && "bg-danger/10 text-danger-700 dark:text-danger",
+        tone === "warning" && "bg-warning/20 text-warning-700 dark:text-warning",
+        tone === "default" && "bg-content2 text-default-600",
+      )}
+      role="status"
+    >
+      {children}
+    </div>
+  );
+}
+
+/** «Частично»: the month's price, what is entered (by whom) and what is left. */
+function MonthHistory({ status: s }: { status: MonthStatus }) {
+  return (
+    <div className="space-y-2 rounded-xl bg-content2 px-3 py-2 text-sm">
+      <div className="flex justify-between gap-2">
+        <span className="text-default-500">Цена месяца</span>
+        <span className="font-medium">{tjs(s.price)}</span>
+      </div>
+      {s.payments.length > 0 && (
+        <ul aria-label="Оплаты за месяц" className="space-y-1 border-t border-divider pt-2">
+          {s.payments.map((p) => (
+            <li key={p.id} className="flex justify-between gap-2">
+              <span className="min-w-0 text-default-600">
+                {whenText(p.created_at)} · {methodLabel(p.method)} · {p.created_by ?? "импорт"} ·{" "}
+                <span className={p.status === "ожидает" ? "text-warning-700 dark:text-warning" : "text-success-700 dark:text-success"}>
+                  {statusText(p.status)}
+                </span>
+              </span>
+              <span className="shrink-0 font-medium">{tjs(p.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex justify-between gap-2 border-t border-divider pt-2">
+        <span className="text-default-500">Осталось</span>
+        <span className="font-semibold">{tjs(s.remaining)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -87,6 +150,8 @@ export function PaymentFormModal({
   const [paidAt, setPaidAt] = useState(payment?.paid_at ?? todayIso());
   const [note, setNote] = useState(payment?.note ?? "");
   const [error, setError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"full" | "partial">("full");
+  const creating = !payment;
 
   const options = useQuery({
     queryKey: ["pay-options", eid ? { enrollment: eid } : { q: q.trim() }],
@@ -96,19 +161,41 @@ export function PaymentFormModal({
       }),
   });
   const option = eid ? (options.data?.find((o) => o.enrollment_id === eid) ?? null) : null;
-  const month = monthChoice ?? option?.next_month ?? 1;
-  const amount = amountChoice ?? (option ? amountText(option.price_month) : "");
+  const fullMonths = option?.full_months ?? [];
+  // a new payment starts on the first month that still takes one (null: every month is paid)
+  const autoMonth = option ? defaultMonth(option.months, fullMonths) : null;
+  const month = monthChoice ?? (payment ? payment.month_no : autoMonth);
+  const live = usePaymentMonth(eid, month, creating && !!option && month !== null);
+  const st = live.status;
+  const capped = !!st && Number(st.price) > 0; // a cohort without a price has no «Полностью»
+  const amount = creating
+    ? st && capped && mode === "full"
+      ? amountText(st.remaining)
+      : (amountChoice ?? "")
+    : (amountChoice ?? (payment ? amountText(payment.amount) : ""));
   const dateOk = paidAt >= MIN_DATE && paidAt <= MAX_DATE;
-  const monthOk = month >= 1 && (!option || month <= option.months);
-  const valid = !!eid && validAmount(amount) && dateOk && monthOk && (!!payment || !!option);
+  const monthOk = month !== null && month >= 1 && (!option || month <= option.months);
+  const allPaid = creating && !!option && month === null;
+  const heldBy = st && !st.full ? st.held_by : null;
+  const amountOk = validAmount(amount) && (!creating || !st || !capped || partialAmountOk(amountText(amount), st.remaining));
+  const valid = creating
+    ? !!eid && !!option && !!st && !st.full && !heldBy && amountOk && dateOk && monthOk
+    : !!eid && validAmount(amount) && dateOk && monthOk;
+  const suggestion = st?.full && option && month !== null ? nextOpenMonth(option.months, fullMonths, month) : null;
 
   const pick = (o: EnrollmentOption | null) => {
     setEid(o?.enrollment_id ?? null);
     setMonthChoice(null);
     setAmountChoice(null);
+    setError(null);
+  };
+  const chooseMonth = (m: number) => {
+    setMonthChoice(m);
+    setAmountChoice(null);
+    setError(null);
   };
 
-  const values = { month_no: month, amount: amountText(amount), method, paid_at: paidAt, note: note.trim() || null };
+  const values = { month_no: month ?? 1, amount: amountText(amount), method, paid_at: paidAt, note: note.trim() || null };
   const done = () => {
     void refresh();
     notify(payment ? "Оплата сохранена" : "Оплата добавлена");
@@ -118,10 +205,15 @@ export function PaymentFormModal({
     mutationFn: () =>
       api("/api/v1/payments", {
         method: "POST",
-        body: { ...values, idempotency_key: key, enrollment_id: eid },
+        body: { ...values, idempotency_key: key, enrollment_id: eid, partial: capped && mode === "partial" },
       }),
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
+    onError: (e) => {
+      // somebody paid the month meanwhile: say who, not a generic error
+      setError(monthConflictText(e) ?? messageOf(e));
+      live.refresh();
+      void refresh();
+    },
   });
   const edit = useVersionedSave({
     record: payment,
@@ -158,7 +250,12 @@ export function PaymentFormModal({
           <Button variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <LoadingButton color="primary" isDisabled={!valid} isLoading={create.isPending || edit.pending} onPress={() => submit()}>
+          <LoadingButton
+            color="primary"
+            isDisabled={!valid}
+            isLoading={create.isPending || edit.pending || !!heldBy}
+            onPress={() => submit()}
+          >
             {payment ? "Сохранить" : "Добавить"}
           </LoadingButton>
         </>
@@ -219,19 +316,50 @@ export function PaymentFormModal({
           </div>
         )}
 
-        {(payment || option) && (
+        {allPaid && <Banner tone="default">Все месяцы оплачены</Banner>}
+
+        {(payment || (option && !allPaid)) && (
           <>
+            {creating && capped && !st.full && (
+              <Segmented
+                label="Сумма оплаты"
+                options={[
+                  { key: "full", label: "Полностью" },
+                  { key: "partial", label: "Частично" },
+                ]}
+                value={mode}
+                onChange={(m) => {
+                  setMode(m);
+                  setAmountChoice(null);
+                }}
+              />
+            )}
+            {st?.full && month !== null && (
+              <Banner tone="danger">
+                {paidText(st)}
+                {suggestion !== null && (
+                  <button className="mt-1 block font-medium underline" type="button" onClick={() => chooseMonth(suggestion)}>
+                    Перейти к месяцу {suggestion}
+                  </button>
+                )}
+              </Banner>
+            )}
+            {heldBy && month !== null && <Banner tone="warning">{holdText(heldBy.name, month)}</Banner>}
             <div className="grid grid-cols-2 gap-3">
               {option ? (
                 <SelectField
                   isRequired
+                  className="col-span-2"
                   label="Месяц"
-                  options={Array.from({ length: option.months }, (_, i) => ({
-                    key: String(i + 1),
-                    label: `${i + 1}-й${option.paid_months.includes(i + 1) ? " · оплачен" : ""}`,
-                  }))}
-                  value={String(month)}
-                  onChange={(m) => setMonthChoice(Number(m))}
+                  options={Array.from({ length: option.months }, (_, i) => {
+                    const state = option.month_states?.find((s) => s.month_no === i + 1);
+
+                    return { key: String(i + 1), label: monthOptionLabel(i + 1, state) };
+                  })}
+                  value={month === null ? "" : String(month)}
+                  onChange={(m) => {
+                    if (m) chooseMonth(Number(m));
+                  }}
                 />
               ) : (
                 <Input
@@ -239,20 +367,36 @@ export function PaymentFormModal({
                   label="Месяц"
                   min={1}
                   type="number"
-                  value={String(month)}
+                  value={String(month ?? "")}
                   onValueChange={(m) => setMonthChoice(Number(m))}
                 />
               )}
               <Input
                 isRequired
+                className={option ? "col-span-2" : undefined}
+                description={creating && st && capped && mode === "full" && Number(st.paid) > 0 ? "Остаток месяца" : undefined}
                 endContent={<span className="text-xs text-default-500">TJS</span>}
+                errorMessage={creating && st && capped ? `Не больше ${tjs(st.remaining)}` : undefined}
                 inputMode="decimal"
-                isInvalid={amount !== "" && !validAmount(amount)}
+                isInvalid={amount !== "" && !amountOk}
+                isReadOnly={creating && capped && mode === "full"}
                 label="Сумма"
                 value={amount}
                 onValueChange={setAmountChoice}
               />
             </div>
+            {creating && st && capped && mode === "partial" && !st.full && (
+              <>
+                <MonthHistory status={st} />
+                <button
+                  className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-brand-text"
+                  type="button"
+                  onClick={() => setAmountChoice(amountText(st.remaining))}
+                >
+                  Остаток {tjs(st.remaining)}
+                </button>
+              </>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <SelectField
                 isRequired
@@ -275,7 +419,7 @@ export function PaymentFormModal({
             <Input label="Заметка" maxLength={500} value={note} onValueChange={setNote} />
           </>
         )}
-        {(error ?? edit.error) && (
+        {(error ?? edit.error) && !st?.full && (
           <p className="text-sm text-danger" role="alert">
             {error ?? edit.error}
           </p>
