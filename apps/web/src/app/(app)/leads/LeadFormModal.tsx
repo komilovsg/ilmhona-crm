@@ -13,8 +13,9 @@ import { SelectField } from "@/components/SelectField";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useRefreshSales } from "@/hooks/sales";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { CALL_STATUSES, fromLocalInput, LEAD_SOURCES, localInput } from "@/lib/sales";
 import type { CampaignList, LeadRow } from "@/lib/sales-types";
 import { useSubmit } from "@/lib/submit";
@@ -78,7 +79,6 @@ export function LeadFormModal({
   const [reason, setReason] = useState(lead?.refusal_reason ?? "");
   const [comment, setComment] = useState(lead?.comment ?? "");
   const [needsReview, setNeedsReview] = useState(lead?.needs_review ?? false);
-  const [error, setError] = useState<string | null>(null);
   const converted = lead?.status === "записан";
   const valid = name.trim() && (lead || branchId);
 
@@ -115,7 +115,6 @@ export function LeadFormModal({
       return api<LeadRow>("/api/v1/leads", { method: "POST", body: { ...body, branch_id: branchId } });
     },
     onSuccess: done,
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: lead,
@@ -150,6 +149,13 @@ export function LeadFormModal({
     },
     onSaved: done,
   });
+  const fe = useFieldErrors(lead ? edit.failure : create.error, [
+    "full_name",
+    "phone",
+    "comment",
+    "refusal_reason",
+    "next_contact_at",
+  ]);
   const pending = create.isPending || edit.pending;
   const submit = useSubmit(() => (lead ? edit.save(values) : create.mutateAsync()), !valid);
 
@@ -179,9 +185,9 @@ export function LeadFormModal({
           isRequired
           label="ФИО"
           value={name}
-          onValueChange={setName}
+          {...fe.field("full_name", setName)}
         />
-        <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
+        <Input inputMode="tel" label="Телефон" placeholder="+992 90 123 45 67" type="tel" value={phone} {...fe.field("phone", setPhone)} />
         <SelectField
           allLabel="Не указан"
           label="Курс"
@@ -222,7 +228,7 @@ export function LeadFormModal({
           onChange={(v) => setStatus(v ?? "новый")}
         />
         {status === "отказ" && (
-          <Input label="Причина отказа" value={reason} onValueChange={setReason} />
+          <Input label="Причина отказа" value={reason} {...fe.field("refusal_reason", setReason)} />
         )}
         <SelectField
           label="Звонок"
@@ -235,17 +241,17 @@ export function LeadFormModal({
           label="Когда перезвонить"
           type="datetime-local"
           value={nextContact}
-          onValueChange={setNextContact}
+          {...fe.field("next_contact_at", setNextContact)}
         />
-        <Textarea className="sm:col-span-2" label="Комментарий" minRows={2} value={comment} onValueChange={setComment} />
+        <Textarea className="sm:col-span-2" label="Комментарий" minRows={2} value={comment} {...fe.field("comment", setComment)} />
         {lead?.needs_review && (
           <Switch className="sm:col-span-2" isSelected={needsReview} onValueChange={setNeedsReview}>
             Нужна проверка имени
           </Switch>
         )}
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger sm:col-span-2" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>

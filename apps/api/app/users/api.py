@@ -25,6 +25,7 @@ from app.core.paging import Page, PageSize
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
+from app.leads.hygiene import ManualPhone
 from app.models import AppUser, Branch, PasswordResetRequest, Role
 from app.permissions import SUPERADMIN_CODE
 from app.users.errors import (
@@ -53,7 +54,6 @@ NewLogin = Annotated[
         strip_whitespace=True, min_length=3, max_length=40, pattern=r"^[A-Za-z0-9._-]+$"
     ),
 ]
-Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
 
 
 class Strict(BaseModel):
@@ -63,7 +63,7 @@ class Strict(BaseModel):
 class UserCreate(Strict):
     login: LoginText
     full_name: Text
-    phone: Phone | None = None
+    phone: ManualPhone = None
     email: Text | None = None
     branch_id: uuid.UUID | None = None
     role_id: uuid.UUID
@@ -75,7 +75,7 @@ class UserUpdate(Strict):
 
     login: NewLogin | None = None
     full_name: Text | None = None
-    phone: Phone | None = None
+    phone: ManualPhone = None
     email: Text | None = None
     branch_id: uuid.UUID | None = None
     role_id: uuid.UUID | None = None

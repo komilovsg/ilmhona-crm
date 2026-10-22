@@ -85,6 +85,7 @@ const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 // Raised by the browser side only (no response from the API).
 const clientErrors: Record<string, string> = {
   network_error: "Нет связи с сервером. Проверьте интернет.",
+  check_marked_fields: "Проверьте выделенные поля.",
 };
 
 /** The text of an error code; `{name}` placeholders are filled from the problem's `params`. */
@@ -97,4 +98,28 @@ export function errorText(code: string | undefined, params?: Record<string, unkn
     // a day arrives as ISO (2026-11-17), people read 17.11.2026
     return typeof value === "string" && ISO_DAY.test(value) ? fullDate(value) : String(value ?? "");
   });
+}
+
+/** The hint under one form field for a 422 entry (`code` + the limits pydantic gave in `ctx`). */
+export function fieldText(code: string, ctx?: Record<string, unknown>): string {
+  const num = (key: string) => String(ctx?.[key] ?? "");
+
+  if (code === "missing") return "Обязательное поле";
+  if (code === "string_too_long") return `Не длиннее ${num("max_length")} символов`;
+  if (code === "string_too_short" || code === "too_short")
+    return Number(ctx?.min_length) > 1 ? `Не короче ${num("min_length")} символов` : "Заполните поле";
+  if (code === "invalid_phone") return "Неверный номер. Пример: +992 90 123 45 67";
+  if (code === "decimal_max_digits" || code === "decimal_whole_digits") return "Слишком большое число";
+  if (code === "decimal_max_places") return "Слишком много знаков после запятой";
+  if (/^(int|float|decimal)_(parsing|type)|^decimal_/.test(code)) return "Введите число";
+  if (code === "greater_than_equal") return `Не меньше ${num("ge")}`;
+  if (code === "less_than_equal") return `Не больше ${num("le")}`;
+  if (code === "greater_than") return `Больше ${num("gt")}`;
+  if (code === "less_than") return `Меньше ${num("lt")}`;
+  if (/^uuid_|^literal_error$|^enum$/.test(code)) return "Выберите значение из списка";
+  if (/^time_/.test(code)) return "Неверное время";
+  if (/^(date|datetime)_/.test(code)) return "Неверная дата";
+  if (code.includes("email")) return "Неверный email";
+
+  return "Неверное значение";
 }

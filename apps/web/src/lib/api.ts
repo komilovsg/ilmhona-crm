@@ -1,4 +1,4 @@
-import { errorText } from "./api-errors";
+import { errorText, fieldText } from "./api-errors";
 import { trackRequest } from "./wakeup";
 
 /** An API error as thrown by `api()`: HTTP status + the code of the problem+json body. */
@@ -8,7 +8,19 @@ export type ApiError = {
   params?: Record<string, unknown>;
   /** Rejected fields of a 422 (last name of each `loc`). */
   fields?: string[];
+  /** The Russian hint per rejected field of a 422 (last name of the `loc` -> text). */
+  fieldErrors?: Record<string, string>;
 };
+
+type Entry = { loc: unknown[]; code: string; ctx?: Record<string, unknown> };
+
+function fieldErrorsOf(errors: Entry[] | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+
+  for (const e of errors ?? []) out[String(e.loc.at(-1))] ??= fieldText(e.code, e.ctx);
+
+  return out;
+}
 
 export function isApiError(error: unknown): error is ApiError {
   return typeof error === "object" && error !== null && "status" in error && "code" in error;
@@ -106,6 +118,7 @@ export async function api<T = void>(path: string, options: Options = {}, retried
     code,
     params: data?.params,
     fields: (data?.errors as { loc: string[] }[] | undefined)?.map((e) => String(e.loc.at(-1))),
+    fieldErrors: fieldErrorsOf(data?.errors),
   } satisfies ApiError;
 }
 

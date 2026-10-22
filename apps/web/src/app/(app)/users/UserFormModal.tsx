@@ -9,8 +9,9 @@ import { AppModal } from "@/components/AppModal";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe, useRoles } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { TempPassword, UserRow } from "@/lib/types";
@@ -39,7 +40,6 @@ export function UserFormModal({
   // A branch-bound manager works inside their own branch only.
   const [branchId, setBranchId] = useState<string | null>(user ? user.branch_id : (me?.branch?.id ?? null));
   const [roleId, setRoleId] = useState<string | null>(user?.role_id ?? null);
-  const [error, setError] = useState<string | null>(null);
   const bound = !!me?.branch;
   const isSuper = me?.role.code === "superadmin";
 
@@ -62,7 +62,6 @@ export function UserFormModal({
       onCreated(result);
       onClose();
     },
-    onError: (e) => setError(messageOf(e)),
   });
   const edit = useVersionedSave({
     record: user,
@@ -97,6 +96,7 @@ export function UserFormModal({
   });
 
   const valid = fullName.trim() && roleId && login.trim().length >= 3;
+  const fe = useFieldErrors(user ? edit.failure : create.error, ["login", "full_name", "phone", "email", "branch_id", "role_id"]);
   const submit = useSubmit(() => (user ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -127,18 +127,22 @@ export function UserFormModal({
           isRequired
           label="Логин"
           value={login}
-          onValueChange={setLogin}
+          {...fe.field("login", setLogin)}
         />
-        <Input isRequired label="ФИО" value={fullName} onValueChange={setFullName} />
-        <Input label="Телефон" type="tel" value={phone} onValueChange={setPhone} />
-        <Input label="Email" type="email" value={email} onValueChange={setEmail} />
+        <Input isRequired label="ФИО" value={fullName} {...fe.field("full_name", setFullName)} />
+        <Input inputMode="tel" label="Телефон" placeholder="+992 90 123 45 67" type="tel" value={phone} {...fe.field("phone", setPhone)} />
+        <Input label="Email" type="email" value={email} {...fe.field("email", setEmail)} />
         <SelectField
           allLabel="Все филиалы"
           isDisabled={bound}
           label="Филиал"
           options={branches.map((b) => ({ key: b.id, label: b.name }))}
           value={branchId}
-          onChange={setBranchId}
+          onChange={(v) => {
+            fe.clear("branch_id");
+            setBranchId(v);
+          }}
+          {...fe.hint("branch_id")}
         />
         <SelectField
           isRequired
@@ -147,16 +151,20 @@ export function UserFormModal({
             .filter((r) => r.assignable || r.id === user?.role_id)
             .map((r) => ({ key: r.id, label: r.name }))}
           value={roleId}
-          onChange={setRoleId}
+          onChange={(v) => {
+            fe.clear("role_id");
+            setRoleId(v);
+          }}
+          {...fe.hint("role_id")}
         />
         {!user && (
           <p className="text-xs text-default-500">
             После создания вы увидите временный пароль на 7 дней. Сотрудник сменит его при первом входе.
           </p>
         )}
-        {(error ?? edit.error) && (
+        {fe.message && (
           <p className="text-sm text-danger" role="alert">
-            {error ?? edit.error}
+            {fe.message}
           </p>
         )}
       </form>

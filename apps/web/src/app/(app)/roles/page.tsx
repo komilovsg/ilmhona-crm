@@ -16,8 +16,9 @@ import { PageHeader } from "@/components/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { useMe, useRoles, useSections } from "@/hooks/queries";
+import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
-import { api, messageOf } from "@/lib/api";
+import { api } from "@/lib/api";
 import { can, fromMatrix, toMatrix, type MatrixChoice } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -77,6 +78,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
       notify("Роль сохранена");
     },
   });
+  const fe = useFieldErrors(save.failure, ["name"]);
   const remove = useMutation({
     mutationFn: () => api(`/api/v1/roles/${role.id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -110,7 +112,7 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
         <span className="text-sm text-default-500">Пользователей: {role.users_count}</span>
       </div>
 
-      <Input isDisabled={readOnly} label="Название" value={name} onValueChange={setName} />
+      <Input isDisabled={readOnly} label="Название" value={name} {...fe.field("name", setName)} />
 
       <p className="mb-1 mt-5 text-xs text-default-500">«Изменение» включает удаление.</p>
       <ul className="divide-y divide-divider">
@@ -135,9 +137,9 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
         ))}
       </ul>
 
-      {save.error && (
+      {fe.message && (
         <p className="mt-3 text-sm text-danger" role="alert">
-          {save.error}
+          {fe.message}
         </p>
       )}
       <ConflictDialog save={save} />
@@ -181,7 +183,6 @@ function RoleEditor({ role, sections, canChange, onDeleted }: {
 function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
   const create = useMutation({
     mutationFn: () => api<RoleRow>("/api/v1/roles", { method: "POST", body: { name, permissions: {} } }),
     onSuccess: (role) => {
@@ -189,8 +190,8 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       onCreated(role.id);
       onClose();
     },
-    onError: (e) => setError(messageOf(e)),
   });
+  const fe = useFieldErrors(create.error, ["name"]);
 
   const submitCreate = useSubmit(() => create.mutateAsync(), !name.trim());
 
@@ -214,11 +215,11 @@ function NewRoleModal({ onClose, onCreated }: { onClose: () => void; onCreated: 
       <form
         onSubmit={submitCreate}
       >
-        <Input autoFocus isRequired label="Название" value={name} onValueChange={setName} />
+        <Input autoFocus isRequired label="Название" value={name} {...fe.field("name", setName)} />
         <p className="mt-2 text-xs text-default-500">Права отметите после создания.</p>
-        {error && (
+        {fe.message && (
           <p className="mt-2 text-sm text-danger" role="alert">
-            {error}
+            {fe.message}
           </p>
         )}
       </form>

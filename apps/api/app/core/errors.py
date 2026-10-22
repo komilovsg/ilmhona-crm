@@ -106,15 +106,22 @@ async def _http(request: Request, exc: Exception) -> Response:
     return _problem(request, _BY_STATUS.get(exc.status_code, BAD_REQUEST), status=exc.status_code)
 
 
+_LIMITS = {"max_length", "min_length", "ge", "le", "gt", "lt"}
+
+
 async def _validation(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, RequestValidationError)
     # a malformed id in the URL path names no record: 404, same as an unknown id
     found = exc.errors()
     if found and all(e["loc"][:1] == ("path",) and e["type"] == "uuid_parsing" for e in found):
         return _problem(request, NOT_FOUND)
-    errs = [
-        {"loc": list(e.get("loc", ())), "code": str(e.get("type", "invalid"))} for e in exc.errors()
-    ]
+    errs = []
+    for e in found:
+        err: dict[str, Any] = {"loc": list(e.get("loc", ())), "code": str(e.get("type", "invalid"))}
+        ctx = {k: v for k, v in (e.get("ctx") or {}).items() if k in _LIMITS}
+        if ctx:
+            err["ctx"] = ctx  # the limits the web names in its hint («Не длиннее 200 символов»)
+        errs.append(err)
     return _problem(request, VALIDATION_FAILED, errs=errs)
 
 

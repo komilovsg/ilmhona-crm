@@ -51,6 +51,7 @@ from app.education.scope import (
 )
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import CERTIFICATE_ISSUED
+from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks
 from app.models import (
     AppUser,
@@ -77,7 +78,6 @@ OPEN_FROM, OPEN_TO = time(7, 0), time(22, 0)
 Day = Annotated[date, Field(ge=MIN_DATE, le=MAX_DATE)]
 Capacity = Annotated[int, Field(ge=1, le=100)]
 Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
-Phone = Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)]
 WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 ENROLLMENT_STATUSES = ("активный", "завершил", "выпускник", "отчислен")
 
@@ -177,7 +177,7 @@ class NewStudent(Strict):
     full_name: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)
     ]
-    phone: Phone | None = None
+    phone: ManualPhone = None
     gender: Annotated[str, StringConstraints(pattern=r"^(male|female)$")] | None = None
 
 
