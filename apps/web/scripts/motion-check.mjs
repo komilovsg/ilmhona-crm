@@ -269,6 +269,10 @@ if (LOGIN && PASSWORD && !ONLY) {
   console.log("overlays skipped: set CRM_LOGIN and CRM_PASSWORD");
 }
 
+const ROW_MENU_PAGES = ["/leads", "/users", "/payments", "/salaries", "/marketing", "/rooms"];
+// pages whose list is lazyModal-guarded: they must have a row menu, else the check proves nothing
+const REQUIRED_ROW_MENUS = new Set(["/leads", "/users", "/payments", "/salaries", "/marketing"]);
+
 // ---- 3. gestures ------------------------------------------------------------------------------------------------
 async function touchSwipe(page, [x0, y0], [x1, y1], { steps = 10, gap = 14 } = {}) {
   const cdp = await page.context().newCDPSession(page);
@@ -419,18 +423,26 @@ if (LOGIN && PASSWORD) {
 
     // -- row menus: the «…» popover closes before a (lazy) modal opens and leaves nothing behind
     for (const vp of [DESKTOP, PHONE]) {
-      for (const path of ["/leads", "/users", "/rooms"]) {
+      for (const path of ROW_MENU_PAGES) {
         const context = await loggedIn(mode, vp);
         const page = await goto(context, mode, path);
         const trigger = page.locator('main button[aria-label^="Действия"]:visible').first();
 
+        await trigger.waitFor({ timeout: 4000 }).catch(() => {});
         if (!(await trigger.count())) {
-          if (path === "/leads") bad.push(`${tag}: no row menu found on ${path}, the check proves nothing`);
+          if (REQUIRED_ROW_MENUS.has(path)) bad.push(`${tag}: no row menu found on ${path} ${vp.width}px, the check proves nothing`);
           await context.close();
           continue;
         }
         await page.waitForTimeout(500);
-        const busyBefore = await count(page, '[aria-busy="true"]');
+        // the list as it is now: this very element and the number of rows. A page that regressed to a plain
+        // dynamic() suspends while the modal chunk loads and the list is swapped for (or hidden behind) skeletons.
+        const ROWS = 'main button[aria-label^="Действия"]';
+        const rowsBefore = await count(page, ROWS);
+
+        await trigger.evaluate((el) => {
+          window.__listRow = el;
+        });
 
         await trigger.click();
         await page.getByRole("menuitem").first().waitFor();
@@ -441,7 +453,17 @@ if (LOGIN && PASSWORD) {
         });
         await (path === "/leads" && vp === DESKTOP ? page.getByRole("menuitem", { name: "Изменить" }) : page.getByRole("menuitem")).first().click({ force: true });
         await page.waitForTimeout(300);
-        expect(busyBefore > 0 || (await count(page, '[aria-busy="true"]')) === 0, `${tag}: the page fell back to skeletons while the modal chunk loaded on ${path} ${vp.width}px`);
+        const during = await page.evaluate((rows) => {
+          const el = window.__listRow;
+
+          return {
+            kept: !!el && el.isConnected && el.checkVisibility(),
+            rows: document.querySelectorAll(rows).length,
+            skeletons: document.querySelectorAll('main [role="status"][aria-busy="true"], main [data-skeleton]').length,
+          };
+        }, ROWS);
+
+        expect(during.kept && during.rows === rowsBefore && during.skeletons === 0, `${tag}: the list was replaced by skeletons while the modal chunk loaded on ${path} ${vp.width}px (row kept ${during.kept}, rows ${rowsBefore} -> ${during.rows}, skeletons ${during.skeletons})`);
         await page.waitForTimeout(2300);
         const menus = await count(page, '[role="menu"]');
         const dialogs = await count(page, '[role="dialog"]');

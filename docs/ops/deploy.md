@@ -18,15 +18,29 @@ Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
 ## What runs when
 
 ```
-push to main -> ci (green) -> deploy-api: migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
-                           -> Vercel builds and deploys apps/web by itself (git integration)
+push to main -> ci (green) -> deploy-api: wait for Vercel production deployment of the same sha
+                                          -> migrate (owner URL) -> Render deploy hook -> wait for the commit in /api/health
+                                          -> check the web's /version sha equals the api sha
+                           -> Vercel builds and deploys apps/web by itself (git integration; only main, see apps/web/vercel.json)
 every 10 min, 08:00-20:59 Dushanbe  keepalive   curl /api/health through the Vercel URL
 every 2 h, 21:00-07:59 Dushanbe     uptime      same check; a non-200 fails the run (e-mail), see monitoring.md
 00:30 Dushanbe (19:30 UTC)          daily       python -m app.cli daily (as ilm_app)
 01:30 Dushanbe (20:30 UTC)          backup      pg_dump -> age -> ilmhona-backups, last 30 kept
 ```
 
-All workflows have the least `permissions:` (`contents: read`, or none).
+All workflows have the least `permissions:` (`contents: read`, or none; `deploy-api` also reads
+`deployments` and `statuses`).
+
+### Web before API
+
+Vercel can be rate-limited (Hobby: 100 deployments a day), and an API deployed without its front
+breaks saves. So `deploy-api` first polls the GitHub deployments of the commit (environment
+`Production`, created by Vercel) every 20 s: `success` lets the migration and the API deploy go on,
+`failure`/`error` fails the job («Vercel не выкатил фронт — API не выкатываем»), 20 minutes without a
+result fails it too. After the API is live the job reads `<WEB_URL>/version` (repo variable `WEB_URL`,
+default `https://ilmhona-crm.vercel.app`; the route returns `VERCEL_GIT_COMMIT_SHA`, public, no
+secrets) and fails when it differs from the API's sha. `apps/web/vercel.json` turns off preview
+deployments of every branch except `main`.
 
 ## Roles in the database
 

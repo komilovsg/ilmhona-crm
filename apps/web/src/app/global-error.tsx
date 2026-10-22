@@ -1,7 +1,10 @@
 "use client";
 
 import { ILM_MARK_PATH } from "@/components/brand/IlmMark";
+import { useEffect } from "react";
+
 import { ERROR_COPY, supportCode } from "@/lib/error-copy";
+import { reportError } from "@/lib/report-error";
 
 const copy = ERROR_COPY.fatal;
 
@@ -24,6 +27,10 @@ p{margin:0;color:var(--muted);font-size:.875rem;line-height:1.5}
 /** The root layout itself failed: a self-contained Russian page with its own <html>/<body>. */
 export default function GlobalError({ error }: { error: Error & { digest?: string } }) {
   const code = supportCode(error);
+
+  useEffect(() => {
+    reportError(error);
+  }, [error]);
 
   return (
     <html lang="ru">

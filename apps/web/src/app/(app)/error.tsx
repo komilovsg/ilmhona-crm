@@ -7,6 +7,7 @@ import { useEffect } from "react";
 
 import { ErrorScreen } from "@/components/ErrorScreen";
 import { ERROR_COPY, supportCode } from "@/lib/error-copy";
+import { reportError } from "@/lib/report-error";
 
 const copy = ERROR_COPY.failure;
 
@@ -16,6 +17,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
 
   useEffect(() => {
     console.error(error);
+    reportError(error);
   }, [error]);
 
   // the cached data may be what broke the page: drop it, so the retry loads fresh data

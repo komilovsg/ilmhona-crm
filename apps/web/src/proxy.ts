@@ -8,7 +8,7 @@ const ACCESS_COOKIE = "ilm_access";
 const PUBLIC_PAGES = new Set(["/login", "/forgot-password"]);
 // Link-preview and install assets: reachable without a session (static, no data).
 // Sentry tunnel (src/app/monitoring/route.ts): public, an error can happen before login.
-const PUBLIC_PATHS = ["/monitoring"];
+const PUBLIC_PATHS = ["/monitoring", "/version"];
 const PUBLIC_ASSETS = ["/opengraph-image", "/twitter-image", "/icon", "/apple-icon"];
 
 /**
