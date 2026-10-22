@@ -19,6 +19,11 @@ test("field hints name the limit", () => {
   assert.equal(fieldText("string_too_short", { min_length: 1 }), "Заполните поле");
   assert.equal(fieldText("invalid_phone"), "Неверный номер. Пример: +992 90 123 45 67");
   assert.equal(fieldText("decimal_parsing"), "Введите число");
+  assert.equal(fieldText("string_too_short", { min_length: 3 }), "Не короче 3 символов");
+  assert.equal(fieldText("decimal_max_digits"), "Слишком большое число");
+  assert.equal(fieldText("decimal_max_places"), "Слишком много знаков после запятой");
+  assert.equal(fieldText("time_parsing"), "Неверное время");
+  assert.equal(fieldText("date_from_datetime_parsing"), "Неверная дата");
   assert.equal(fieldText("int_parsing"), "Введите число");
   assert.equal(fieldText("greater_than_equal", { ge: 0 }), "Не меньше 0");
   assert.equal(fieldText("less_than_equal", { le: 100 }), "Не больше 100");

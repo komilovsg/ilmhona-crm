@@ -106,15 +106,19 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
 
   if (code === "missing") return "Обязательное поле";
   if (code === "string_too_long") return `Не длиннее ${num("max_length")} символов`;
-  if (code === "string_too_short" || code === "too_short") return "Заполните поле";
+  if (code === "string_too_short" || code === "too_short")
+    return Number(ctx?.min_length) > 1 ? `Не короче ${num("min_length")} символов` : "Заполните поле";
   if (code === "invalid_phone") return "Неверный номер. Пример: +992 90 123 45 67";
+  if (code === "decimal_max_digits" || code === "decimal_whole_digits") return "Слишком большое число";
+  if (code === "decimal_max_places") return "Слишком много знаков после запятой";
   if (/^(int|float|decimal)_(parsing|type)|^decimal_/.test(code)) return "Введите число";
   if (code === "greater_than_equal") return `Не меньше ${num("ge")}`;
   if (code === "less_than_equal") return `Не больше ${num("le")}`;
   if (code === "greater_than") return `Больше ${num("gt")}`;
   if (code === "less_than") return `Меньше ${num("lt")}`;
   if (/^uuid_|^literal_error$|^enum$/.test(code)) return "Выберите значение из списка";
-  if (/^(date|datetime|time)_/.test(code)) return "Неверная дата";
+  if (/^time_/.test(code)) return "Неверное время";
+  if (/^(date|datetime)_/.test(code)) return "Неверная дата";
   if (code.includes("email")) return "Неверный email";
 
   return "Неверное значение";
