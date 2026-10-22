@@ -86,7 +86,7 @@ jobs:
     timeout-minutes: 25
     env:
       SHA: ${{ github.event.workflow_run.head_sha }}
-      HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://ilmhona-api.onrender.com/api/health' }}
+      HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://ilmhona-api-1oaz.onrender.com/api/health' }}
     steps:
       - name: trigger render deploy of this commit
         env:
