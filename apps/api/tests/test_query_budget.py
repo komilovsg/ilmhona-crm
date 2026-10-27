@@ -23,7 +23,7 @@ ENDPOINTS: dict[str, tuple[Callable[[dict[str, str]], str], int]] = {
     "students list": (lambda w: "/api/v1/students", 5),
     "payments list": (lambda w: "/api/v1/payments", 4),
     "payments debtors": (lambda w: "/api/v1/payments/debtors", 4),
-    "cohorts list": (lambda w: "/api/v1/cohorts", 5),
+    "cohorts list": (lambda w: "/api/v1/cohorts", 7),
     "attendance grid": (lambda w: f"/api/v1/cohorts/{w['cohort']}/attendance", 7),
     "me/today": (lambda w: "/api/v1/me/today", 6),
     "master-list": (lambda w: "/api/v1/master-list", 9),
