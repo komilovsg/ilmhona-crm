@@ -75,7 +75,7 @@ export function ListSkeleton({ cols = 5, rows = 8 }: { cols?: number; rows?: num
 }
 
 /** Cohort cards grid (same grid classes as the cohorts page). */
-export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
+export function CardGridSkeleton({ cards = 6, lines = 4 }: { cards?: number; lines?: number }) {
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: cards }, (_, i) => (
@@ -88,7 +88,7 @@ export function CardGridSkeleton({ cards = 6 }: { cards?: number }) {
             <Bone className="h-6 w-16 rounded-full" />
           </div>
           <div className="grid gap-1.5">
-            {[0, 1, 2, 3].map((k) => (
+            {Array.from({ length: lines }, (_, k) => (
               <Bone key={k} className="h-5 w-3/4" />
             ))}
           </div>
@@ -183,10 +183,12 @@ export function ListPageSkeleton({
   action = true,
   cols = 5,
   cards = false,
+  cardLines,
 }: {
   action?: boolean;
   cols?: number;
   cards?: boolean;
+  cardLines?: number;
 }) {
   return (
     <Late>
@@ -195,7 +197,7 @@ export function ListPageSkeleton({
         <Bone className="h-10 flex-1 rounded-xl md:max-w-xs md:flex-none md:basis-80" />
         <Bone className="hidden h-14 w-44 rounded-xl md:block" />
       </div>
-      {cards ? <CardGridSkeleton /> : <ListSkeleton cols={cols} />}
+      {cards ? <CardGridSkeleton lines={cardLines} /> : <ListSkeleton cols={cols} />}
     </Late>
   );
 }

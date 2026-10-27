@@ -168,3 +168,32 @@ async def test_new_exports_read_as_sentences(admin: httpx.AsyncClient) -> None:
     texts = [i["text"] for i in items]
     assert any("оценки потока" in t for t in texts)
     assert any("сегодня и не заполнено" in t for t in texts)
+
+
+# ---- cohort cards: paid line ---------------------------------------------------------------
+
+
+async def test_cohort_list_and_export_show_paid_only_with_payments_right(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    cohort = await running_cohort(admin)
+    paid = await enroll_paid(admin, cohort, "Amy")
+    await pay(admin, paid, amount=300, confirm=True)
+    await pay(admin, paid, month=2, amount=100)  # pending: not counted
+    await pay(admin, await enroll_paid(admin, cohort, "Bob"), amount=200)  # pending
+    gone = await enroll_paid(admin, cohort, "Cid")
+    await pay(admin, gone, amount=400, confirm=True)
+    await sql("UPDATE enrollment SET status = 'отчислен' WHERE id = :i", i=gone)
+
+    item = (await admin.get("/api/v1/cohorts")).json()["items"][0]
+    assert item["payers"] == 1
+    assert item["income"] == "700.00"  # confirmed money of the cohort, as the payments tab
+    rows = sheets(await admin.get("/api/v1/cohorts/export"))["Потоки"]
+    assert rows[0][-2:] == ("Оплатили", "Оплачено, TJS")
+    assert rows[1][-2] == 1
+
+    role = await make_role("Потоки", {"cohorts": "view"})
+    viewer = await login_as("viewer2", role, branch="Душанбе")
+    item = (await viewer.get("/api/v1/cohorts")).json()["items"][0]
+    assert "payers" not in item and "income" not in item
+    assert "Оплатили" not in sheets(await viewer.get("/api/v1/cohorts/export"))["Потоки"][0]

@@ -106,6 +106,9 @@ export type CohortRow = {
   price_month: string;
   status: string;
   fill: Fill;
+  /** list only, for those who see payments: confirmed payers and income (Decimal as string) */
+  payers?: number;
+  income?: string;
   /** detail only: lessons that came overlapping another lesson of the instructor (old data) */
   instructor_conflicts?: number;
 };

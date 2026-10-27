@@ -19,9 +19,10 @@ import { SelectField } from "@/components/SelectField";
 import { CardGridSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
+import { useSeesPayments } from "@/hooks/money";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { COHORT_STATUSES, daysLabel, fullDate } from "@/lib/education";
+import { COHORT_STATUSES, daysLabel, formatPrice, fullDate } from "@/lib/education";
 import type { CohortRow, Paged } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
 import { lazyModal } from "@/lib/lazy-modal";
@@ -95,6 +96,16 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
             {c.room_name} · {c.branch_name}
           </dd>
         </div>
+        {c.payers !== undefined && (
+          <div className="flex items-center gap-2 text-default-600">
+            <Icon name="payments" size={14} />
+            <dd className="truncate tabular-nums">
+              {c.payers === 0
+                ? "Оплат нет"
+                : `Оплатили ${c.payers} из ${c.fill.enrolled} · ${formatPrice(c.income ?? 0)}`}
+            </dd>
+          </div>
+        )}
       </dl>
       <FillBar fill={c.fill} />
     </Link>
@@ -104,6 +115,7 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
 export default function CohortsPage() {
   const overlayMotion = useOverlayMotion();
   const canChange = useCanChange("cohorts");
+  const seesPayments = useSeesPayments();
   const summary = useEducationSummary();
   const [filters, setFilters] = useState<Filters>({ q: "", status: null, branch: null });
   const [page, setPage] = useState(1);
@@ -204,7 +216,7 @@ export default function CohortsPage() {
         }
         isEmpty={(d) => d.items.length === 0}
         query={list}
-        skeleton={<CardGridSkeleton />}
+        skeleton={<CardGridSkeleton lines={seesPayments ? 5 : 4} />}
       >
         <>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
