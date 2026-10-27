@@ -53,6 +53,7 @@ from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks
+from app.metrics.money import cohort_income, cohort_payers
 from app.models import (
     AppUser,
     Attendance,
@@ -66,6 +67,7 @@ from app.models import (
     Room,
     Student,
 )
+from app.payments.api import can_view_payments
 from app.permissions import allows
 
 router = APIRouter(prefix="/api/v1", tags=["cohorts"], dependencies=[Depends(require_csrf_header)])
@@ -382,8 +384,9 @@ async def list_cohorts(
     rows = (
         await db.execute(_cohort_ordered(where).limit(page_size).offset((page - 1) * page_size))
     ).all()
+    items = await _with_paid(db, p, await _outs(db, list(rows)))
     return {
-        "items": await _outs(db, list(rows)),
+        "items": items,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -411,6 +414,24 @@ COHORT_COLUMNS: list[Col[dict[str, Any]]] = [
 ]
 
 
+PAID_COLUMNS: list[Col[dict[str, Any]]] = [
+    Col("Оплатили", lambda c: c["payers"], "int"),
+    Col("Оплачено, TJS", lambda c: c["income"], "money"),
+]
+
+
+async def _with_paid(
+    db: AsyncSession, p: Principal, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Payers and income per cohort (metrics, one query each) for those who see payments."""
+    if can_view_payments(p):
+        ids = [i["id"] for i in items]
+        payers, income = await cohort_payers(db, ids), await cohort_income(db, ids)
+        for i in items:
+            i["payers"], i["income"] = payers[i["id"]], income[i["id"]]
+    return items
+
+
 @router.get("/cohorts/export")
 async def export_cohorts(
     p: View,
@@ -422,14 +443,15 @@ async def export_cohorts(
     where = _cohort_where(p, status, branch_id, q)
     rows = (await db.execute(_cohort_ordered(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
+    columns = [*COHORT_COLUMNS, *PAID_COLUMNS] if can_view_payments(p) else COHORT_COLUMNS
     return await xlsx_response(
         db,
         p,
         entity="cohort",
         slug="potoki",
         title="Потоки",
-        columns=COHORT_COLUMNS,
-        rows=await _outs(db, list(rows)),
+        columns=columns,
+        rows=await _with_paid(db, p, await _outs(db, list(rows))),
         filters={"status": status, "branch_id": branch_id, "q": q},
     )
 
