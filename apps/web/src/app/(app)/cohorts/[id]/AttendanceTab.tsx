@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
+import { Popover, PopoverContent } from "@heroui/popover";
 import clsx from "clsx";
 
 import { ExportButton } from "@/components/ExportButton";
@@ -19,13 +20,14 @@ import { api } from "@/lib/api";
 import { lessonProgress, markedLabel, markState, percentLabel } from "@/lib/attendance";
 import {
   ALL_MONTHS,
+  arrowStep,
   cellMarkable,
+  keyMark,
   defaultMonth,
   lessonsOfMonth,
   markLabel,
   monthLabel,
   monthsOf,
-  nextPresent,
   withMark,
   type Mark,
 } from "@/lib/attendance-grid";
@@ -85,18 +87,57 @@ function MarkCell({
   student,
   lesson,
   busy,
-  onToggle,
+  row,
+  col,
+  onOpen,
+  onMark,
 }: {
   student: GridStudent;
   lesson: Col;
   busy: boolean;
-  onToggle: () => void;
+  row: number;
+  col: number;
+  onOpen: (el: HTMLButtonElement) => void;
+  onMark: (present: boolean) => void;
 }) {
   const mark = student.marks[lesson.id];
+
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const value = keyMark(e.key);
+
+    if (value !== undefined) {
+      e.preventDefault();
+      onMark(value);
+
+      return;
+    }
+    const step = arrowStep(e.key);
+
+    if (!step) return;
+    e.preventDefault();
+    const table = e.currentTarget.closest("table");
+    let r = row + step[0];
+    let c = col + step[1];
+
+    // skip non-markable cells in the direction of travel, stop at the edge
+    for (let i = 0; i < 200; i++, r += step[0], c += step[1]) {
+      const next = table?.querySelector<HTMLButtonElement>(`button[data-cell="${r}:${c}"]`);
+
+      if (next) {
+        next.focus();
+
+        return;
+      }
+      if (r < 0 || c < 0 || (step[0] !== 0 && !table?.querySelector(`tr:nth-child(${r + 1})`))) return;
+    }
+  };
 
   return (
     <button
       aria-busy={busy}
+      aria-haspopup="dialog"
+      data-cell={`${row}:${col}`}
       aria-label={`${student.student_name}, ${fullDate(lesson.date)}: ${markLabel(mark?.present)}`}
       className={clsx(
         CELL,
@@ -108,7 +149,8 @@ function MarkCell({
       )}
       title={mark?.present === false ? (mark.reason ?? undefined) : undefined}
       type="button"
-      onClick={onToggle}
+      onClick={(e) => onOpen(e.currentTarget)}
+      onKeyDown={onKeyDown}
     >
       {mark?.present === true && <Icon name="check" size={16} strokeWidth={2.6} />}
       {mark?.present === false && <Icon name="x" size={16} strokeWidth={2.6} />}
@@ -210,6 +252,7 @@ function Grid({
   const inflight = useRef(new Set<string>());
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [bulk, setBulk] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ enrollmentId: string; lessonId: string; el: HTMLButtonElement } | null>(null);
   const gridKey = ["grid", cohortId];
 
   const settle = () => {
@@ -231,14 +274,13 @@ function Grid({
         : old,
     );
 
-  const toggle = async (student: GridStudent, lesson: Col) => {
+  const setMark = async (student: GridStudent, lesson: Col, present: boolean) => {
     const key = `${lesson.id}:${student.enrollment_id}`;
 
     if (inflight.current.has(key)) return;
     inflight.current.add(key);
     setPending(new Set(inflight.current));
     const prev = student.marks[lesson.id];
-    const present = nextPresent(prev?.present);
 
     await queryClient.cancelQueries({ queryKey: gridKey });
     patch(student.enrollment_id, lesson.id, { present, reason: null });
@@ -255,6 +297,23 @@ function Grid({
       setPending(new Set(inflight.current));
       settle();
     }
+  };
+
+  const menuStudent = menu && students.find((s) => s.enrollment_id === menu.enrollmentId);
+  const menuLesson = menu && grid.lessons.find((l) => l.id === menu.lessonId);
+  const menuCurrent = menuStudent && menuLesson ? menuStudent.marks[menuLesson.id]?.present : undefined;
+
+  const closeMenu = () => {
+    menu?.el.focus();
+    setMenu(null);
+  };
+
+  const choose = (present: boolean) => {
+    if (!menuStudent || !menuLesson) return;
+    const [s, l] = [menuStudent, menuLesson];
+
+    closeMenu();
+    if (s.marks[l.id]?.present !== present) void setMark(s, l, present);
   };
 
   const allPresent = async (lesson: Col) => {
@@ -291,6 +350,12 @@ function Grid({
           <ExportButton label="Табель" path={`/api/v1/cohorts/${cohortId}/attendance/export`} />
         </div>
       </div>
+
+      {marking && (
+        <p className="mb-3 hidden text-xs text-default-500 md:block">
+          Нажмите на ячейку и выберите «Был» или «Не был». «Все ✓» в шапке урока — отметить всех присутствующими.
+        </p>
+      )}
 
       <div className="mb-3 hidden flex-wrap items-center gap-3 md:flex">
         <Segmented
@@ -358,7 +423,7 @@ function Grid({
             </tr>
           </thead>
           <tbody>
-            {students.map((s) => (
+            {students.map((s, row) => (
               <tr key={s.enrollment_id} className="group">
                 <th
                   className="sticky left-0 z-10 border-b border-divider bg-content1 px-4 py-2 font-medium group-hover:bg-default-50"
@@ -376,14 +441,17 @@ function Grid({
                 <td className="min-w-40 whitespace-nowrap border-b border-divider px-3 py-2">
                   <Unmarked n={s.unmarked} />
                 </td>
-                {lessons.map((l) => (
+                {lessons.map((l, col) => (
                   <td key={l.id} className={clsx("border-b border-divider px-1 py-2", l.date === today && "bg-primary/5")}>
                     {marking && cellMarkable(l, s) ? (
                       <MarkCell
                         busy={pending.has(`${l.id}:${s.enrollment_id}`)}
+                        col={col}
                         lesson={l}
+                        row={row}
                         student={s}
-                        onToggle={() => void toggle(s, l)}
+                        onMark={(present) => void setMark(s, l, present)}
+                        onOpen={(el) => setMenu({ enrollmentId: s.enrollment_id, lessonId: l.id, el })}
                       />
                     ) : (
                       <Cell lesson={l} student={s} />
@@ -395,6 +463,45 @@ function Grid({
           </tbody>
         </table>
       </div>
+
+      {menu && menuStudent && menuLesson && (
+        <Popover
+          isOpen
+          placement="bottom"
+          triggerRef={{ current: menu.el }}
+          onOpenChange={(open) => {
+            if (!open) closeMenu();
+          }}
+        >
+          {/* the anchor is the clicked cell (triggerRef); Popover wants a trigger slot first */}
+          <></>
+          <PopoverContent>
+            <div aria-label={`${menuStudent.student_name}, ${fullDate(menuLesson.date)}`} className="flex gap-2 p-2" role="group">
+              <Button
+                aria-label="Был"
+                className="h-11 min-w-28 text-base font-medium"
+                color="success"
+                data-autofocus
+                startContent={<Icon name="check" size={18} strokeWidth={2.6} />}
+                variant={menuCurrent === true ? "solid" : "flat"}
+                onPress={() => choose(true)}
+              >
+                Был
+              </Button>
+              <Button
+                aria-label="Не был"
+                className="h-11 min-w-28 text-base font-medium"
+                color="danger"
+                startContent={<Icon name="x" size={18} strokeWidth={2.6} />}
+                variant={menuCurrent === false ? "solid" : "flat"}
+                onPress={() => choose(false)}
+              >
+                Не был
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
+      )}
 
       {/* phone: the list of lessons; a tap opens the mark screen (one lesson per screen, #23) */}
       <ul data-rows className="space-y-2 md:hidden">
