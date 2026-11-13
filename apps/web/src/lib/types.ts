@@ -140,6 +140,8 @@ export type EnrollmentRow = {
   /** hints for the instructor: they added it, and it has no payments, marks or grades */
   created_by_me: boolean;
   deletable: boolean;
+  /** set by the create response when this enrollment took the cohort over its seats */
+  over_capacity?: Fill | null;
 };
 
 export type StudentRow = {

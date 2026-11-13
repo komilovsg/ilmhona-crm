@@ -42,7 +42,7 @@ export type LeadFunnel = {
 export type ConvertResult = {
   lead: LeadRow;
   student: { id: string; full_name: string; created: boolean };
-  enrollment: { id: string; cohort_id: string; cohort_code: string; new: boolean } | null;
+  enrollment: { id: string; cohort_id: string; cohort_code: string; new: boolean; over_capacity: { enrolled: number; capacity: number } | null } | null;
   already: boolean;
 };
 

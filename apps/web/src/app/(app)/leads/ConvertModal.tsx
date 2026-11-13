@@ -16,9 +16,12 @@ import { api, messageOf } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import type { ConvertResult, LeadRow } from "@/lib/sales-types";
 import { Bone } from "@/components/Skeletons";
+import { OverCapacityNotice } from "@/components/OverCapacityNotice";
+import { overToast, wouldExceed } from "@/lib/capacity";
 import { convertCohorts } from "@/lib/convert-cohort";
 import { lazyModal } from "@/lib/lazy-modal";
 import { useSubmit } from "@/lib/submit";
+import { notify } from "@/lib/toast";
 import type { CohortRow, Paged } from "@/lib/types";
 
 const PaymentFormModal = lazyModal(() => import("../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
@@ -45,6 +48,8 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
   });
   const { items: open, match, auto } = convertCohorts(cohorts.data?.items ?? [], lead.course_id);
   const cohortId = picked === undefined ? auto : picked;
+  const chosen = open.find((c) => c.id === cohortId);
+  const exceeds = wouldExceed(chosen?.fill);
 
   const convert = useMutation({
     mutationFn: () =>
@@ -52,6 +57,7 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
     onSuccess: (r) => {
       void refreshSales();
       void refreshEducation();
+      if (r.enrollment?.over_capacity) notify(`Записан${overToast(r.enrollment.over_capacity)}`);
       setResult(r);
     },
     onError: (e) => setError(messageOf(e)),
@@ -110,7 +116,7 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
             Отмена
           </Button>
           <LoadingButton color="primary" isLoading={convert.isPending} onPress={() => submit()}>
-            {cohortId ? "Записать в поток" : "Создать студента"}
+            {cohortId ? (exceeds ? "Записать всё равно" : "Записать в поток") : "Создать студента"}
           </LoadingButton>
         </>
       }
@@ -136,7 +142,7 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
               label="Поток"
               options={open.map((c) => ({
                 key: c.id,
-                label: `${match.has(c.id) ? "по курсу лида · " : ""}${c.code} · ${c.course_name} · с ${fullDate(c.start_date)} · ${formatPrice(c.price_month)}/мес · мест: ${Math.max(c.capacity - c.fill.enrolled, 0)}`,
+                label: `${match.has(c.id) ? "по курсу лида · " : ""}${c.code} · ${c.course_name} · с ${fullDate(c.start_date)} · ${formatPrice(c.price_month)}/мес · ${c.fill.enrolled >= c.capacity ? `сверх плана (${c.fill.enrolled} из ${c.capacity})` : `мест: ${c.capacity - c.fill.enrolled}`}`,
               }))}
               value={cohortId}
               onChange={setPicked}
@@ -145,6 +151,7 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
         ) : (
           <p className="text-sm text-default-500">Запись в поток доступна с правом «Потоки: изменение».</p>
         )}
+        <OverCapacityNotice fill={chosen?.fill} />
         {error && (
           <p className="text-sm text-danger" role="alert">
             {error}
