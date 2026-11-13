@@ -232,7 +232,7 @@ async def test_cancel_restore_delete_cohort(admin: httpx.AsyncClient) -> None:
     assert (r.status_code, r.json()["code"]) == (409, "cohort_in_use")
 
 
-async def test_enrollment_flow_capacity_and_new_student(
+async def test_enrollment_flow_soft_capacity_and_new_student(
     admin: httpx.AsyncClient, login_as: SignedIn
 ) -> None:
     course, room = await make_course(), await make_room()
@@ -263,21 +263,28 @@ async def test_enrollment_flow_capacity_and_new_student(
     second = await admin.post(
         f"{C}/{cid}/enrollments", json={"student_id": str(await make_student("Второй"))}
     )
-    assert second.status_code == 201
+    assert second.status_code == 201 and second.json()["over_capacity"] is None
+    # capacity is soft (owner decision 2026-11-14): a third student is enrolled and flagged
     full = await admin.post(
         f"{C}/{cid}/enrollments", json={"student_id": str(await make_student("Третий"))}
     )
-    assert (full.status_code, full.json()["code"]) == (409, "cohort_full")
+    assert full.status_code == 201
+    assert full.json()["over_capacity"] == {"enrolled": 3, "capacity": 2}
+    assert (await admin.get(f"{C}/{cid}")).json()["fill"] == {"enrolled": 3, "capacity": 2}
+    log = (await admin.get("/api/v1/audit", params={"action": "enrollment.create"})).json()
+    texts = [i["text"] for i in log["items"]]
+    assert sum(t.endswith(" — сверх плана: 3 из 2") for t in texts) == 1
     # an expelled student frees a seat
-    await admin.patch(f"/api/v1/enrollments/{second.json()['id']}", json={"status": "отчислен"})
-    assert (await admin.get(f"{C}/{cid}")).json()["fill"] == {"enrolled": 1, "capacity": 2}
+    await admin.patch(f"/api/v1/enrollments/{full.json()['id']}", json={"status": "отчислен"})
+    assert (await admin.get(f"{C}/{cid}")).json()["fill"] == {"enrolled": 2, "capacity": 2}
     assert (
         await admin.post(
             f"{C}/{cid}/enrollments", json={"student_id": str(await make_student("Третий"))}
         )
     ).status_code == 201
-    # cannot shrink below the enrolled count
-    assert (await admin.patch(f"{C}/{cid}", json={"capacity": 1})).json()["code"] == "cohort_full"
+    # capacity may shrink below the enrolled count (soft limit)
+    r = await admin.patch(f"{C}/{cid}", json={"capacity": 1})
+    assert r.status_code == 200 and r.json()["fill"] == {"enrolled": 3, "capacity": 1}
     assert (
         await admin.patch(
             f"/api/v1/enrollments/{second.json()['id']}", json={"status": "нет такого"}
@@ -505,3 +512,11 @@ async def test_metrics_agree_with_the_lists(admin: httpx.AsyncClient, login_as: 
     )
     scoped = await check(mgr)
     assert scoped["students"]["всего"] == 7 and scoped["cohorts"]["всего"] == 2
+
+
+def test_fill_percent_may_exceed_100() -> None:
+    from app.metrics import fill_percent, over_capacity_of
+
+    assert (fill_percent(5, 20), fill_percent(22, 20), fill_percent(3, 0)) == (25, 110, 0)
+    assert over_capacity_of(20, 20) is None
+    assert over_capacity_of(22, 20) == {"enrolled": 22, "capacity": 20}

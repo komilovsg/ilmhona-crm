@@ -37,7 +37,6 @@ from app.core.search import search_clause
 from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
-    COHORT_FULL,
     COHORT_IN_USE,
     COHORT_NOT_CANCELLED,
     ENROLLMENT_HAS_RECORDS,
@@ -58,7 +57,7 @@ from app.education.scope import (
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
-from app.metrics import cohort_enrolled, cohort_fill, has_marks
+from app.metrics import cohort_enrolled, cohort_fill, has_marks, over_capacity_of
 from app.metrics.money import cohort_income, cohort_payers
 from app.models import (
     AppUser,
@@ -572,8 +571,6 @@ async def update_cohort(
         cohort.start_date, cohort.end_date, cohort.weekdays, cohort.start_time, cohort.end_time
     ):
         raise DomainError(VALIDATION_FAILED)
-    if cohort.capacity < (await cohort_enrolled(db, [cohort.id]))[cohort.id]:
-        raise DomainError(COHORT_FULL)
     if "room_id" in sent and body.room_id is not None:
         await _room_in_branch(db, p, body.room_id, cohort.branch_id)
         cohort.room_id = body.room_id
@@ -986,8 +983,9 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
     cohort = await _load(db, p, cohort_id, lock=True)
     if cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)
-    if (await cohort_enrolled(db, [cohort.id]))[cohort.id] >= cohort.capacity:
-        raise DomainError(COHORT_FULL)
+    over = over_capacity_of(
+        (await cohort_enrolled(db, [cohort.id]))[cohort.id] + 1, cohort.capacity
+    )
     if body.new_student is not None:
         student = Student(
             full_name=body.new_student.full_name,
@@ -1030,10 +1028,11 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
             "cohort": [None, cohort.code],
             "student": [None, student.full_name],
             "status": [None, enrollment.status],
+            **({"over_capacity": [None, over]} if over else {}),
         },
         branch_id=cohort.branch_id,
     )
-    return _enrollment_out(enrollment, student, p.id, records=False)
+    return {**_enrollment_out(enrollment, student, p.id, records=False), "over_capacity": over}
 
 
 async def _enrollment(
