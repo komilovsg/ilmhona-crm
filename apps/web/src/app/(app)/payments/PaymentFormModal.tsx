@@ -133,19 +133,25 @@ function MonthHistory({ status: s }: { status: MonthStatus }) {
 export function PaymentFormModal({
   payment,
   enrollmentId = null,
+  month: monthProp = null,
+  query = "",
   onClose,
 }: {
   payment: PaymentRow | null;
   /** Open the create form with this enrollment already chosen (the cohort's «Оплата» button). */
   enrollmentId?: string | null;
+  /** With `enrollmentId`: the month to pay (a tapped month chip); default is the first open one. */
+  month?: number | null;
+  /** Without an enrollment: the picker's search text (the student's name). */
+  query?: string;
   onClose: () => void;
 }) {
   const refresh = useRefreshMoney();
   const [key] = useState(newKey);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(query);
   const [eid, setEid] = useState<string | null>(payment?.enrollment_id ?? enrollmentId);
   // what the user typed; until then the month and the amount follow the chosen enrollment
-  const [monthChoice, setMonthChoice] = useState<number | null>(payment?.month_no ?? null);
+  const [monthChoice, setMonthChoice] = useState<number | null>(payment?.month_no ?? (enrollmentId ? monthProp : null));
   const [amountChoice, setAmountChoice] = useState<string | null>(payment ? amountText(payment.amount) : null);
   const [method, setMethod] = useState<string>(payment?.method ?? "наличные");
   const [paidAt, setPaidAt] = useState(payment?.paid_at ?? todayIso());

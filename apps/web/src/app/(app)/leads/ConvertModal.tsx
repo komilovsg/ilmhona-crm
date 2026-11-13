@@ -10,16 +10,18 @@ import { LoadingButton } from "@/components/LoadingButton";
 import { QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
+import { useCanPay } from "@/hooks/money";
 import { useRefreshSales } from "@/hooks/sales";
 import { api, messageOf } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import type { ConvertResult, LeadRow } from "@/lib/sales-types";
 import { Bone } from "@/components/Skeletons";
+import { convertCohorts } from "@/lib/convert-cohort";
+import { lazyModal } from "@/lib/lazy-modal";
 import { useSubmit } from "@/lib/submit";
-import { notify } from "@/lib/toast";
 import type { CohortRow, Paged } from "@/lib/types";
 
-const OPEN = ["набор", "активный"];
+const PaymentFormModal = lazyModal(() => import("../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 /**
  * «Записать в поток»: one action turns the lead into a student (linked by phone when the branch
@@ -29,7 +31,10 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
   const refreshSales = useRefreshSales();
   const refreshEducation = useRefreshEducation();
   const canEnroll = useCanChange("cohorts");
-  const [cohortId, setCohortId] = useState<string | null>(null);
+  const canPay = useCanPay();
+  // undefined: the user has not chosen yet, the lead's own course decides
+  const [picked, setPicked] = useState<string | null | undefined>(undefined);
+  const [paying, setPaying] = useState(false);
   const [result, setResult] = useState<ConvertResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,7 +43,8 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
     queryFn: () => api<Paged<CohortRow>>("/api/v1/cohorts", { params: { branch_id: lead.branch_id, page_size: "100" } }),
     enabled: canEnroll,
   });
-  const open = (cohorts.data?.items ?? []).filter((c) => OPEN.includes(c.status));
+  const { items: open, match, auto } = convertCohorts(cohorts.data?.items ?? [], lead.course_id);
+  const cohortId = picked === undefined ? auto : picked;
 
   const convert = useMutation({
     mutationFn: () =>
@@ -47,23 +53,34 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
       void refreshSales();
       void refreshEducation();
       setResult(r);
-      notify(r.already ? "Лид уже был записан" : "Лид записан");
     },
     onError: (e) => setError(messageOf(e)),
   });
   const submit = useSubmit(() => convert.mutateAsync());
 
+  if (result && paying && result.enrollment)
+    return <PaymentFormModal enrollmentId={result.enrollment.id} payment={null} onClose={onClose} />;
+
+  const canPayNow = !!result?.enrollment && canPay;
+
   if (result)
     return (
       <AppModal
         footer={
-          <Button color="primary" onPress={onClose}>
-            Готово
-          </Button>
+          <>
+            <Button color={canPayNow ? "default" : "primary"} variant={canPayNow ? "light" : "solid"} onPress={onClose}>
+              Готово
+            </Button>
+            {canPayNow && (
+              <Button color="primary" onPress={() => setPaying(true)}>
+                Внести оплату
+              </Button>
+            )}
+          </>
         }
         isOpen
         size="md"
-        title="Лид записан"
+        title={result.already ? "Лид уже был записан" : "Лид записан"}
         onClose={onClose}
       >
         <div className="space-y-2 text-sm">
@@ -119,10 +136,10 @@ export function ConvertModal({ lead, onClose }: { lead: LeadRow; onClose: () => 
               label="Поток"
               options={open.map((c) => ({
                 key: c.id,
-                label: `${c.code} · ${c.course_name} · с ${fullDate(c.start_date)} · ${formatPrice(c.price_month)}/мес · мест: ${Math.max(c.capacity - c.fill.enrolled, 0)}`,
+                label: `${match.has(c.id) ? "по курсу лида · " : ""}${c.code} · ${c.course_name} · с ${fullDate(c.start_date)} · ${formatPrice(c.price_month)}/мес · мест: ${Math.max(c.capacity - c.fill.enrolled, 0)}`,
               }))}
               value={cohortId}
-              onChange={setCohortId}
+              onChange={setPicked}
             />
           </QueryState>
         ) : (
