@@ -1,6 +1,7 @@
 """Cohorts (потоки): CRUD, status, lessons, enrollments.
 
-Rights: `cohorts` view to read, `cohorts` change to write (never for the instructor role: #24).
+Rights: `cohorts` view to read, `cohorts` change to write (never for the instructor role: #24,
+except adding new students to their own cohort and removing the ones they added: `enroller`).
 Branch scope everywhere; an instructor sees only cohorts where they teach (others are 404, also
 their lessons and enrollments). Numbers (fill, counts) come from `app.metrics`.
 """
@@ -13,7 +14,7 @@ from typing import Annotated, Any, Self
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, exists, func, or_, select, union, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +39,8 @@ from app.education.errors import (
     COHORT_FULL,
     COHORT_IN_USE,
     COHORT_NOT_CANCELLED,
+    ENROLLMENT_HAS_RECORDS,
+    ENROLLMENT_NOT_YOURS,
     INSTRUCTOR_INVALID,
     LESSON_CANCELLED,
     ROOM_BRANCH_MISMATCH,
@@ -47,6 +50,8 @@ from app.education.scope import (
     branch_for_write,
     check_cohort_visible,
     cohort_filters,
+    enroller,
+    is_instructor,
     writer,
 )
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -60,9 +65,12 @@ from app.models import (
     Branch,
     Cohort,
     Course,
+    Employment,
     Enrollment,
     Grade,
+    Lead,
     Lesson,
+    Payment,
     Role,
     Room,
     Student,
@@ -74,6 +82,7 @@ router = APIRouter(prefix="/api/v1", tags=["cohorts"], dependencies=[Depends(req
 
 View = Annotated[Principal, require("cohorts", "view")]
 Change = Annotated[Principal, writer("cohorts")]
+Enroller = Annotated[Principal, enroller()]
 
 MIN_DATE, MAX_DATE = date(2020, 1, 1), date(2035, 12, 31)
 OPEN_FROM, OPEN_TO = time(7, 0), time(22, 0)
@@ -887,7 +896,12 @@ async def cancel_lesson(lesson_id: uuid.UUID, p: Change, db: DB) -> dict[str, An
 # ---- enrollments -------------------------------------------------------------------------
 
 
-def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
+def _enrollment_out(
+    e: Enrollment, s: Student, me: uuid.UUID | None = None, records: bool = True
+) -> dict[str, Any]:
+    """`created_by_me` / `deletable` are hints for the instructor's UI: their own row with no
+    payments, marks or grades. The DELETE endpoint decides again."""
+    mine = me is not None and e.created_by == me
     return {
         "id": e.id,
         "version": e.version,
@@ -901,6 +915,8 @@ def _enrollment_out(e: Enrollment, s: Student) -> dict[str, Any]:
         "enrolled_at": e.enrolled_at,
         "needs_review": e.needs_review,
         "review_reason": e.review_reason,
+        "created_by_me": mine,
+        "deletable": mine and not records,
     }
 
 
@@ -916,8 +932,21 @@ def _enrollment_select(cohort_id: uuid.UUID) -> Any:
 @router.get("/cohorts/{cohort_id}/enrollments")
 async def list_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
     cohort = await _load(db, p, cohort_id)
-    rows = await db.execute(_enrollment_select(cohort.id))
-    return [_enrollment_out(e, s) for e, s in rows.all()]
+    rows = (await db.execute(_enrollment_select(cohort.id))).all()
+    busy = await _with_records(db, [e.id for e, _ in rows])
+    return [_enrollment_out(e, s, p.id, e.id in busy) for e, s in rows]
+
+
+async def _with_records(db: AsyncSession, ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """The enrollments among `ids` that have a payment (any status), a mark or a grade."""
+    if not ids:
+        return set()
+    query = union(
+        select(Payment.enrollment_id).where(Payment.enrollment_id.in_(ids)),
+        select(Attendance.enrollment_id).where(Attendance.enrollment_id.in_(ids)),
+        select(Grade.enrollment_id).where(Grade.enrollment_id.in_(ids)),
+    )
+    return set((await db.execute(query)).scalars())
 
 
 ENROLLMENT_COLUMNS: list[Col[dict[str, Any]]] = [
@@ -946,8 +975,13 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
 
 
 @router.post("/cohorts/{cohort_id}/enrollments", status_code=201)
-async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Change, db: DB) -> dict[str, Any]:
-    if body.new_student is not None and not allows(p.level("students"), "change"):
+async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> dict[str, Any]:
+    """A manager enrolls an existing student or creates one; an instructor only creates a new
+    student, and only in their own cohort (another one is 404 via `_load`)."""
+    if is_instructor(p):
+        if body.student_id is not None:
+            raise DomainError(FORBIDDEN, section="students", level="view")
+    elif body.new_student is not None and not allows(p.level("students"), "change"):
         raise DomainError(FORBIDDEN, section="students", level="change")
     cohort = await _load(db, p, cohort_id, lock=True)
     if cohort.status in (st.CANCELLED, st.DONE):
@@ -960,6 +994,7 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Change, db: DB) -> dic
             phone=body.new_student.phone or None,
             gender=body.new_student.gender,
             branch_id=cohort.branch_id,
+            created_by=p.id,
         )
         db.add(student)
         await db.flush()
@@ -982,7 +1017,7 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Change, db: DB) -> dic
         if found.branch_id != cohort.branch_id:
             raise DomainError(STUDENT_BRANCH_MISMATCH)
         student = found
-    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id)
+    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
     db.add(enrollment)
     await db.flush()  # unique(cohort_id, student_id): a second enrollment is a 409 (#4)
     await record(
@@ -998,20 +1033,21 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Change, db: DB) -> dic
         },
         branch_id=cohort.branch_id,
     )
-    return _enrollment_out(enrollment, student)
+    return _enrollment_out(enrollment, student, p.id, records=False)
 
 
 async def _enrollment(
-    db: AsyncSession, p: Principal, enrollment_id: uuid.UUID
+    db: AsyncSession, p: Principal, enrollment_id: uuid.UUID, *, lock: bool = False
 ) -> tuple[Enrollment, Student, Cohort]:
-    row = (
-        await db.execute(
-            select(Enrollment, Student, Cohort)
-            .join(Student, Student.id == Enrollment.student_id)
-            .join(Cohort, Cohort.id == Enrollment.cohort_id)
-            .where(Enrollment.id == enrollment_id)
-        )
-    ).first()
+    query = (
+        select(Enrollment, Student, Cohort)
+        .join(Student, Student.id == Enrollment.student_id)
+        .join(Cohort, Cohort.id == Enrollment.cohort_id)
+        .where(Enrollment.id == enrollment_id)
+    )
+    if lock:  # a mark or payment written meanwhile waits for us (its FK locks the row)
+        query = query.with_for_update(of=[Enrollment, Student])
+    row = (await db.execute(query)).first()
     if row is None:
         raise DomainError(NOT_FOUND)
     check_cohort_visible(p, row[2])
@@ -1083,7 +1119,10 @@ async def set_enrollment_review(
 
 
 @router.delete("/enrollments/{enrollment_id}", status_code=204)
-async def remove_enrollment(enrollment_id: uuid.UUID, p: Change, db: DB) -> None:
+async def remove_enrollment(enrollment_id: uuid.UUID, p: Enroller, db: DB) -> None:
+    if is_instructor(p):
+        await _remove_own(db, p, enrollment_id)
+        return
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
     # payments block the delete (RESTRICT -> 409); marks and the grade go with it: say so
     marks = (
@@ -1115,4 +1154,49 @@ async def remove_enrollment(enrollment_id: uuid.UUID, p: Change, db: DB) -> None
         enrollment_id,
         {"cohort": [cohort.code, None], "student": [student.full_name, None], **lost},
         branch_id=cohort.branch_id,
+    )
+
+
+async def _remove_own(db: AsyncSession, p: Principal, enrollment_id: uuid.UUID) -> None:
+    """An instructor takes back an enrollment they added by mistake: own cohort, own row, no
+    payments, marks or grades. The student goes too when this instructor created them and
+    nothing else holds them (no other enrollment, no lead, no employment)."""
+    enrollment, student, cohort = await _enrollment(db, p, enrollment_id, lock=True)
+    if enrollment.created_by != p.id:
+        raise DomainError(ENROLLMENT_NOT_YOURS)
+    if await _with_records(db, [enrollment.id]):
+        raise DomainError(ENROLLMENT_HAS_RECORDS)
+    await db.delete(enrollment)
+    await db.flush()
+    await record(
+        db,
+        p.id,
+        "enrollment.delete",
+        "enrollment",
+        enrollment_id,
+        {"cohort": [cohort.code, None], "student": [student.full_name, None]},
+        branch_id=cohort.branch_id,
+    )
+    if student.created_by != p.id or student.source_lead_id is not None:
+        return
+    held = await db.scalar(
+        select(
+            exists().where(Enrollment.student_id == student.id)
+            | exists().where(Lead.converted_student_id == student.id)
+            | exists().where(Employment.student_id == student.id)
+        )
+    )
+    if held:
+        return
+    snapshot = {"full_name": student.full_name, "phone": student.phone}
+    await db.delete(student)
+    await db.flush()
+    await record(
+        db,
+        p.id,
+        "student.delete",
+        "student",
+        student.id,
+        diff_of(snapshot, {}),
+        branch_id=student.branch_id,
     )

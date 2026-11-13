@@ -279,6 +279,7 @@ async def create_student(body: StudentCreate, p: Change, db: DB) -> dict[str, An
         gender=body.gender,
         phone=body.phone or None,
         branch_id=branch_for_write(p, body.branch_id),
+        created_by=p.id,
     )
     db.add(student)
     await db.flush()

@@ -392,7 +392,7 @@ async def test_bug_20_status_is_also_set_on_every_write(admin: httpx.AsyncClient
 # ---- #24 ---------------------------------------------------------------------------------
 
 
-async def test_bug_24_instructor_cannot_enroll_or_edit_students(
+async def test_bug_24_instructor_cannot_enroll_existing_or_edit_students(
     admin: httpx.AsyncClient, login_as: SignedIn
 ) -> None:
     course, room = await make_course(), await make_room()
@@ -410,15 +410,12 @@ async def test_bug_24_instructor_cannot_enroll_or_edit_students(
     await forbidden(
         await ins.post(f"{C}/{cohort['id']}/enrollments", json={"student_id": str(student)})
     )
-    await forbidden(
-        await ins.post(
-            f"{C}/{cohort['id']}/enrollments", json={"new_student": {"full_name": "Новый"}}
-        )
-    )
+    # a new student into their own cohort is allowed since 2026-11-13 (test_attendance.py)
     await forbidden(
         await ins.patch(f"/api/v1/enrollments/{enrollment['id']}", json={"status": "отчислен"})
     )
-    await forbidden(await ins.delete(f"/api/v1/enrollments/{enrollment['id']}"))
+    r = await ins.delete(f"/api/v1/enrollments/{enrollment['id']}")  # a manager added it
+    assert (r.status_code, r.json()["code"]) == (403, "enrollment_not_yours")
     await forbidden(await ins.post("/api/v1/students", json={"full_name": "X"}))
     await forbidden(await ins.patch(f"/api/v1/students/{student}", json={"full_name": "Y"}))
     await forbidden(await ins.patch(f"{C}/{cohort['id']}", json={"capacity": 3}))

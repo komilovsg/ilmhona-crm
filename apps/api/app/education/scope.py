@@ -2,7 +2,9 @@
 
 - Branch scope: a branch-bound user sees their branch only (404 for the rest).
 - Role instructor: sees only cohorts where they are the instructor (others 404, also their
-  lessons and enrollments) and can never write (#24), whatever the rights matrix says.
+  lessons and enrollments) and can never write (#24), whatever the rights matrix says. One
+  exception (owner decision 2026-11-13): in their own cohort an instructor adds new students and
+  removes the ones they added that have no payments, marks or grades (`enroller`).
 """
 
 import uuid
@@ -41,6 +43,20 @@ def writer(section: str) -> object:
     async def dependency(p: CurrentUser) -> Principal:
         if not allows(p.level(section), "change") or is_instructor(p):
             raise DomainError(FORBIDDEN, section=section, level="change")
+        return p
+
+    return Depends(dependency)
+
+
+def enroller() -> object:
+    """Adding to / removing from a cohort: `cohorts` change for everybody but the instructor;
+    an instructor needs `cohorts` view only, the endpoint then narrows what they may do (own
+    cohort, new students only, own rows only)."""
+
+    async def dependency(p: CurrentUser) -> Principal:
+        level = "view" if is_instructor(p) else "change"
+        if not allows(p.level("cohorts"), level):
+            raise DomainError(FORBIDDEN, section="cohorts", level="change")
         return p
 
     return Depends(dependency)

@@ -548,6 +548,7 @@ async def convert_lead(
             phone=lead.phone,
             branch_id=lead.branch_id,
             source_lead_id=lead.id,
+            created_by=p.id,
         )
         db.add(student)
         await db.flush()
@@ -602,7 +603,7 @@ async def _enroll(
         return {"id": existing.id, "cohort_id": cohort.id, "cohort_code": cohort.code, "new": False}
     if (await cohort_enrolled(db, [cohort.id]))[cohort.id] >= cohort.capacity:
         raise DomainError(COHORT_FULL)
-    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id)
+    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
     db.add(enrollment)
     await db.flush()
     await record(
