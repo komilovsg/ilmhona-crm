@@ -1,6 +1,9 @@
 "use client";
 
+import { Button } from "@heroui/button";
 import { DatePicker } from "@heroui/date-picker";
+
+import { Icon } from "@/components/Icon";
 
 import { parseIso, toIso } from "@/lib/iso-date";
 import { FILTER_H } from "@/lib/filter-controls";
@@ -46,6 +49,21 @@ export function DateField({
       className={className}
       classNames={filter ? { inputWrapper: FILTER_H } : undefined}
       description={description}
+      endContent={
+        value && !isRequired ? (
+          <Button
+            isIconOnly
+            aria-label="Очистить дату"
+            className="-mr-1 size-10 min-w-10 shrink-0"
+            radius="full"
+            size="sm"
+            variant="light"
+            onPress={() => onValueChange("")}
+          >
+            <Icon name="x" size={16} />
+          </Button>
+        ) : undefined
+      }
       errorMessage={errorMessage}
       granularity={withTime ? "minute" : "day"}
       hourCycle={24}
