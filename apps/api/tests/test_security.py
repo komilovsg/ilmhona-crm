@@ -165,6 +165,14 @@ def test_production_settings_refuse_unsafe_values() -> None:
             _prod(**bad).check()
 
 
+def test_env_typo_does_not_silently_skip_production_checks() -> None:
+    """`ENV=Production` or `ENV=prod` used to count as «not production»: the secret checks were
+    skipped and Swagger was served. An unknown value now refuses to load."""
+    for typo in ("Production", "prod", "production ", "staging"):
+        with pytest.raises(ValueError):
+            Settings(env=typo)
+
+
 def test_api_docs_are_off_in_production() -> None:
     assert not _prod().api_docs
     assert Settings(env="development").api_docs
