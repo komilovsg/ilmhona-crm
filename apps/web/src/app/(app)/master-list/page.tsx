@@ -54,8 +54,8 @@ export default function MasterListPage() {
           <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
         )}
         <SelectField allLabel="Любой статус" label="Статус" options={COHORT_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => set({ ...f, status })} />
-        <Input label="Старт с" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
-        <Input label="Старт по" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
+        <Input placeholder=" " label="Старт с" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
+        <Input placeholder=" " label="Старт по" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
       </div>
       <p className="mb-3 text-xs text-default-500">{LEADS_NOTE}</p>
       <QueryState

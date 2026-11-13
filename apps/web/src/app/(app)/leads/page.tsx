@@ -258,8 +258,8 @@ export default function LeadsPage() {
       {!me?.branch && (
         <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ branch })} />
       )}
-      <Input label="С даты" type="date" value={f.from} onValueChange={(from) => set({ from })} />
-      <Input label="По дату" type="date" value={f.to} onValueChange={(to) => set({ to })} />
+      <Input label="С даты" placeholder=" " type="date" value={f.from} onValueChange={(from) => set({ from })} />
+      <Input label="По дату" placeholder=" " type="date" value={f.to} onValueChange={(to) => set({ to })} />
       <button
         aria-pressed={f.review}
         className={clsx(
@@ -338,7 +338,7 @@ export default function LeadsPage() {
           <Input
             className="flex-1"
             isClearable
-            placeholder="Поиск: имя или телефон"
+            placeholder="Имя, телефон"
             startContent={<Icon name="search" size={18} />}
             value={f.q}
             onClear={() => set({ q: "" })}
@@ -359,6 +359,7 @@ export default function LeadsPage() {
           </Button>
         </div>
         <div className="hidden md:contents">{filterFields}</div>
+
       </div>
 
       <QueryState

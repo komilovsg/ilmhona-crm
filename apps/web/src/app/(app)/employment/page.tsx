@@ -81,8 +81,8 @@ export default function EmploymentPage() {
         {!me?.branch && (
           <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
         )}
-        <Input label="С" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
-        <Input label="По" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
+        <Input placeholder=" " label="С" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
+        <Input placeholder=" " label="По" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
       </div>
       <QueryState
         empty={

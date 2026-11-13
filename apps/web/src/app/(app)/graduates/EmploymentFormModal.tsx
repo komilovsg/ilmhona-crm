@@ -83,7 +83,7 @@ export function EmploymentFormModal({
         <p className="text-sm text-default-600">{student.name}</p>
         <Input isRequired label="Организация" value={organization} {...fe.field("organization", setOrganization)} />
         <Input label="Должность" value={position} {...fe.field("position", setPosition)} />
-        <Input isRequired label="Дата трудоустройства" max={MAX_DATE} min={MIN_DATE} type="date" value={date} {...fe.field("employed_at", setDate)} />
+        <Input placeholder=" " isRequired label="Дата трудоустройства" max={MAX_DATE} min={MIN_DATE} type="date" value={date} {...fe.field("employed_at", setDate)} />
         {fe.message && (
           <p className="text-sm text-danger" role="alert">
             {fe.message}

@@ -226,8 +226,8 @@ export default function DashboardPage() {
         )}
         {tab !== "months" && (
           <div className="flex gap-2">
-            <Input className="w-40" label="С" size="sm" type="date" value={from} onValueChange={setFrom} />
-            <Input className="w-40" label="По" size="sm" type="date" value={to} onValueChange={setTo} />
+            <Input placeholder=" " className="w-40" label="С" size="sm" type="date" value={from} onValueChange={setFrom} />
+            <Input placeholder=" " className="w-40" label="По" size="sm" type="date" value={to} onValueChange={setTo} />
           </div>
         )}
       </div>
