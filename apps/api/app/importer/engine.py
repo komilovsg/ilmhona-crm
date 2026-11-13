@@ -35,7 +35,7 @@ from app.cohorts.status import today as today_local
 from app.importer import parse as p
 from app.importer.report import Recon, Report
 from app.leads.hygiene import neutral
-from app.metrics import enrollment_counts, enrollment_results, student_counts
+from app.metrics import enrollment_counts, enrollment_results, grading, student_counts
 from app.metrics.money import cohort_periods, income_total
 from app.metrics.reports import graduate_count
 from app.models import (
@@ -47,6 +47,7 @@ from app.models import (
     Course,
     Enrollment,
     Grade,
+    GradeScore,
     InstructorPayout,
     Lead,
     Lesson,
@@ -97,7 +98,6 @@ DEFAULT_CAPACITY = 20
 PLACEHOLDER_ROOM_CAPACITY = 30
 PLACEHOLDER_DAYS = [1, 3, 5]
 PLACEHOLDER_TIMES = (time(9, 0), time(10, 30))
-PASS_TOTAL = 70
 BATCH = 1500
 
 
@@ -263,6 +263,8 @@ class Importer:
     # ---- run ------------------------------------------------------------------------------
 
     async def run(self) -> None:
+        # the old totals decide graduates by the academy standard's pass score
+        self.standard = await grading.standard_scheme(self.db)
         await self._load()
         await self._courses()
         await self._instructors()
@@ -1034,7 +1036,7 @@ class Importer:
         ctx = self.cohorts[plan.cohort_old]
         if (
             plan.old_total is not None
-            and plan.old_total >= PASS_TOTAL
+            and grading.passes(self.standard, plan.old_total)
             and plan.homework is None
             and plan.status in ("активный", "завершил")
             and ctx.obj.status == DONE
@@ -1086,15 +1088,24 @@ class Importer:
         existing = set((await self.db.execute(select(Grade.enrollment_id))).scalars())
         for enrollment_id in applied:  # a grade already in the database is «уже было»
             (rep.existing if enrollment_id in existing else rep.imported)["GRADES"] += 1
-        rows = [
-            {"enrollment_id": plan.id, "homework": plan.homework, "final": plan.final}
+        # homework / final on the 0-40 scale: the categories `homework` / `final` of the standard
+        graded = [
+            plan
             for plan in self.plans.values()
             if (plan.homework is not None or plan.final is not None) and plan.id not in existing
         ]
-        for i in range(0, len(rows), BATCH):
-            await self.db.execute(
-                pg_insert(Grade).values(rows[i : i + BATCH]).on_conflict_do_nothing()
-            )
+        rows = [{"enrollment_id": plan.id} for plan in graded]
+        scores = [
+            {"enrollment_id": plan.id, "category_key": key, "points": value}
+            for plan in graded
+            for key, value in (("homework", plan.homework), ("final", plan.final))
+            if value is not None
+        ]
+        for table, values in ((Grade, rows), (GradeScore, scores)):
+            for i in range(0, len(values), BATCH):
+                await self.db.execute(
+                    pg_insert(table).values(values[i : i + BATCH]).on_conflict_do_nothing()
+                )
         rep.note("строк grade записано", len(rows))
 
     # ---- PAYMENTS -------------------------------------------------------------------------
@@ -1603,7 +1614,8 @@ class Importer:
         old_grads = sum(
             1
             for r in old.get("ENROLLMENTS", [])
-            if (t := p.to_decimal(r.get("final_score"))) is not None and t >= PASS_TOTAL
+            if (t := p.to_decimal(r.get("final_score"))) is not None
+            and grading.passes(self.standard, t)
         )
         rep.recon += [
             Recon(

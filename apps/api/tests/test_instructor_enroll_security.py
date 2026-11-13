@@ -176,7 +176,7 @@ async def test_mark_or_grade_of_an_enrollment_removed_meanwhile_is_404_not_500(
                 if write == "mark"
                 else ins.patch(
                     f"{E}/{added['id']}/grade",
-                    json={"homework": 5},
+                    json={"scores": {"homework": 5}},
                     headers={"X-Record-Version": "1"},
                 )
             )

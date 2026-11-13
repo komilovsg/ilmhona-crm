@@ -17,7 +17,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,8 +26,8 @@ from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
 from app.core import clock
 from app.core.db import DB
-from app.core.errors import NOT_FOUND, DomainError
-from app.core.versioning import Version, check_version
+from app.core.errors import NOT_FOUND, VALIDATION_FAILED, DomainError
+from app.core.versioning import Version, check_version, lock
 from app.education.errors import (
     COHORT_CLOSED,
     ENROLLED_AFTER_LESSON,
@@ -42,6 +42,7 @@ from app.metrics import (
     today_lessons,
     unfilled_lessons,
 )
+from app.metrics import grading as g
 from app.metrics.attendance import EXPELLED, enrolled_by
 from app.models import (
     AppUser,
@@ -50,6 +51,7 @@ from app.models import (
     Course,
     Enrollment,
     Grade,
+    GradeScore,
     Lesson,
     Room,
     Student,
@@ -63,6 +65,7 @@ View = Annotated[Principal, require("attendance", "view")]
 Change = Annotated[Principal, require("attendance", "change")]
 
 Reason = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
+CategoryKey = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,39}$")]
 
 
 class Strict(BaseModel):
@@ -75,10 +78,10 @@ class Mark(Strict):
 
 
 class GradeIn(Strict):
-    """Only the fields sent change (`null` clears one)."""
+    """Scores by category key; only the keys sent change (`null` clears one). The range
+    (0..weight) depends on the cohort's scheme and is checked by the endpoint."""
 
-    homework: Annotated[int, Field(ge=0, le=40)] | None = None
-    final: Annotated[int, Field(ge=0, le=40)] | None = None
+    scores: dict[CategoryKey, int | None] = Field(default_factory=dict, max_length=g.MAX_CATEGORIES)
 
 
 def _hm(dt: datetime) -> str:
@@ -445,10 +448,11 @@ def _grade_out(enrollment_id: uuid.UUID, result: dict[str, Any]) -> dict[str, An
     return {
         "enrollment_id": enrollment_id,
         "version": result["grade_version"],
-        "homework": result["homework"],
-        "final": result["final"],
-        "attendance_score": result["score"],
+        "scores": result["scores"],
+        "points": result["points"],
+        "attendance_score": result["attendance_score"],
         "total": result["total"],
+        "projected": result["projected"],
         "passed": result["passed"],
     }
 
@@ -482,24 +486,56 @@ async def _grade_rows(
     ]
 
 
+def _scheme_out(scheme: g.Scheme) -> dict[str, Any]:
+    return {
+        "source": scheme.source,
+        "pass_score": scheme.pass_score,
+        "categories": [
+            {"key": c.key, "name": c.name, "weight": c.weight, "kind": c.kind}
+            for c in scheme.categories
+        ],
+    }
+
+
 @router.get("/cohorts/{cohort_id}/grades")
-async def cohort_grades(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[str, Any]]:
-    return await _grade_rows(db, await _cohort(db, p, cohort_id))
+async def cohort_grades(cohort_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
+    """The cohort's effective scheme (the columns) and one row per student."""
+    cohort = await _cohort(db, p, cohort_id)
+    return {
+        "scheme": _scheme_out(await g.scheme_of(db, cohort.id)),
+        "rows": await _grade_rows(db, cohort),
+    }
 
 
-GRADE_COLUMNS: list[Col[dict[str, Any]]] = [
-    Col("Студент", lambda r: r["student_name"]),
-    Col("Статус", lambda r: r["status"]),
-    Col("Д/З", lambda r: r["homework"], "int"),
-    Col("Финал", lambda r: r["final"], "int"),
-    Col("Баллы за посещаемость", lambda r: r["attendance_score"], "int"),
-    Col("Итого", lambda r: r["total"], "int"),
-    Col("Зачёт", lambda r: r["passed"], "bool"),
-    Col("Проведено уроков", lambda r: r["held"], "int"),
-    Col("Присутствовал", lambda r: r["present"], "int"),
-    Col("Не отмечено", lambda r: r["unmarked"], "int"),
-    Col("Посещаемость", lambda r: r["percent"], "percent"),
-]
+def grade_columns(scheme: g.Scheme) -> list[Col[dict[str, Any]]]:
+    """Student, status, one column per category of the scheme (points), total, projected, pass,
+    then the attendance numbers."""
+
+    def points(key: str) -> Callable[[dict[str, Any]], Any]:
+        return lambda r: r["points"][key]
+
+    def entered(key: str) -> Callable[[dict[str, Any]], Any]:
+        return lambda r: r["scores"].get(key)
+
+    columns: list[Col[dict[str, Any]]] = [
+        Col("Студент", lambda r: r["student_name"]),
+        Col("Статус", lambda r: r["status"]),
+    ]
+    for c in scheme.categories:
+        if c.kind == g.ATTENDANCE:
+            columns.append(Col(f"{c.name} (авто, из {c.weight})", points(c.key), "int"))
+        else:
+            columns.append(Col(f"{c.name} (из {c.weight})", entered(c.key), "int"))
+    return [
+        *columns,
+        Col("Итого", lambda r: r["total"], "int"),
+        Col("Прогноз", lambda r: r["projected"], "int"),
+        Col(f"Зачёт (от {scheme.pass_score})", lambda r: r["passed"], "bool"),
+        Col("Проведено уроков", lambda r: r["held"], "int"),
+        Col("Присутствовал", lambda r: r["present"], "int"),
+        Col("Не отмечено", lambda r: r["unmarked"], "int"),
+        Col("Посещаемость", lambda r: r["percent"], "percent"),
+    ]
 
 
 @router.get("/cohorts/{cohort_id}/grades/export")
@@ -513,10 +549,27 @@ async def export_grades(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         entity="grade",
         slug=f"otsenki_{cohort.code}",
         title="Оценки",
-        columns=GRADE_COLUMNS,
+        columns=grade_columns(await g.scheme_of(db, cohort.id)),
         rows=rows,
         filters={"cohort": cohort.code},
     )
+
+
+def _check_scores(scheme: g.Scheme, scores: dict[str, int | None]) -> None:
+    """Every key a manual category of the scheme, every value 0..its weight: 422 naming the
+    field and the limit (the web shows «Не больше 40»)."""
+    manual = {c.key: c for c in scheme.manual}
+    errs: list[dict[str, Any]] = []
+    for key, value in scores.items():
+        loc = ["body", "scores", key]
+        if key not in manual:
+            errs.append({"loc": loc, "code": "unknown_category"})
+        elif value is not None and value < 0:
+            errs.append({"loc": loc, "code": "greater_than_equal", "ctx": {"ge": 0}})
+        elif value is not None and value > manual[key].weight:
+            errs.append({"loc": loc, "code": "less_than_equal", "ctx": {"le": manual[key].weight}})
+    if errs:
+        raise DomainError(VALIDATION_FAILED, errors=errs)
 
 
 @router.patch("/enrollments/{enrollment_id}/grade")
@@ -536,6 +589,8 @@ async def set_grade(
     check_cohort_visible(p, cohort)
     if cohort.status == st.CANCELLED:
         raise DomainError(COHORT_CLOSED)
+    scheme = await g.scheme_of(db, cohort.id)
+    _check_scores(scheme, body.scores)
     # a student has a grade row from the first save on; until then it reads as version 1
     await db.execute(pg_insert(Grade).values(enrollment_id=enrollment.id).on_conflict_do_nothing())
     grade = (
@@ -548,15 +603,43 @@ async def set_grade(
         ]
         return _grade_out(enrollment.id, result)
 
-    await check_version(
-        db, grade, version, "grade", current, changes=body.model_dump(exclude_unset=True)
-    )
-    before = {"homework": grade.homework, "final": grade.final}
-    for field in body.model_fields_set:
-        setattr(grade, field, getattr(body, field))
-    after = {"homework": grade.homework, "final": grade.final}
-    diff = {k: [before[k], after[k]] for k in after if before[k] != after[k]}
+    await lock(db, grade)
+    before: dict[str, int | None] = {
+        k: v
+        for k, v in (
+            await db.execute(
+                select(GradeScore.category_key, GradeScore.points).where(
+                    GradeScore.enrollment_id == enrollment.id
+                )
+            )
+        ).all()
+    }
+    # a double submit (a lost response) is not a conflict: everything sent is already there
+    applied = bool(body.scores) and all(before.get(k) == v for k, v in body.scores.items())
+    if not applied:
+        await check_version(db, grade, version, "grade", current)
+    names = {c.key: c.name for c in scheme.manual}
+    diff = {names[k]: [before.get(k), v] for k, v in body.scores.items() if before.get(k) != v}
     if diff:  # nothing changed: no new version, so nobody else's save goes stale for nothing
+        for key, value in body.scores.items():
+            if before.get(key) == value:
+                continue
+            if value is None:
+                await db.execute(
+                    delete(GradeScore).where(
+                        GradeScore.enrollment_id == enrollment.id, GradeScore.category_key == key
+                    )
+                )
+            else:
+                stmt = pg_insert(GradeScore).values(
+                    enrollment_id=enrollment.id, category_key=key, points=value
+                )
+                await db.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["enrollment_id", "category_key"],
+                        set_={"points": stmt.excluded.points},
+                    )
+                )
         grade.updated_at = _now()
         await db.flush()
         await record(

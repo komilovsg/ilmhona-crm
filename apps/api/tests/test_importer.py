@@ -395,8 +395,11 @@ async def test_grades_from_score_strings_and_the_grades_sheet(snapshot: dict[str
     grades = {
         r[0]: (r[1], r[2])
         for r in await sql(
-            "SELECT s.full_name, g.homework, g.final FROM grade g "
-            "JOIN enrollment e ON e.id = g.enrollment_id JOIN student s ON s.id = e.student_id"
+            "SELECT s.full_name, h.points, f.points FROM grade g "
+            "JOIN enrollment e ON e.id = g.enrollment_id JOIN student s ON s.id = e.student_id "
+            "LEFT JOIN grade_score h ON h.enrollment_id = g.enrollment_id "
+            "AND h.category_key = 'homework' "
+            "LEFT JOIN grade_score f ON f.enrollment_id = g.enrollment_id AND f.category_key = 'final'"
         )
     }
     assert grades["Мура Выдуманная"] == (40, 40)  # score:20|20|60 on the old 20 / 20 / 60 scale
@@ -466,7 +469,7 @@ async def test_attendance_creates_missing_lessons_and_resolves_conflicts(
 
 
 async def test_attendance_feeds_the_attendance_score(snapshot: dict[str, Any]) -> None:
-    from app.metrics import attendance_score
+    from app.metrics.grading import scaled_points
 
     await do_import(snapshot, apply=True)
     present, marked = await one(
@@ -475,7 +478,7 @@ async def test_attendance_feeds_the_attendance_score(snapshot: dict[str, Any]) -
         "WHERE s.full_name = 'Мура Выдуманная'"
     )
     assert (present, marked) == (3, 3)
-    assert attendance_score(3, 13) == 5  # computed, never stored (#12)
+    assert scaled_points(20, 3, 13) == 5  # computed, never stored (#12)
 
 
 # ---- sales, money ------------------------------------------------------------------------------

@@ -98,7 +98,9 @@ def _problem(
 
 async def _domain(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, DomainError)
-    return _problem(request, exc.error, exc.params)
+    # `errors` (field problems shaped like the request validation's) go where the web reads them
+    params = dict(exc.params)
+    return _problem(request, exc.error, params, params.pop("errors", None))
 
 
 async def _http(request: Request, exc: Exception) -> Response:

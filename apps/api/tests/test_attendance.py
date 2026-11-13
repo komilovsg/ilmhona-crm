@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.cli import daily
 from app.cohorts.status import today
-from app.metrics import attendance_score
+from app.metrics.grading import scaled_points
 from tests.conftest import SignedIn, branch_id, make_role, sql
 from tests.edu import C, body, make_cohort, make_course, make_room, make_student
 
@@ -78,7 +78,7 @@ async def test_bug_12_percent_is_of_held_lessons_and_unmarked_are_shown(
     row = await row_of(admin, cohort, e)
     # the old system said 100 % here (1 of 1 marked); the truth is 1 of 9 held lessons
     assert (row["held"], row["present"], row["unmarked"]) == (9, 1, 8)
-    assert row["percent"] == 11.1 and row["score"] == 2
+    assert row["percent"] == 11.1
     for lesson in lessons[1:4]:
         await mark(admin, lesson, e, present=False, reason="болел")
     row = await row_of(admin, cohort, e)
@@ -86,11 +86,11 @@ async def test_bug_12_percent_is_of_held_lessons_and_unmarked_are_shown(
 
 
 async def test_bug_12_attendance_score_rounds_20_x_present_over_held() -> None:
-    assert attendance_score(9, 9) == 20
-    assert attendance_score(5, 9) == 11  # 11.1
-    assert attendance_score(1, 8) == 3  # 2.5 rounds up
-    assert attendance_score(0, 9) == 0
-    assert attendance_score(0, 0) == 0  # nothing held yet: no score, no division by zero
+    assert scaled_points(20, 9, 9) == 20
+    assert scaled_points(20, 5, 9) == 11  # 11.1
+    assert scaled_points(20, 1, 8) == 3  # 2.5 rounds up
+    assert scaled_points(20, 0, 9) == 0
+    assert scaled_points(20, 0, 0) == 0  # nothing held yet: no score, no division by zero
 
 
 async def test_bug_12_student_enrolled_mid_course_counts_lessons_since_enrollment(
@@ -109,7 +109,7 @@ async def test_bug_12_student_enrolled_mid_course_counts_lessons_since_enrollmen
     for lesson in lessons[5:]:
         assert (await mark(admin, lesson, late)).status_code == 200
     row = await row_of(admin, cohort, late)
-    assert (row["held"], row["present"], row["percent"], row["score"]) == (4, 4, 100.0, 20)
+    assert (row["held"], row["present"], row["percent"]) == (4, 4, 100.0)
     # a lesson before he joined cannot be marked for him
     r = await mark(admin, lessons[0], late)
     assert (r.status_code, r.json()["code"]) == (422, "enrolled_after_lesson")
@@ -135,7 +135,7 @@ async def test_bug_12_future_lessons_are_not_held(admin: httpx.AsyncClient) -> N
     cohort = await make_cohort(admin, course, room)  # starts next week
     e = await enroll(admin, cohort, "Алиев")
     row = await row_of(admin, cohort, e)
-    assert (row["held"], row["unmarked"], row["percent"], row["score"]) == (0, 0, None, 0)
+    assert (row["held"], row["unmarked"], row["percent"]) == (0, 0, None)
 
 
 # ---- cells: the same cell, different cells -----------------------------------------------
@@ -209,26 +209,22 @@ async def test_cell_of_another_cohort_is_not_found(admin: httpx.AsyncClient) -> 
 # ---- grades ------------------------------------------------------------------------------
 
 
-async def test_grade_total_is_attendance_plus_homework_plus_final(
+async def test_grade_total_is_attendance_plus_homework_plus_final_on_the_standard(
     admin: httpx.AsyncClient,
 ) -> None:
     cohort, lessons = await past_cohort(admin)
     e = await enroll(admin, cohort, "Алиев")
     for lesson in lessons[:5]:
         await mark(admin, lesson, e)  # 5 of 9 held: round(100 / 9) = 11
-    row = (await admin.get(f"{C}/{cohort['id']}/grades")).json()[0]
-    assert (row["attendance_score"], row["homework"], row["final"], row["total"]) == (
-        11,
-        None,
-        None,
-        11,
-    )
+    row = (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"][0]
+    assert (row["attendance_score"], row["scores"], row["total"]) == (11, {}, 11)
     assert row["version"] == 1
-    r = await admin.patch(f"{E}/{e}/grade", json={"homework": 30, "final": 25})
+    r = await admin.patch(f"{E}/{e}/grade", json={"scores": {"homework": 30, "final": 25}})
     assert r.status_code == 200, r.text
     assert (r.json()["total"], r.json()["version"]) == (66, 2)
-    r = await admin.patch(f"{E}/{e}/grade", json={"final": None})  # only the sent field changes
-    assert (r.json()["homework"], r.json()["final"], r.json()["total"]) == (30, None, 41)
+    assert r.json()["points"] == {"attendance": 11, "homework": 30, "final": 25}
+    r = await admin.patch(f"{E}/{e}/grade", json={"scores": {"final": None}})  # only the sent field changes
+    assert (r.json()["scores"], r.json()["total"]) == ({"homework": 30}, 41)
 
 
 async def test_grade_version_conflict_and_range(
@@ -237,24 +233,28 @@ async def test_grade_version_conflict_and_range(
     cohort, _ = await past_cohort(admin)
     e = await enroll(admin, cohort, "Алиев")
     boris = await login_as("boris", await make_role("Оценщик", {"attendance": "change"}))
-    loaded = (await admin.get(f"{C}/{cohort['id']}/grades")).json()[0]["version"]
+    loaded = (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"][0]["version"]
     ok = await admin.patch(
-        f"{E}/{e}/grade", json={"homework": 30}, headers={"X-Record-Version": str(loaded)}
+        f"{E}/{e}/grade", json={"scores": {"homework": 30}}, headers={"X-Record-Version": str(loaded)}
     )
     assert ok.status_code == 200
     stale = await boris.patch(
-        f"{E}/{e}/grade", json={"final": 20}, headers={"X-Record-Version": str(loaded)}
+        f"{E}/{e}/grade", json={"scores": {"final": 20}}, headers={"X-Record-Version": str(loaded)}
     )
     assert (stale.status_code, stale.json()["code"]) == (409, "stale_version")
-    assert stale.json()["params"]["current"]["homework"] == 30
-    assert (await sql("SELECT homework, final FROM grade"))[0] == (30, None)
-    for bad in ({"homework": 41}, {"final": -1}):
-        assert (await admin.patch(f"{E}/{e}/grade", json=bad)).status_code == 422
-    r = await admin.patch(f"{E}/{e}/grade", json={"final": 20}, no_version=True)
+    assert stale.json()["params"]["current"]["scores"] == {"homework": 30}
+    assert await sql("SELECT category_key, points FROM grade_score") == [("homework", 30)]
+    for bad in ({"homework": 41}, {"final": -1}, {"project": 5}, {"Финал": 5}):
+        assert (await admin.patch(f"{E}/{e}/grade", json={"scores": bad})).status_code == 422
+    r = await admin.patch(f"{E}/{e}/grade", json={"scores": {"homework": 41}})
+    assert r.json()["errors"] == [
+        {"loc": ["body", "scores", "homework"], "code": "less_than_equal", "ctx": {"le": 40}}
+    ]
+    r = await admin.patch(f"{E}/{e}/grade", json={"scores": {"final": 20}}, no_version=True)
     assert r.status_code == 428
     # the database refuses it too
     with pytest.raises(IntegrityError):
-        await sql("UPDATE grade SET homework = 99")
+        await sql("UPDATE grade_score SET points = 101")
 
 
 # ---- graduation at close -----------------------------------------------------------------
@@ -272,8 +272,8 @@ async def test_closing_the_cohort_graduates_at_70_and_completes_the_rest(
         await admin.post(f"{L}/{lesson}/attendance/all-present")  # attendance 20 for everyone
     await admin.patch(f"{E}/{top}", json={"status": "активный"})
     await admin.patch(f"{E}/{gone}", json={"status": "отчислен"})
-    await admin.patch(f"{E}/{top}/grade", json={"homework": 30, "final": 20})  # 70
-    await admin.patch(f"{E}/{edge}/grade", json={"homework": 30, "final": 19})  # 69
+    await admin.patch(f"{E}/{top}/grade", json={"scores": {"homework": 30, "final": 20}})  # 70
+    await admin.patch(f"{E}/{edge}/grade", json={"scores": {"homework": 30, "final": 19}})  # 69
     assert await daily() == 1
     status = {str(i): s for i, s in await sql("SELECT id, status FROM enrollment")}
     assert status == {top: "выпускник", edge: "завершил", none: "завершил", gone: "отчислен"}
@@ -336,7 +336,7 @@ async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_writes_not
 
     assert (await mark(ins, my_lessons[0], my_e)).status_code == 200
     assert (await ins.post(f"{L}/{my_lessons[1]}/attendance/all-present")).status_code == 200
-    assert (await ins.patch(f"{E}/{my_e}/grade", json={"homework": 35})).status_code == 200
+    assert (await ins.patch(f"{E}/{my_e}/grade", json={"scores": {"homework": 35}})).status_code == 200
     assert (await ins.get(f"{C}/{mine['id']}/attendance")).status_code == 200
 
     for r in (
@@ -345,7 +345,7 @@ async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_writes_not
         await ins.get(f"{L}/{their_lessons[0]}/attendance"),
         await ins.get(f"{C}/{theirs['id']}/attendance"),
         await ins.get(f"{C}/{theirs['id']}/grades"),
-        await ins.patch(f"{E}/{their_e}/grade", json={"homework": 40}),
+        await ins.patch(f"{E}/{their_e}/grade", json={"scores": {"homework": 40}}),
     ):
         assert (r.status_code, r.json()["code"]) == (404, "not_found")
     assert (await sql("SELECT count(*) FROM attendance"))[0][0] == 2  # mine only
@@ -436,7 +436,7 @@ async def test_bug_24_instructor_adds_new_students_to_own_cohort_and_removes_onl
     marked = await add()
     assert (await mark(ins, my_lessons[0], marked)).status_code == 200
     graded = await add()
-    assert (await ins.patch(f"{E}/{graded}/grade", json={"homework": 5})).status_code == 200
+    assert (await ins.patch(f"{E}/{graded}/grade", json={"scores": {"homework": 5}})).status_code == 200
     paid = await add()
     await sql(
         "INSERT INTO payment (enrollment_id, month_no, amount, method, paid_at, "
@@ -505,7 +505,7 @@ async def test_attendance_rights_view_does_not_write_and_branch_scope(
     assert (await viewer.get(f"{L}/{lessons[0]}/attendance")).status_code == 200
     r = await mark(viewer, lessons[0], e)
     assert (r.status_code, r.json()["code"]) == (403, "forbidden")
-    assert (await viewer.patch(f"{E}/{e}/grade", json={"homework": 1})).status_code == 403
+    assert (await viewer.patch(f"{E}/{e}/grade", json={"scores": {"homework": 1}})).status_code == 403
     nothing = await login_as("none", await make_role("Без прав", {"cohorts": "view"}))
     assert (await nothing.get(f"{C}/{cohort['id']}/attendance")).status_code == 403
     istar = await login_as(
