@@ -1,5 +1,5 @@
 // API shapes of the money screens (stage 2).
-import type { MonthState } from "./payment-month";
+import type { DueMonth, MonthState } from "./payment-month";
 import type { Paged } from "./types";
 
 /** Amounts arrive as strings («500.00») from lists and as numbers inside a 409's `current`. */
@@ -55,7 +55,7 @@ export type DebtorRow = {
   debt: Money;
   month_states: MonthState[];
   /** Started months not covered yet and what is left of each. */
-  due_months: { month_no: number; remaining: Money }[];
+  due_months: DueMonth[];
 };
 
 export type DebtorsPage = Paged<DebtorRow> & { total_debt: Money };
@@ -100,7 +100,7 @@ export type EnrollmentPayments = {
   expected: Money;
   debt: Money;
   month_states: MonthState[];
-  due_months: { month_no: number; remaining: Money }[];
+  due_months: DueMonth[];
 };
 
 export type InstructorCard = {

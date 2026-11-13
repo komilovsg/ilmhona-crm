@@ -27,11 +27,14 @@ export function BarList({ title, rows, note }: { title: string; rows: Bar[]; not
             >
               <span className="truncate text-default-600">{r.label}</span>
               <span className="flex items-center gap-2">
-                <span
-                  className="h-4 min-w-0.5 rounded-r"
-                  style={{ width: `${(r.value / max) * 100}%`, maxWidth: "calc(100% - 6rem)", background: "var(--series-1)" }}
-                />
-                <span className="shrink-0 whitespace-nowrap tabular-nums">
+                {/* the track takes what the figure leaves, the bar is a share of the track: 3 vs 2 looks 3:2 */}
+                <span className="min-w-0 flex-1">
+                  <span
+                    className="block h-4 min-w-0.5 rounded-r"
+                    style={{ width: `${(r.value / max) * 100}%`, background: "var(--series-1)" }}
+                  />
+                </span>
+                <span className="w-24 shrink-0 whitespace-nowrap tabular-nums">
                   {r.text}
                   {r.hint && <span className="text-xs text-default-500"> {r.hint}</span>}
                 </span>

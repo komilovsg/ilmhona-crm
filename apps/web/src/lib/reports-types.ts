@@ -28,6 +28,8 @@ export type Overview = {
   graduates: number;
   converted: number;
   cac: string | null;
+  /** Total debt (confirmed payments only); null without the payments right. */
+  debt: string | null;
   unfilled: {
     count: number;
     items: {

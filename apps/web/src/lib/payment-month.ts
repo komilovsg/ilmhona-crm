@@ -40,7 +40,23 @@ export type MonthState = {
   remaining: Money;
   overpaid?: Money;
   state: "не оплачен" | "частично" | "оплачен";
+  /** «оплачен» only because of pending payments: the debt (confirmed only) still counts it. */
+  awaiting?: boolean;
+  /** The month has begun (false: «не наступил»). */
+  started?: boolean;
 };
+
+export type DueMonth = { month_no: number; remaining: Money; awaiting?: boolean };
+
+/** The chip a month gets: оплачен / ожидает / не оплачен (began, not covered) / не наступил. */
+export type MonthKind = "paid" | "awaiting" | "unpaid" | "future";
+
+export function monthKind(s: Pick<MonthState, "state" | "awaiting" | "started">): MonthKind {
+  if (s.awaiting) return "awaiting";
+  if (s.state === "оплачен") return "paid";
+
+  return s.started === false ? "future" : "unpaid";
+}
 
 /** First month that still takes a payment; null when every month is full. */
 export function defaultMonth(months: number, fullMonths: number[]): number | null {
@@ -125,7 +141,11 @@ export function monthConflictText(error: unknown): string | null {
 }
 
 /** «не оплачен» · «частично: 200 из 500 TJS» · «оплачен» · «переплата 200 TJS». */
-export function monthStateLabel(s: Pick<MonthState, "state" | "paid" | "price" | "overpaid">): string {
+export function monthStateLabel(
+  s: Pick<MonthState, "state" | "paid" | "price" | "overpaid"> & Partial<Pick<MonthState, "awaiting" | "started">>,
+): string {
+  if (s.awaiting) return "ожидает подтверждения";
+  if (monthKind(s) === "future") return "не наступил";
   if (Number(s.overpaid ?? 0) > 0) return `переплата ${tjs(s.overpaid ?? 0)}`;
   if (s.state === "частично") return `частично: ${tjs(s.paid).replace(" TJS", "")} из ${tjs(s.price)}`;
 
@@ -154,7 +174,7 @@ export function monthOptionLabel(
   const text =
     state.state === "частично" && !(Number(state.overpaid ?? 0) > 0)
       ? `${tjs(state.paid).replace(" TJS", "")} / ${tjs(state.price).replace(" TJS", "")}`
-      : monthStateLabel(state);
+      : monthStateLabel({ ...state, awaiting: false });
 
   return `${month}-й · ${text}${Number(state.pending) > 0 ? " · ожидает" : ""}`;
 }
@@ -169,4 +189,44 @@ export function partialAmountOk(amount: string, remaining: Money): boolean {
 /** «2: 300 TJS, 3: 500 TJS» — what is left of each started month (debtors). */
 export function dueText(due: { month_no: number; remaining: Money }[]): string {
   return due.map((d) => `${d.month_no}: ${tjs(d.remaining)}`).join(", ");
+}
+
+function monthsText(months: number[]): string {
+  const names = months.map((m) => `${m}-й`);
+
+  return names.length < 2 ? names.join("") : `${names.slice(0, -1).join(", ")} и ${names[names.length - 1]}`;
+}
+
+/**
+ * Debtor card wording, one line per kind: «Не оплачены 1-й и 3-й мес. · по 600 TJS» (equal amounts grouped),
+ * «Не оплачены: 1-й — 600, 3-й — 400» (different amounts), «Ожидает подтверждения: 2-й мес. · 500 TJS».
+ */
+export function debtLines(due: DueMonth[]): string[] {
+  const unpaid = due.filter((d) => !d.awaiting);
+  const waiting = due.filter((d) => d.awaiting);
+  const lines: string[] = [];
+  const sum = (rows: DueMonth[]) => {
+    const amounts = new Set(rows.map((d) => Number(d.remaining)));
+
+    return amounts.size === 1 ? tjs(rows[0].remaining) : null;
+  };
+
+  if (unpaid.length) {
+    const same = sum(unpaid);
+
+    lines.push(
+      same
+        ? `${unpaid.length > 1 ? "Не оплачены" : "Не оплачен"} ${monthsText(unpaid.map((d) => d.month_no))} мес. · ${unpaid.length > 1 ? "по " : ""}${same}`
+        : `Не оплачены: ${unpaid.map((d) => `${d.month_no}-й — ${tjs(d.remaining).replace(" TJS", "")}`).join(", ")} TJS`,
+    );
+  }
+  if (waiting.length) {
+    const same = sum(waiting);
+
+    lines.push(
+      `Ожидает подтверждения: ${same ? `${monthsText(waiting.map((d) => d.month_no))} мес. · ${waiting.length > 1 ? "по " : ""}${same}` : `${waiting.map((d) => `${d.month_no}-й — ${tjs(d.remaining).replace(" TJS", "")}`).join(", ")} TJS`}`,
+    );
+  }
+
+  return lines;
 }

@@ -1,15 +1,22 @@
 import clsx from "clsx";
 
-import { monthStateLabel, type MonthState } from "@/lib/payment-month";
+import { monthKind, monthStateLabel, type MonthKind, type MonthState } from "@/lib/payment-month";
+
+const KIND: Record<MonthKind, string> = {
+  paid: "bg-success/15 text-success-700 dark:text-success",
+  awaiting: "border border-dashed border-warning bg-warning/15 text-warning-700 dark:text-warning",
+  unpaid: "bg-danger/15 text-danger",
+  future: "bg-default-100 text-default-500",
+};
 
 /**
- * The months of an enrollment as small numbered marks: оплачен (green), частично (amber, with
- * «A из B» spelled out below), не оплачен (grey). Pending payments count, like the payment rule.
+ * The months of an enrollment as small numbered marks: оплачен (green), ожидает подтверждения (amber, dashed),
+ * не оплачен (red: the month began, not covered), не наступил (grey). Partial months are spelled out below.
  */
 export function MonthStates({ states, className }: { states: MonthState[]; className?: string }) {
   if (!states.length) return null;
   // spelled out: partial months and old-system overpayments («переплата N TJS»)
-  const partial = states.filter((s) => s.state === "частично" || Number(s.overpaid ?? 0) > 0);
+  const partial = states.filter((s) => (s.state === "частично" && s.started !== false) || Number(s.overpaid ?? 0) > 0);
 
   return (
     <div className={clsx("text-xs", className)}>
@@ -18,12 +25,7 @@ export function MonthStates({ states, className }: { states: MonthState[]; class
           <li
             key={s.month_no}
             aria-label={`Месяц ${s.month_no}: ${monthStateLabel(s)}`}
-            className={clsx(
-              "flex h-5 min-w-5 items-center justify-center rounded-md px-1 font-medium tabular-nums",
-              s.state === "оплачен" && "bg-success/15 text-success-700 dark:text-success",
-              s.state === "частично" && "bg-warning/20 text-warning-700 dark:text-warning",
-              s.state === "не оплачен" && "bg-default-100 text-default-500",
-            )}
+            className={clsx("flex h-5 min-w-5 items-center justify-center rounded-md px-1 font-medium tabular-nums", KIND[monthKind(s)])}
             title={`Месяц ${s.month_no}: ${monthStateLabel(s)}`}
           >
             {s.month_no}

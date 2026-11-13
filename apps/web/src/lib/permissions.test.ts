@@ -73,6 +73,18 @@ test("phone: four main items, the rest goes to «Ещё»", () => {
   assert.deepEqual(splitNav(visibleNav(instructor, "instructor")).more, []);
 });
 
+test("phone: users who see payments get Дашборд, Лиды, Студенты, Оплаты; «Сегодня» goes to «Ещё»", () => {
+  const withToday = { ...manager, attendance: "view" } as Permissions;
+  const { main, more } = splitNav(visibleNav(withToday, "manager"), "manager");
+  assert.deepEqual(main.map((i) => i.href), ["/dashboard", "/leads", "/students", "/payments"]);
+  assert.ok(more.some((i) => i.href === "/today"));
+  // without payments nothing changes: the first four
+  const noPay = { ...withToday, payments: undefined } as Permissions;
+  assert.deepEqual(splitNav(visibleNav(noPay, "manager"), "manager").main.map((i) => i.href), ["/dashboard", "/today", "/leads", "/students"]);
+  // the instructor's bar is unchanged
+  assert.deepEqual(splitNav(visibleNav(instructor, "instructor"), "instructor").main.map((i) => i.href), splitNav(visibleNav(instructor, "instructor")).main.map((i) => i.href));
+});
+
 test("home is the first visible section, the profile when there is none", () => {
   assert.equal(homePath(manager), "/dashboard");
   assert.equal(homePath(instructor, "instructor"), "/today"); // the instructor lands on «Сегодня»
