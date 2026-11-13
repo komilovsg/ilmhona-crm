@@ -8,6 +8,7 @@ import { Input } from "@heroui/input";
 import { BarList } from "@/components/charts/BarList";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { ExportButton } from "@/components/ExportButton";
+import { DashboardTop } from "@/components/goals/DashboardTop";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, QueryState } from "@/components/QueryState";
 import { Segmented } from "@/components/Segmented";
@@ -287,6 +288,7 @@ export default function DashboardPage() {
         actions={tab === "months" ? <ExportButton params={{ branch_id: params.branch_id }} path="/api/v1/dashboard/by-month/export" /> : undefined}
         title="Дашборд"
       />
+      <DashboardTop />
       <div className="mb-4 flex flex-wrap items-end gap-3">
         <Segmented label="Раздел дашборда" options={[...TABS]} value={tab} onChange={setTab} />
         {(!me?.branch || shown.length > 1) && (
