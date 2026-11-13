@@ -291,15 +291,28 @@ export type GradeRow = {
   student_id: string;
   student_name: string;
   status: string;
-  homework: number | null;
-  final: number | null;
+  /** Entered points by category key (archived categories included). */
+  scores: Record<string, number>;
+  /** Counted points by category key of the cohort's scheme. */
+  points: Record<string, number>;
   attendance_score: number;
   total: number;
+  /** The total scaled up from the categories that already count; null = nothing yet. */
+  projected: number | null;
   passed: boolean;
   held: number;
   present: number;
   unmarked: number;
   percent: number | null;
+};
+
+export type GradesData = {
+  scheme: {
+    source: "standard" | "cohort";
+    pass_score: number;
+    categories: { key: string; name: string; weight: number; kind: "attendance" | "manual" }[];
+  };
+  rows: GradeRow[];
 };
 
 export type SessionRow = {

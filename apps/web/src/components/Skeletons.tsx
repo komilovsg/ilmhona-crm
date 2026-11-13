@@ -201,3 +201,23 @@ export function ListPageSkeleton({
     </Late>
   );
 }
+
+/** A grading scheme card: the title, the category chips, the pass score and the targets. */
+export function SchemeSkeleton() {
+  return (
+    <div className="space-y-4 rounded-2xl bg-content1 p-4 md:p-5">
+      <Bone className="h-6 w-40" />
+      <Bone className="h-4 w-full max-w-xl" />
+      <div className="flex flex-wrap gap-2">
+        {[0, 1, 2].map((i) => (
+          <Bone key={i} className="h-8 w-36 rounded-lg" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Bone key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    </div>
+  );
+}

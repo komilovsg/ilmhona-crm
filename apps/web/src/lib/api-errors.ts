@@ -100,6 +100,7 @@ export function errorText(code: string | undefined, params?: Record<string, unkn
   return text.replace(/\{(\w+)\}/g, (_, key: string) => {
     const value = params?.[key];
 
+    if (Array.isArray(value)) return value.join("; ");
     // a day arrives as ISO (2026-11-17), people read 17.11.2026
     return typeof value === "string" && ISO_DAY.test(value) ? fullDate(value) : String(value ?? "");
   });
