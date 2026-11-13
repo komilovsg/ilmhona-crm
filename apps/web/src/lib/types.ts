@@ -137,6 +137,9 @@ export type EnrollmentRow = {
   enrolled_at: string;
   needs_review: boolean;
   review_reason: string | null;
+  /** hints for the instructor: they added it, and it has no payments, marks or grades */
+  created_by_me: boolean;
+  deletable: boolean;
 };
 
 export type StudentRow = {
