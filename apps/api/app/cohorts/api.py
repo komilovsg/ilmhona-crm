@@ -91,6 +91,7 @@ Capacity = Annotated[int, Field(ge=1, le=100)]
 Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
 WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 ENROLLMENT_STATUSES = ("активный", "завершил", "выпускник", "отчислен")
+ENROLLED = ENROLLMENT_STATUSES[0]
 
 
 def window_problem(start: time, end: time) -> str | None:
@@ -899,8 +900,8 @@ async def cancel_lesson(lesson_id: uuid.UUID, p: Change, db: DB) -> dict[str, An
 def _enrollment_out(
     e: Enrollment, s: Student, me: uuid.UUID | None = None, records: bool = True
 ) -> dict[str, Any]:
-    """`created_by_me` / `deletable` are hints for the instructor's UI: their own row with no
-    payments, marks or grades. The DELETE endpoint decides again."""
+    """`created_by_me` / `deletable` are hints for the instructor's UI: their own row, still
+    active, with no payments, marks, grades or job. The DELETE endpoint decides again."""
     mine = me is not None and e.created_by == me
     return {
         "id": e.id,
@@ -916,7 +917,7 @@ def _enrollment_out(
         "needs_review": e.needs_review,
         "review_reason": e.review_reason,
         "created_by_me": mine,
-        "deletable": mine and not records,
+        "deletable": mine and not records and e.status == ENROLLED,
     }
 
 
@@ -938,13 +939,14 @@ async def list_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> list[dict[s
 
 
 async def _with_records(db: AsyncSession, ids: list[uuid.UUID]) -> set[uuid.UUID]:
-    """The enrollments among `ids` that have a payment (any status), a mark or a grade."""
+    """The enrollments among `ids` that have a payment (any status), a mark, a grade or a job."""
     if not ids:
         return set()
-    query = union(
+    query: Any = union(
         select(Payment.enrollment_id).where(Payment.enrollment_id.in_(ids)),
         select(Attendance.enrollment_id).where(Attendance.enrollment_id.in_(ids)),
         select(Grade.enrollment_id).where(Grade.enrollment_id.in_(ids)),
+        select(Employment.enrollment_id).where(Employment.enrollment_id.in_(ids)),
     )
     return set((await db.execute(query)).scalars())
 
@@ -1158,13 +1160,14 @@ async def remove_enrollment(enrollment_id: uuid.UUID, p: Enroller, db: DB) -> No
 
 
 async def _remove_own(db: AsyncSession, p: Principal, enrollment_id: uuid.UUID) -> None:
-    """An instructor takes back an enrollment they added by mistake: own cohort, own row, no
-    payments, marks or grades. The student goes too when this instructor created them and
-    nothing else holds them (no other enrollment, no lead, no employment)."""
+    """An instructor takes back an enrollment they added by mistake: own cohort, own row, still
+    active (a status is the manager's decision, #24), no payments, marks, grades or job. The
+    student goes too when this instructor created them and nothing else holds them (no other
+    enrollment, no lead, no employment)."""
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id, lock=True)
     if enrollment.created_by != p.id:
         raise DomainError(ENROLLMENT_NOT_YOURS)
-    if await _with_records(db, [enrollment.id]):
+    if enrollment.status != ENROLLED or await _with_records(db, [enrollment.id]):
         raise DomainError(ENROLLMENT_HAS_RECORDS)
     await db.delete(enrollment)
     await db.flush()
