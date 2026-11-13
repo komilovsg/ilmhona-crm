@@ -312,7 +312,7 @@ function GradesList({ cohortId, canMark, rows }: { cohortId: string; canMark: bo
         </p>
         <ExportButton label="Оценки" path={`/api/v1/cohorts/${cohortId}/grades/export`} />
       </div>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>

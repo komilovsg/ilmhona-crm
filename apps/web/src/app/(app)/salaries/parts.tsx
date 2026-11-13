@@ -59,7 +59,7 @@ function RowActions({ r, a }: { r: SalaryRow; a: Actions }) {
 export function ScheduleList({ rows, actions, showInstructor = true }: { rows: SalaryRow[]; actions?: Actions; showInstructor?: boolean }) {
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -106,7 +106,7 @@ export function ScheduleList({ rows, actions, showInstructor = true }: { rows: S
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="font-medium capitalize">{monthLabel(r.period)}</div>
-                <div className="truncate text-sm text-default-500">
+                <div className="break-words text-sm text-default-500">
                   {showInstructor ? `${r.instructor_name} · ` : ""}
                   <Link className="text-brand-text" href={`/cohorts/${r.cohort_id}`}>
                     {r.cohort_code}
@@ -146,7 +146,7 @@ export function ScheduleList({ rows, actions, showInstructor = true }: { rows: S
 export function PayoutsList({ rows, showInstructor = true }: { rows: PayoutRow[]; showInstructor?: boolean }) {
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -184,7 +184,7 @@ export function PayoutsList({ rows, showInstructor = true }: { rows: PayoutRow[]
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="font-medium capitalize">{monthLabel(p.period)}</div>
-                <div className="truncate text-sm text-default-500">
+                <div className="break-words text-sm text-default-500">
                   {showInstructor ? `${p.instructor_name} · ` : ""}
                   {p.cohort_code} · {p.course_name}
                 </div>

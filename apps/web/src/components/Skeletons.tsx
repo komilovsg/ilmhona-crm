@@ -22,7 +22,7 @@ const WIDTHS = ["w-40", "w-28", "w-24", "w-32", "w-20", "w-16"];
 /** Desktop table: header row (text-xs, py-3) and body rows (text-sm, py-3), like the real ones. */
 export function TableSkeleton({ cols = 5, rows = 8 }: { cols?: number; rows?: number }) {
   return (
-    <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+    <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-divider text-xs text-default-500">
           <tr>

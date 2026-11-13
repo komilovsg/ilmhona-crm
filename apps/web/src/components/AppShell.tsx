@@ -292,7 +292,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <TopProgress />
         <aside className="sb-aside fixed inset-y-0 left-0 hidden bg-sidebar md:block" />
         <header className="sticky top-0 z-20 h-[calc(57px+env(safe-area-inset-top))] border-b border-divider bg-content1" />
-        <main className="mx-auto max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
+        <main className="mx-auto min-w-0 max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
           <span className="sr-only" role="status">
             Загрузка…
           </span>
@@ -327,7 +327,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
+      <main className="mx-auto min-w-0 max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
         {canOpen(me.permissions, pathname, me.role.code) ? (
           <div key={pathname} className="page-in">
             {children}

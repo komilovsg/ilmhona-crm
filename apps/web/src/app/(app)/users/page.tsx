@@ -311,7 +311,7 @@ export default function UsersPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(q) => set({ ...filters, q })}
         />
-        <div className="hidden gap-3 md:flex">
+        <div className="hidden flex-wrap gap-3 md:flex">
           <FilterFields filters={filters} set={set} />
         </div>
         <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
@@ -338,7 +338,7 @@ export default function UsersPage() {
         skeleton={<ListSkeleton cols={7} />}
       >
         <>
-          <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+          <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>

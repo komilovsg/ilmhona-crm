@@ -156,7 +156,7 @@ function RowActions({ p, canPay, a }: { p: PaymentRow; canPay: boolean; a: Actio
 function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean; a: Actions }) {
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -271,7 +271,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
 
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -515,7 +515,7 @@ export default function PaymentsPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(q) => set({ ...filters, q })}
         />
-        <div className="hidden gap-3 md:flex">
+        <div className="hidden flex-wrap gap-3 md:flex">
           <FilterFields debtors={debtors} filters={filters} set={set} />
         </div>
         <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>

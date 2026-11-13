@@ -218,7 +218,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         skeleton={<ListSkeleton cols={4} rows={5} />}
       >
         <>
-          <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+          <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>

@@ -101,7 +101,7 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
     <section aria-label={c.full_name} className="flex flex-col gap-4 rounded-2xl bg-content1 p-4">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h2 className="min-w-0 truncate text-base font-semibold">{c.full_name}</h2>
+          <h2 className="min-w-0 break-words text-base font-semibold">{c.full_name}</h2>
           {!c.is_active && <span className="shrink-0 rounded-full bg-default-100 px-2 py-0.5 text-xs">нет доступа</span>}
         </div>
         {/* always mounted: once the account is active the button goes, the password modal stays */}
@@ -130,6 +130,7 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
         {canEdit && (
           <Button
             aria-label={`Изменить ставку: ${c.full_name}`}
+            className="shrink-0"
             size="sm"
             startContent={<Icon name="edit" size={16} />}
             color="primary" variant="flat"
