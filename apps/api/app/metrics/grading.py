@@ -17,9 +17,9 @@
 """
 
 import uuid
-from decimal import Decimal
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import ColumnElement, or_, select

@@ -223,7 +223,9 @@ async def test_grade_total_is_attendance_plus_homework_plus_final_on_the_standar
     assert r.status_code == 200, r.text
     assert (r.json()["total"], r.json()["version"]) == (66, 2)
     assert r.json()["points"] == {"attendance": 11, "homework": 30, "final": 25}
-    r = await admin.patch(f"{E}/{e}/grade", json={"scores": {"final": None}})  # only the sent field changes
+    r = await admin.patch(
+        f"{E}/{e}/grade", json={"scores": {"final": None}}
+    )  # only the sent field changes
     assert (r.json()["scores"], r.json()["total"]) == ({"homework": 30}, 41)
 
 
@@ -235,7 +237,9 @@ async def test_grade_version_conflict_and_range(
     boris = await login_as("boris", await make_role("Оценщик", {"attendance": "change"}))
     loaded = (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"][0]["version"]
     ok = await admin.patch(
-        f"{E}/{e}/grade", json={"scores": {"homework": 30}}, headers={"X-Record-Version": str(loaded)}
+        f"{E}/{e}/grade",
+        json={"scores": {"homework": 30}},
+        headers={"X-Record-Version": str(loaded)},
     )
     assert ok.status_code == 200
     stale = await boris.patch(
@@ -336,7 +340,9 @@ async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_writes_not
 
     assert (await mark(ins, my_lessons[0], my_e)).status_code == 200
     assert (await ins.post(f"{L}/{my_lessons[1]}/attendance/all-present")).status_code == 200
-    assert (await ins.patch(f"{E}/{my_e}/grade", json={"scores": {"homework": 35}})).status_code == 200
+    assert (
+        await ins.patch(f"{E}/{my_e}/grade", json={"scores": {"homework": 35}})
+    ).status_code == 200
     assert (await ins.get(f"{C}/{mine['id']}/attendance")).status_code == 200
 
     for r in (
@@ -436,7 +442,9 @@ async def test_bug_24_instructor_adds_new_students_to_own_cohort_and_removes_onl
     marked = await add()
     assert (await mark(ins, my_lessons[0], marked)).status_code == 200
     graded = await add()
-    assert (await ins.patch(f"{E}/{graded}/grade", json={"scores": {"homework": 5}})).status_code == 200
+    assert (
+        await ins.patch(f"{E}/{graded}/grade", json={"scores": {"homework": 5}})
+    ).status_code == 200
     paid = await add()
     await sql(
         "INSERT INTO payment (enrollment_id, month_no, amount, method, paid_at, "
@@ -505,7 +513,9 @@ async def test_attendance_rights_view_does_not_write_and_branch_scope(
     assert (await viewer.get(f"{L}/{lessons[0]}/attendance")).status_code == 200
     r = await mark(viewer, lessons[0], e)
     assert (r.status_code, r.json()["code"]) == (403, "forbidden")
-    assert (await viewer.patch(f"{E}/{e}/grade", json={"scores": {"homework": 1}})).status_code == 403
+    assert (
+        await viewer.patch(f"{E}/{e}/grade", json={"scores": {"homework": 1}})
+    ).status_code == 403
     nothing = await login_as("none", await make_role("Без прав", {"cohorts": "view"}))
     assert (await nothing.get(f"{C}/{cohort['id']}/attendance")).status_code == 403
     istar = await login_as(

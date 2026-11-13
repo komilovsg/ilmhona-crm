@@ -37,7 +37,9 @@ async def test_grades_export_equals_list(admin: httpx.AsyncClient) -> None:
     cohort, lessons = await past_cohort(admin)
     zed, amy = await enroll(admin, cohort, "Zed"), await enroll(admin, cohort, "Amy")
     await mark(admin, lessons[0], amy)
-    await admin.patch(f"/api/v1/enrollments/{amy}/grade", json={"scores": {"homework": 30, "final": 25}})
+    await admin.patch(
+        f"/api/v1/enrollments/{amy}/grade", json={"scores": {"homework": 30, "final": 25}}
+    )
     listed = (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"]
     book = sheets(await admin.get(f"{C}/{cohort['id']}/grades/export"))
     assert list(book) == ["Оценки"]

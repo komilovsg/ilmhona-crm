@@ -21,7 +21,9 @@ ML = "/api/v1/master-list"
 
 
 async def grade(c: httpx.AsyncClient, enrollment: str, homework: int, final: int) -> None:
-    r = await c.patch(f"{E}/{enrollment}/grade", json={"scores": {"homework": homework, "final": final}})
+    r = await c.patch(
+        f"{E}/{enrollment}/grade", json={"scores": {"homework": homework, "final": final}}
+    )
     assert r.status_code == 200, r.text
 
 

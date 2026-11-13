@@ -17,10 +17,10 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.attendance import journal as jr
 from app.audit.log import record
 from app.auth.deps import CurrentUser, Principal, require, require_csrf_header
 from app.cohorts import status as st
-from app.attendance import journal as jr
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, STALE_VERSION, DomainError
 from app.core.versioning import Version, _last_change, check_version
