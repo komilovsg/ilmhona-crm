@@ -199,7 +199,7 @@ export function SchemeEditor({
               </div>
               <input
                 aria-label="Название категории"
-                className="h-11 min-w-0 flex-1 rounded-lg border border-default-300 bg-content2 px-3 text-base outline-none focus:border-primary md:h-9 md:text-sm"
+                className="h-11 min-w-0 flex-1 basis-40 rounded-lg border border-default-300 bg-content2 px-3 text-base outline-none focus:border-primary md:h-9 md:text-sm"
                 maxLength={60}
                 value={c.name}
                 onChange={(e) => setCategory(i, { name: e.target.value })}

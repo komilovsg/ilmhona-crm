@@ -71,6 +71,7 @@ for (const vp of VIEWPORTS) {
     "/master-list",
     "/graduates",
     "/employment",
+    "/settings/grading",
     ...(cohort ? [`/cohorts/${cohort.id}`] : []),
     "/students",
     ...(student ? [`/students/${student.id}`] : []),

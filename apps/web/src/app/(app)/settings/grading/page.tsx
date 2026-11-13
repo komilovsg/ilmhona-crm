@@ -20,13 +20,14 @@ import { PageHeader } from "@/components/PageHeader";
 import { QueryState } from "@/components/QueryState";
 import { SchemeSkeleton } from "@/components/Skeletons";
 import { api } from "@/lib/api";
-import { fullDate } from "@/lib/education";
 
 type Standard = SchemePayload & {
   updated_at: string;
   updated_by_name: string | null;
   cohorts_with_own: number;
 };
+
+const changedOn = new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Dushanbe" });
 
 const PATH = "/api/v1/grading/standard";
 
@@ -100,7 +101,7 @@ function Standard({ data }: { data: Standard }) {
           </p>
         )}
         <p className="text-xs text-default-500">
-          Изменено {fullDate(data.updated_at.slice(0, 10))}
+          Изменено {changedOn.format(new Date(data.updated_at))}
           {data.updated_by_name ? ` · ${data.updated_by_name}` : ""}.
           {!data.can_edit && " Менять стандарт может только суперадмин."}
         </p>

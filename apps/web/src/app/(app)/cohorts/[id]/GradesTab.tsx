@@ -100,7 +100,7 @@ function PassChip({ row }: { row: GradeRow }) {
   return (
     <span
       className={clsx(
-        "rounded-md px-2 py-0.5 text-xs font-medium",
+        "whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium",
         row.passed ? "bg-success/15 text-success-700 dark:text-success" : "bg-default-100 text-default-600",
       )}
     >
