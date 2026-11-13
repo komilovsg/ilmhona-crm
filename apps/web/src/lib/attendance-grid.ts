@@ -1,4 +1,4 @@
-// Pure helpers of the journal table (month filter, mark cycle). No React, no imports: unit-tested
+// Pure helpers of the journal table (month filter, mark keys). No React, no imports: unit-tested
 // with node --test. Percentages stay on the API side.
 
 export const ALL_MONTHS = "all";
@@ -32,9 +32,21 @@ export function lessonsOfMonth<T extends { date: string }>(lessons: T[], month: 
   return month === ALL_MONTHS ? lessons : lessons.filter((l) => l.date.startsWith(month));
 }
 
-/** unmarked -> present -> absent -> present ... (the API has no «unmark»). */
-export function nextPresent(current: boolean | undefined): boolean {
-  return current !== true;
+/** Shortcut on a focused cell: 1 = был, 2 = не был; any other key is not a mark. */
+export function keyMark(key: string): boolean | undefined {
+  return key === "1" ? true : key === "2" ? false : undefined;
+}
+
+/** Arrow key -> [row, column] step between cells; undefined for other keys. */
+export function arrowStep(key: string): [number, number] | undefined {
+  const steps: Record<string, [number, number]> = {
+    ArrowUp: [-1, 0],
+    ArrowDown: [1, 0],
+    ArrowLeft: [0, -1],
+    ArrowRight: [0, 1],
+  };
+
+  return Object.hasOwn(steps, key) ? steps[key] : undefined;
 }
 
 /** A cell is a button when the lesson takes marks and the student was enrolled by its date. */
