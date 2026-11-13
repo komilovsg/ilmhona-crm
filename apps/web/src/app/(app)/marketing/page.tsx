@@ -128,8 +128,8 @@ export default function MarketingPage() {
         {!me?.branch && (
           <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => setF({ ...f, branch })} />
         )}
-        <Input label="Старт с" type="date" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
-        <Input label="Старт по" type="date" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
+        <Input placeholder=" " label="Старт с" type="date" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
+        <Input placeholder=" " label="Старт по" type="date" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
       </div>
 
       <QueryState

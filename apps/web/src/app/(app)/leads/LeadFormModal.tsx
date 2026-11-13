@@ -236,7 +236,7 @@ export function LeadFormModal({
           value={callStatus}
           onChange={(v) => setCallStatus(v ?? "не звонили")}
         />
-        <Input
+        <Input placeholder=" "
           description={callStatus === "перезвонить" ? "Пусто — сейчас: лид попадёт в «Перезвонить сегодня»." : undefined}
           label="Когда перезвонить"
           type="datetime-local"
