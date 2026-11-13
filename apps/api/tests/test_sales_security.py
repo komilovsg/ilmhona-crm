@@ -76,6 +76,20 @@ async def test_import_bad_content_length_is_not_a_500(admin: httpx.AsyncClient) 
     assert r.status_code < 500
 
 
+async def test_broken_utf16_csv_is_unreadable_not_a_500(admin: httpx.AsyncClient) -> None:
+    """A UTF-16 byte-order mark followed by an odd byte count or a lone surrogate used to escape
+    as an unhandled UnicodeDecodeError (500, an error report)."""
+    branch = str(await branch_id("Душанбе"))
+    for data in (b"\xff\xfeA", b"\xff\xfe\x00\xd8A\x00", b"\xfe\xff\xd8\x00"):
+        r = await admin.post(
+            f"{L}/import/preview",
+            content=data,
+            params={"branch_id": branch},
+            headers={"Content-Type": "text/csv"},
+        )
+        assert (r.status_code, r.json()["code"]) == (422, "import_unreadable"), r.text
+
+
 async def test_import_needs_csrf_header_and_stays_in_own_branch(
     admin: httpx.AsyncClient, login_as: SignedIn
 ) -> None:

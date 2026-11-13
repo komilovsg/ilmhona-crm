@@ -63,7 +63,10 @@ _SOURCE_WORDS = (
 
 def decode(data: bytes) -> str:
     if data.startswith((b"\xff\xfe", b"\xfe\xff")):
-        return data.decode("utf-16")
+        try:
+            return data.decode("utf-16")
+        except UnicodeDecodeError:  # odd byte count or a lone surrogate after the BOM
+            raise DomainError(IMPORT_UNREADABLE) from None
     try:
         return data.decode("utf-8-sig")
     except UnicodeDecodeError:
