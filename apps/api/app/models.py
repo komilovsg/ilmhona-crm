@@ -405,3 +405,55 @@ class Employment(Versioned, Base):
     position: Mapped[str | None] = mapped_column(Text)
     employed_at: Mapped[date] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class AcademyGoal(Versioned, Base):
+    """The academy-wide direction text: exactly one row (the `singleton` flag is unique)."""
+
+    __tablename__ = "academy_goal"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    singleton: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    text: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Goal(Versioned, Base):
+    """A target with a metric that is computed (`app.metrics.goals`), never typed in."""
+
+    __tablename__ = "goal"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    title: Mapped[str] = mapped_column(Text)
+    metric: Mapped[str] = mapped_column(Text)
+    target: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    start_date: Mapped[date] = mapped_column(Date)
+    deadline: Mapped[date] = mapped_column(Date)
+    branch_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("branch.id"))
+    archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Note(Versioned, Base):
+    """A private note: only its owner reads it."""
+
+    __tablename__ = "note"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    owner_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    goal_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("goal.id", ondelete="SET NULL")
+    )
+    course_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("course.id", ondelete="SET NULL")
+    )
+    cohort_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cohort.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)

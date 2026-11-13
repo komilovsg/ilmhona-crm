@@ -20,6 +20,9 @@ from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.employment.api import router as employment_router
 from app.export import XLSX
+from app.goals.api import academy_router as academy_goal_router
+from app.goals.api import router as goals_router
+from app.goals.notes import router as notes_router
 from app.graduates.api import router as graduates_router
 from app.instructors.api import router as instructors_router
 from app.leads.api import router as leads_router
@@ -82,6 +85,9 @@ for router in (
     reports_router,
     graduates_router,
     employment_router,
+    academy_goal_router,
+    goals_router,
+    notes_router,
 ):
     app.include_router(router)
 

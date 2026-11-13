@@ -17,6 +17,7 @@ from app.models import (
     Course,
     Employment,
     Enrollment,
+    Goal,
     Lead,
     Lesson,
     Role,
@@ -34,6 +35,7 @@ _NAME_FIELD = {
     "role": "name",
     "lead": "full_name",
     "campaign": "name",
+    "goal": "title",
 }
 # entity -> (id column, name column)
 _NAME_COLUMN = {
@@ -45,6 +47,7 @@ _NAME_COLUMN = {
     "role": (Role.id, Role.name),
     "lead": (Lead.id, Lead.full_name),
     "campaign": (Campaign.id, Campaign.name),
+    "goal": (Goal.id, Goal.title),
 }
 
 

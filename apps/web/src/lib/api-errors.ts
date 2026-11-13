@@ -70,6 +70,7 @@ export const apiErrors: Record<string, string> = {
   campaign_branch_mismatch: "Кампания из другого филиала, чем лид.",
   campaign_in_use: "У кампании есть лиды. Удалить нельзя.",
   campaign_dates_invalid: "Дата окончания раньше даты старта.",
+  goal_dates_invalid: "Срок должен быть позже даты начала.",
   import_too_large: "Файл слишком большой (больше 2 МБ).",
   import_too_many_rows: "В файле больше 2000 строк. Разделите его на части.",
   import_unreadable: "Не удалось прочитать файл. Нужен Excel (.xlsx) или CSV.",
