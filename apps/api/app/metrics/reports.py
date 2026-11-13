@@ -35,6 +35,7 @@ from sqlalchemy import ColumnElement, DateTime, cast, exists, func, literal_colu
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.deps import Principal
+from app.core.search import search_clause
 from app.education.scope import cohort_filters, student_filters
 from app.export import Col
 from app.leads.query import lead_where
@@ -50,6 +51,7 @@ from app.metrics.money import (
     finance,
     money,
     today,
+    total_debt,
 )
 from app.metrics.sales import (
     CONVERTED,
@@ -89,6 +91,7 @@ MONEY_SECTIONS: dict[str, tuple[str, ...]] = {
     "ads": ("marketing",),
     "cac": ("marketing",),
     "profit": ("payments", "instructors", "marketing"),
+    "debt": ("payments",),
 }
 
 
@@ -187,8 +190,7 @@ def graduate_where(
             else Enrollment.certificate_no.is_(None)
         )
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(Student.full_name.ilike(like) | Student.phone.ilike(like))
+        where.append(search_clause(q, (Student.full_name,), (Student.phone,)))
     return where
 
 
@@ -343,6 +345,7 @@ async def overview(
         "graduates": graduates,
         "converted": converted,
         "cac": ratio(fin["ads"], converted),
+        "debt": await total_debt(db, scope.cohort),
     }
 
 

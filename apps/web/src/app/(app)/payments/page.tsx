@@ -8,6 +8,7 @@ import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { SheetHandle } from "@/components/SheetHandle";
 import { Input } from "@heroui/input";
+import clsx from "clsx";
 
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -26,11 +27,14 @@ import { StatCards, StatCardsSkeleton } from "@/components/StatCards";
 import { useCanPay, useRefreshMoney, useSeesPayments } from "@/hooks/money";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
+import { useBrowserValue } from "@/lib/client-store";
 import { formatPrice, fullDate, todayIso } from "@/lib/education";
 import { telHref } from "@/lib/format";
 import { methodLabel, monthOf, monthOptions, PAYMENT_METHODS, PAYMENT_STATUSES, paymentTone } from "@/lib/money";
 import type { DebtorRow, DebtorsPage, PaymentRow, PaymentsPage } from "@/lib/money-types";
-import { dueText } from "@/lib/payment-month";
+import type { DueMonth } from "@/lib/payment-month";
+import { debtLines } from "@/lib/payment-month";
+import { whatsappHref } from "@/lib/sales";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import { useOverlayMotion } from "@/lib/motion";
@@ -223,6 +227,40 @@ function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean
   );
 }
 
+function DebtLines({ due }: { due: DueMonth[] }) {
+  return (
+    <>
+      {debtLines(due).map((line) => (
+        <div key={line} className={clsx("mt-0.5 text-xs", line.startsWith("Ожидает") ? "text-warning-700 dark:text-warning" : "text-danger")}>
+          {line}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** «Позвонить» (tel:) and WhatsApp (wa.me) of a debtor, like on the lead cards. */
+function ContactButtons({ phone, compact }: { phone: string | null; compact?: boolean }) {
+  if (!phone) return null;
+  const wa = whatsappHref(phone);
+  const base = clsx("inline-flex items-center justify-center gap-1.5 rounded-xl font-medium", compact ? "h-8 px-2.5 text-xs" : "h-10 px-4 text-sm");
+
+  return (
+    <>
+      <a aria-label={`Позвонить ${phone}`} className={clsx(base, "bg-primary/10 text-brand-text")} href={telHref(phone)}>
+        <Icon name="phone" size={compact ? 14 : 18} />
+        {!compact && "Позвонить"}
+      </a>
+      {wa && (
+        <a aria-label="WhatsApp" className={clsx(base, "bg-success/15 text-success-700 dark:text-success")} href={wa} rel="noreferrer" target="_blank">
+          <Icon name="message" size={compact ? 14 : 18} />
+          {!compact && "WhatsApp"}
+        </a>
+      )}
+    </>
+  );
+}
+
 function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boolean; onPay: (d: DebtorRow) => void }) {
   const payButton = (d: DebtorRow) =>
     canPay && (
@@ -265,12 +303,17 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
                 </td>
                 <td className="px-4 py-3">
                   <MonthStates states={d.month_states ?? []} />
-                  {d.due_months?.length > 0 && <div className="mt-0.5 text-xs text-danger">Осталось: {dueText(d.due_months)}</div>}
+                  <DebtLines due={d.due_months ?? []} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">{formatPrice(d.expected)}</td>
                 <td className="whitespace-nowrap px-4 py-3">{formatPrice(d.paid)}</td>
                 <td className="whitespace-nowrap px-4 py-3 font-semibold text-danger">{formatPrice(d.debt)}</td>
-                <td className="px-3 py-2 text-right">{payButton(d)}</td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center justify-end gap-2">
+                    <ContactButtons compact phone={d.phone} />
+                    {payButton(d)}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -289,11 +332,14 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
               {d.cohort_code}
             </div>
             <MonthStates className="mt-1" states={d.month_states ?? []} />
-            {d.due_months?.length > 0 && <div className="mt-0.5 text-xs text-danger">Осталось: {dueText(d.due_months)}</div>}
+            <DebtLines due={d.due_months ?? []} />
             <div className="mt-1 text-sm">
               <Phone value={d.phone} />
             </div>
-            <div className="mt-2 flex justify-end">{payButton(d)}</div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <ContactButtons phone={d.phone} />
+              <div className="ml-auto">{payButton(d)}</div>
+            </div>
           </li>
         ))}
       </ul>
@@ -306,7 +352,10 @@ export default function PaymentsPage() {
   const sees = useSeesPayments();
   const canPay = useCanPay();
   const refresh = useRefreshMoney();
-  const [tab, setTab] = useState<Tab>("payments");
+  // the dashboard links here with ?tab=debtors; a pick on the page wins
+  const urlTab = useBrowserValue<Tab>(() => (new URLSearchParams(window.location.search).get("tab") === "debtors" ? "debtors" : "payments"), "payments", "ilm-payments-tab");
+  const [picked, setTab] = useState<Tab | null>(null);
+  const tab = picked ?? urlTab;
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);

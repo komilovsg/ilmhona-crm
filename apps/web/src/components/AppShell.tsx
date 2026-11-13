@@ -307,7 +307,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const items = visibleNav(me.permissions, me.role.code);
   const badges: Badges = { "/users": requests?.total ?? 0 };
-  const { main, more } = splitNav(items);
+  const { main, more } = splitNav(items, me.role.code);
 
   return (
     <div className="sb-shell min-h-dvh">

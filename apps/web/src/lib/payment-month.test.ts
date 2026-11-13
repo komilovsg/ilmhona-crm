@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  debtLines,
   defaultMonth,
   dueText,
   holdText,
   monthConflictText,
+  monthKind,
   monthOptionLabel,
   monthStateLabel,
   nextOpenMonth,
@@ -100,4 +102,26 @@ test("month states and the partial amount", () => {
     ]),
     "2: 300 TJS, 3: 500 TJS",
   );
+});
+
+test("debtLines: equal amounts grouped, different listed, awaiting apart", () => {
+  assert.deepEqual(debtLines([{ month_no: 1, remaining: "600.00" }, { month_no: 3, remaining: "600.00" }]), [
+    "Не оплачены 1-й и 3-й мес. · по 600 TJS",
+  ]);
+  assert.deepEqual(debtLines([{ month_no: 3, remaining: "600.00" }]), ["Не оплачен 3-й мес. · 600 TJS"]);
+  assert.deepEqual(debtLines([{ month_no: 1, remaining: "600.00" }, { month_no: 3, remaining: "400.00" }]), [
+    "Не оплачены: 1-й — 600, 3-й — 400 TJS",
+  ]);
+  assert.deepEqual(debtLines([{ month_no: 1, remaining: "500.00" }, { month_no: 2, remaining: "500.00", awaiting: true }]), [
+    "Не оплачен 1-й мес. · 500 TJS",
+    "Ожидает подтверждения: 2-й мес. · 500 TJS",
+  ]);
+});
+
+test("monthKind: four distinct kinds", () => {
+  assert.equal(monthKind({ state: "оплачен" }), "paid");
+  assert.equal(monthKind({ state: "оплачен", awaiting: true }), "awaiting");
+  assert.equal(monthKind({ state: "не оплачен", started: true }), "unpaid");
+  assert.equal(monthKind({ state: "частично" }), "unpaid");
+  assert.equal(monthKind({ state: "не оплачен", started: false }), "future");
 });

@@ -84,6 +84,35 @@ def expected_months(enrolled_on: date, start: date, end: date, on: date) -> int:
     return max(0, last - first + 1)
 
 
+def debtor_where() -> list[ColumnElement[bool]]:
+    """Enrollments that can owe: not expelled, in a cohort that is not cancelled. The debtors list
+    and the dashboard's total debt share it."""
+    return [Enrollment.status != EXPELLED, Cohort.status != CANCELLED]
+
+
+async def total_debt(
+    db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]], on: date | None = None
+) -> Decimal:
+    """The sum of every enrollment's debt in the given cohort scope (= the debtors total)."""
+    rows = (
+        await db.execute(
+            select(
+                Enrollment.id,
+                Enrollment.enrolled_at,
+                Enrollment.status,
+                Cohort.price_month,
+                Cohort.start_date,
+                Cohort.end_date,
+            )
+            .select_from(Enrollment)
+            .join(Cohort, Cohort.id == Enrollment.cohort_id)
+            .where(*cohort_where, *debtor_where())
+        )
+    ).all()
+    by = await enrollment_money_rows(db, [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows], on)
+    return money(sum((m["debt"] for m in by.values()), ZERO))
+
+
 def debt_of(expected: Decimal, paid: Decimal, status: str) -> Decimal:
     return ZERO if status == EXPELLED else max(expected - paid, ZERO)
 
@@ -169,11 +198,18 @@ async def enrollment_money_rows(
         total = money(sum(confirmed[eid].values(), ZERO))
         local = enrolled_at.astimezone(TZ).date()
         expected = price * expected_months(local, start, end, on)
+        owed = owed_month_numbers(enrolled_at, start, end, on)
         states = [
-            month_info(m, entered[eid].get(m, ZERO), pending[eid].get(m, ZERO), price)
+            month_info(
+                m,
+                entered[eid].get(m, ZERO),
+                pending[eid].get(m, ZERO),
+                price,
+                confirmed[eid].get(m, ZERO),
+                m in owed,
+            )
             for m in range(1, cohort_months(start, end) + 1)
         ]
-        owed = owed_month_numbers(enrolled_at, start, end, on)
         out[eid] = {
             "paid": total,
             # one definition with the payment cap: pending + confirmed reach the price
@@ -185,9 +221,13 @@ async def enrollment_money_rows(
             "due_months": []
             if status == EXPELLED
             else [
-                {"month_no": st["month_no"], "remaining": st["remaining"]}
+                {
+                    "month_no": st["month_no"],
+                    "remaining": st["due_remaining"],
+                    "awaiting": st["awaiting"],
+                }
                 for st in states
-                if st["month_no"] in owed and st["state"] != MONTH_PAID
+                if st["month_no"] in owed and (st["state"] != MONTH_PAID or st["awaiting"])
             ],
         }
     return out
@@ -196,17 +236,33 @@ async def enrollment_money_rows(
 MONTH_UNPAID, MONTH_PARTIAL, MONTH_PAID = "не оплачен", "частично", "оплачен"
 
 
-def month_info(month_no: int, entered: Decimal, pending: Decimal, price: Decimal) -> dict[str, Any]:
+def month_info(
+    month_no: int,
+    entered: Decimal,
+    pending: Decimal,
+    price: Decimal,
+    confirmed: Decimal | None = None,
+    started: bool = True,
+) -> dict[str, Any]:
     """The state of one month of an enrollment (pending + confirmed count, like the payment rule):
-    оплачен (reaches the price), частично (something, less than the price), не оплачен."""
+    оплачен (reaches the price), частично (something, less than the price), не оплачен.
+    `awaiting`: «оплачен» only thanks to pending payments: the debt (confirmed only) still counts
+    the month, `due_remaining` is what the debt counts for it. `started`: the month has begun."""
+    if confirmed is None:
+        confirmed = entered - pending
     if month_full(entered, price) or (price <= 0 and entered > 0):
         state = MONTH_PAID
     elif entered > 0:
         state = MONTH_PARTIAL
     else:
         state = MONTH_UNPAID
+    awaiting = state == MONTH_PAID and price > 0 and confirmed < price
     return {
         "month_no": month_no,
+        "awaiting": awaiting,
+        "started": started,
+        "confirmed": confirmed,
+        "due_remaining": max(price - confirmed, ZERO) if awaiting else max(price - entered, ZERO),
         "paid": entered,
         "pending": pending,
         "price": price,

@@ -107,8 +107,8 @@ export default function MarketingPage() {
         <StatCards
           stats={[
             { label: "Бюджет", value: formatPrice(t.budget), hint: `Кампаний: ${t.campaigns}` },
-            { label: "Лиды", value: String(t.leads), hint: `CPL: ${moneyOrDash(t.cpl)}` },
-            { label: "Записались", value: String(t.converted), hint: `CAC: ${moneyOrDash(t.cac)}` },
+            { label: "Лиды из кампаний", value: String(t.leads), hint: `CPL: ${moneyOrDash(t.cpl)}` },
+            { label: "Записались", value: String(t.converted), hint: `CAC по кампаниям: ${moneyOrDash(t.cac)}` },
             { label: "Зачислено в потоки", value: String(t.enrolled) },
           ]}
         />
@@ -164,7 +164,7 @@ export default function MarketingPage() {
                     <th className="px-4 py-3 text-right font-medium">Лиды</th>
                     <th className="px-4 py-3 text-right font-medium">Зачислено</th>
                     <th className="px-4 py-3 text-right font-medium">CPL</th>
-                    <th className="px-4 py-3 text-right font-medium">CAC</th>
+                    <th className="px-4 py-3 text-right font-medium">CAC по кампаниям</th>
                     <th className="px-4 py-3 font-medium">Статус</th>
                     <th className="w-12 px-2 py-3" />
                   </tr>
@@ -222,10 +222,10 @@ export default function MarketingPage() {
                   <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
                     {[
                       ["Бюджет", formatPrice(c.budget)],
-                      ["Лиды", String(c.leads)],
+                      ["Лиды из кампаний", String(c.leads)],
                       ["Зачислено", String(c.enrolled)],
                       ["CPL", moneyOrDash(c.cpl)],
-                      ["CAC", moneyOrDash(c.cac)],
+                      ["CAC по кампаниям", moneyOrDash(c.cac)],
                     ].map(([k, v]) => (
                       <div key={k}>
                         <dt className="text-xs text-default-500">{k}</dt>

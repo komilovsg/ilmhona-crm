@@ -63,9 +63,19 @@ export function visibleNav(permissions: Permissions | undefined, roleCode?: stri
 
 export const BOTTOM_NAV_SIZE = 4;
 
-/** Phone: the first four visible items go to the bottom bar, the rest to the «Ещё» sheet. */
-export function splitNav(items: NavItem[]): { main: NavItem[]; more: NavItem[] } {
-  return { main: items.slice(0, BOTTOM_NAV_SIZE), more: items.slice(BOTTOM_NAV_SIZE) };
+const MONEY_NAV = ["/dashboard", "/leads", "/students", "/payments"];
+
+/**
+ * Phone: four visible items go to the bottom bar, the rest to the «Ещё» sheet. A user who sees payments
+ * (not an instructor) gets Дашборд · Лиды · Студенты · Оплаты; «Сегодня» moves to «Ещё». Others: the first four.
+ */
+export function splitNav(items: NavItem[], roleCode?: string | null): { main: NavItem[]; more: NavItem[] } {
+  const money = roleCode !== "instructor" && items.some((i) => i.href === "/payments");
+  const main = money ? MONEY_NAV.flatMap((href) => items.filter((i) => i.href === href)) : [];
+
+  for (const item of items) if (main.length < BOTTOM_NAV_SIZE && !main.includes(item)) main.push(item);
+
+  return { main: items.filter((i) => main.includes(i)), more: items.filter((i) => !main.includes(i)) };
 }
 
 /** Where to land after sign-in: the dashboard, else the first allowed section, else the profile. */

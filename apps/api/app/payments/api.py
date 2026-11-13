@@ -29,17 +29,18 @@ from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
+from app.core.search import search_clause
 from app.core.versioning import Version, check_version, lock
 from app.education.scope import check_cohort_visible, cohort_filters, is_instructor
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
 from app.metrics.money import (
     CONFIRMED,
-    EXPELLED,
     PENDING,
     ZERO,
     cohort_months,
     cohort_payers,
+    debtor_where,
     enrollment_money,
     enrollment_money_rows,
     month_full,
@@ -232,10 +233,7 @@ def _where(
         where.append(Payment.paid_at >= first)
         where.append(Payment.paid_at < after)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(Student.full_name.ilike(like), Student.phone.ilike(like), Cohort.code.ilike(like))
-        )
+        where.append(search_clause(q, (Student.full_name, Cohort.code), (Student.phone,)))
     return where
 
 
@@ -356,16 +354,13 @@ def can_view_payments(p: Principal) -> bool:
 def _debtor_select(
     p: Principal, q: str | None, branch_id: uuid.UUID | None, cohort_id: uuid.UUID | None
 ) -> Any:
-    where = [*cohort_filters(p), Enrollment.status != EXPELLED, Cohort.status != "отменён"]
+    where = [*cohort_filters(p), *debtor_where()]
     if branch_id:
         where.append(Cohort.branch_id == branch_id)
     if cohort_id:
         where.append(Cohort.id == cohort_id)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(Student.full_name.ilike(like), Student.phone.ilike(like), Cohort.code.ilike(like))
-        )
+        where.append(search_clause(q, (Student.full_name, Cohort.code), (Student.phone,)))
     # columns, not entities: a debtors list reads every enrollment of the school
     return (
         select(
@@ -530,16 +525,13 @@ async def enrollment_options(
 ) -> list[dict[str, Any]]:
     """What the payment form picks from: live enrollments (not expelled, cohort not cancelled)
     with the price, the months and what is already paid."""
-    where = [*cohort_filters(p), Enrollment.status != EXPELLED, Cohort.status != "отменён"]
+    where = [*cohort_filters(p), *debtor_where()]
     if cohort_id:
         where.append(Cohort.id == cohort_id)
     if enrollment_id:
         where.append(Enrollment.id == enrollment_id)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(Student.full_name.ilike(like), Student.phone.ilike(like), Cohort.code.ilike(like))
-        )
+        where.append(search_clause(q, (Student.full_name, Cohort.code), (Student.phone,)))
     rows = (
         await db.execute(
             select(Enrollment, Cohort, Student, Course.name)

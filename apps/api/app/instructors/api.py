@@ -19,6 +19,7 @@ from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.search import search_clause
 from app.core.versioning import Version, check_version
 from app.education.scope import cohort_filters, is_instructor, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -79,8 +80,7 @@ async def _cards(
 ) -> list[dict[str, Any]]:
     where = _users_where(p)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(or_(AppUser.full_name.ilike(like), AppUser.phone.ilike(like)))
+        where.append(search_clause(q, (AppUser.full_name,), (AppUser.phone,)))
     query = _select(where).order_by(AppUser.full_name, AppUser.id)
     rows = (await db.execute(query.limit(limit) if limit else query)).all()
     stats = await instructor_stats(db, [u.id for u, _ in rows], cohort_filters(p))
