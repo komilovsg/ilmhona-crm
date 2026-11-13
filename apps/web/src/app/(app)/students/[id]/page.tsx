@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+import { Button } from "@heroui/button";
+
 import { StudentEmployment } from "./StudentEmployment";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -17,7 +19,7 @@ import { Bone, DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
 import { ExportButton } from "@/components/ExportButton";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
-import { useSeesPayments } from "@/hooks/money";
+import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { dushanbeDay, telHref } from "@/lib/format";
 import { fullDate } from "@/lib/education";
@@ -27,10 +29,19 @@ import type { EnrollmentPayments } from "@/lib/money-types";
 import type { StudentDetail } from "@/lib/types";
 import { lazyModal } from "@/lib/lazy-modal";
 
+const PaymentFormModal = lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 const StudentFormModal = lazyModal(() => import("../StudentFormModal").then((m) => m.StudentFormModal));
 
 /** The months of one enrollment: оплачен / частично: A из B / не оплачен. */
-function EnrollmentMonths({ enrollmentId }: { enrollmentId: string }) {
+function EnrollmentMonths({
+  enrollmentId,
+  legend,
+  onPay,
+}: {
+  enrollmentId: string;
+  legend?: boolean;
+  onPay?: (month: number) => void;
+}) {
   const money = useQuery({
     queryKey: ["cohort-payments", "enrollment", enrollmentId],
     queryFn: () => api<EnrollmentPayments>(`/api/v1/payments/enrollment/${enrollmentId}`),
@@ -39,7 +50,7 @@ function EnrollmentMonths({ enrollmentId }: { enrollmentId: string }) {
   if (money.isPending) return <Bone className="h-5 w-24 rounded-md" />;
   if (!money.data) return <span className="text-default-400">—</span>;
 
-  return <MonthStates states={money.data.month_states} />;
+  return <MonthStates legend={legend} states={money.data.month_states} onPick={onPay} />;
 }
 
 export default function StudentPage() {
@@ -48,6 +59,8 @@ export default function StudentPage() {
   const refresh = useRefreshEducation();
   const canChange = useCanChange("students");
   const seesPayments = useSeesPayments();
+  const canPay = useCanPay();
+  const [paying, setPaying] = useState<{ enrollmentId: string | null; month: number | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -101,6 +114,9 @@ export default function StudentPage() {
     );
 
   const s = student.data;
+  const active = s.enrollments.filter((e) => e.status === "активный");
+  // one active enrollment: pay for it directly; several: the form opens on this student's search
+  const payAction = () => setPaying({ enrollmentId: active.length === 1 ? active[0].id : null, month: null });
 
   return (
     <>
@@ -136,14 +152,19 @@ export default function StudentPage() {
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <ExportButton path={`/api/v1/students/${s.id}/export`} />
-          {canChange && (
+          {(canChange || (canPay && active.length > 0)) && (
             <RowMenu
               actions={[
-                { key: "edit", label: "Изменить", icon: "edit" },
-                { key: "delete", label: "Удалить", icon: "trash", danger: true },
+                ...(canPay && active.length > 0 ? [{ key: "pay", label: "Оплата", icon: "payments" }] : []),
+                ...(canChange
+                  ? [
+                      { key: "edit", label: "Изменить", icon: "edit" },
+                      { key: "delete", label: "Удалить", icon: "trash", danger: true },
+                    ]
+                  : []),
               ]}
               label="Действия со студентом"
-              onAction={(k) => (k === "edit" ? setEditing(true) : setDeleting(true))}
+              onAction={(k) => (k === "pay" ? payAction() : k === "edit" ? setEditing(true) : setDeleting(true))}
             />
           )}
         </div>
@@ -191,7 +212,11 @@ export default function StudentPage() {
                     </td>
                     {seesPayments && (
                       <td className="px-4 py-3">
-                        <EnrollmentMonths enrollmentId={e.id} />
+                        <EnrollmentMonths
+                          enrollmentId={e.id}
+                          legend
+                          onPay={canPay && e.status === "активный" ? (month) => setPaying({ enrollmentId: e.id, month }) : undefined}
+                        />
                       </td>
                     )}
                   </tr>
@@ -222,8 +247,17 @@ export default function StudentPage() {
                 </div>
                 {seesPayments && (
                   <div className="mt-2">
-                    <EnrollmentMonths enrollmentId={e.id} />
+                    <EnrollmentMonths
+                      enrollmentId={e.id}
+                      legend
+                      onPay={canPay && e.status === "активный" ? (month) => setPaying({ enrollmentId: e.id, month }) : undefined}
+                    />
                   </div>
+                )}
+                {canPay && e.status === "активный" && (
+                  <Button className="mt-3 w-full" color="primary" startContent={<Icon name="payments" size={18} />} onPress={() => setPaying({ enrollmentId: e.id, month: null })}>
+                    Оплата
+                  </Button>
                 )}
               </li>
             ))}
@@ -236,6 +270,15 @@ export default function StudentPage() {
         student={{ id: s.id, name: s.full_name }}
       />
 
+      {paying && (
+        <PaymentFormModal
+          enrollmentId={paying.enrollmentId}
+          month={paying.month}
+          payment={null}
+          query={s.full_name}
+          onClose={() => setPaying(null)}
+        />
+      )}
       {editing && <StudentFormModal student={s} onClose={() => setEditing(false)} />}
       {deleting && (
         <ConfirmModal

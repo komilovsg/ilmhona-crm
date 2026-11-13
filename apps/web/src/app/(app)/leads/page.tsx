@@ -4,10 +4,12 @@ import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { Input } from "@heroui/input";
 import clsx from "clsx";
 
 
+import { SheetHandle } from "@/components/SheetHandle";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -37,6 +39,7 @@ import {
   whatsappHref,
 } from "@/lib/sales";
 import type { Duplicates, LeadFunnel, LeadRow } from "@/lib/sales-types";
+import { useOverlayMotion } from "@/lib/motion";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged } from "@/lib/types";
 import { lazyModal } from "@/lib/lazy-modal";
@@ -142,6 +145,7 @@ function NameCell({ lead }: { lead: LeadRow }) {
 }
 
 export default function LeadsPage() {
+  const overlayMotion = useOverlayMotion();
   const canChange = useCanChangeSales("leads");
   const canConvert = useCanChange("students"); // convert creates or links a student
   const { data: me } = useMe();
@@ -155,6 +159,7 @@ export default function LeadsPage() {
   const [converting, setConverting] = useState<LeadRow | null>(null);
   const [removing, setRemoving] = useState<LeadRow | null>(null);
   const [importing, setImporting] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [warn, setWarn] = useState<{ name: string; duplicates: Duplicates } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const callback = tab === "callback";
@@ -163,6 +168,8 @@ export default function LeadsPage() {
     setF((cur) => ({ ...cur, ...next }));
     setPage(1);
   };
+  // filters that live in the phone sheet (search and status stay inline)
+  const sheetFilters = [f.call, f.source, f.course, f.branch, f.from, f.to, f.review].filter(Boolean).length;
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
 
   const list = useQuery({
@@ -243,6 +250,30 @@ export default function LeadsPage() {
     </Button>
   );
 
+  const filterFields = (
+    <>
+      <SelectField allLabel="Любой звонок" label="Статус звонка" options={CALL_STATUSES.map((s) => ({ key: s, label: s }))} value={f.call} onChange={(call) => set({ call })} />
+      <SelectField allLabel="Все источники" label="Источник" options={LEAD_SOURCES.map((s) => ({ key: s, label: s }))} value={f.source} onChange={(source) => set({ source })} />
+      <SelectField allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ course })} />
+      {!me?.branch && (
+        <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ branch })} />
+      )}
+      <Input label="С даты" type="date" value={f.from} onValueChange={(from) => set({ from })} />
+      <Input label="По дату" type="date" value={f.to} onValueChange={(to) => set({ to })} />
+      <button
+        aria-pressed={f.review}
+        className={clsx(
+          "flex h-14 items-center justify-center gap-2 rounded-xl px-3 text-sm transition-colors",
+          f.review ? "bg-warning/20 text-warning-700 dark:text-warning" : "bg-content1 hover:bg-default-100",
+        )}
+        type="button"
+        onClick={() => set({ review: !f.review })}
+      >
+        Нужна проверка: <b>{funnel.data?.needs_review ?? 0}</b>
+      </button>
+    </>
+  );
+
   return (
     <>
       <PageHeader
@@ -302,35 +333,32 @@ export default function LeadsPage() {
         </div>
       )}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
-          className="sm:col-span-2"
-          isClearable
-          placeholder="Поиск: имя или телефон"
-          startContent={<Icon name="search" size={18} />}
-          value={f.q}
-          onClear={() => set({ q: "" })}
-          onValueChange={(q) => set({ q })}
-        />
-        <SelectField allLabel="Любой звонок" label="Статус звонка" options={CALL_STATUSES.map((s) => ({ key: s, label: s }))} value={f.call} onChange={(call) => set({ call })} />
-        <SelectField allLabel="Все источники" label="Источник" options={LEAD_SOURCES.map((s) => ({ key: s, label: s }))} value={f.source} onChange={(source) => set({ source })} />
-        <SelectField allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ course })} />
-        {!me?.branch && (
-          <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ branch })} />
-        )}
-        <Input label="С даты" type="date" value={f.from} onValueChange={(from) => set({ from })} />
-        <Input label="По дату" type="date" value={f.to} onValueChange={(to) => set({ to })} />
-        <button
-          aria-pressed={f.review}
-          className={clsx(
-            "flex h-14 items-center justify-center gap-2 rounded-xl px-3 text-sm transition-colors",
-            f.review ? "bg-warning/20 text-warning-700 dark:text-warning" : "bg-content1 hover:bg-default-100",
-          )}
-          type="button"
-          onClick={() => set({ review: !f.review })}
-        >
-          Нужна проверка: <b>{funnel.data?.needs_review ?? 0}</b>
-        </button>
+      <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <div className="flex items-start gap-3 md:col-span-2">
+          <Input
+            className="flex-1"
+            isClearable
+            placeholder="Поиск: имя или телефон"
+            startContent={<Icon name="search" size={18} />}
+            value={f.q}
+            onClear={() => set({ q: "" })}
+            onValueChange={(q) => set({ q })}
+          />
+          <Button
+            className="h-14 shrink-0 md:hidden"
+            startContent={<Icon name="filter" size={18} />}
+            variant="flat"
+            onPress={() => setFiltersOpen(true)}
+          >
+            Фильтры
+            {sheetFilters > 0 && (
+              <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
+                {sheetFilters}
+              </span>
+            )}
+          </Button>
+        </div>
+        <div className="hidden md:contents">{filterFields}</div>
       </div>
 
       <QueryState
@@ -416,6 +444,29 @@ export default function LeadsPage() {
           <Pager page={page} pageSize={PAGE_SIZE} total={list.data?.total ?? 0} onChange={setPage} />
         </>
       </QueryState>
+
+      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
+        <DrawerContent>
+          {(close) => (
+            <>
+              <SheetHandle onBackdrop={close} onClose={close} />
+              <DrawerHeader>Фильтры</DrawerHeader>
+              <DrawerBody className="gap-3">{filterFields}</DrawerBody>
+              <DrawerFooter>
+                <Button
+                  variant="light"
+                  onPress={() => set({ call: null, source: null, course: null, branch: null, from: "", to: "", review: false })}
+                >
+                  Сбросить
+                </Button>
+                <Button color="primary" onPress={close}>
+                  Показать
+                </Button>
+              </DrawerFooter>
+            </>
+          )}
+        </DrawerContent>
+      </Drawer>
 
       {editing && (
         <LeadFormModal
