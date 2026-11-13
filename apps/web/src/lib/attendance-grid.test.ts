@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { cellMarkable, defaultMonth, lessonsOfMonth, monthLabel, monthsOf, nextPresent, withMark } from "./attendance-grid.ts";
+import { arrowStep, cellMarkable, defaultMonth, keyMark, lessonsOfMonth, monthLabel, monthsOf, withMark } from "./attendance-grid.ts";
 
 const L = (date: string, held: boolean, cancelled = false) => ({ date, held, cancelled });
 
@@ -23,10 +23,20 @@ test("default month: today's, else latest held, else all", () => {
   assert.equal(defaultMonth([], "2026-10-20"), "all");
 });
 
-test("mark cycle never goes back to unmarked", () => {
-  assert.equal(nextPresent(undefined), true);
-  assert.equal(nextPresent(true), false);
-  assert.equal(nextPresent(false), true);
+test("keys 1 and 2 map to was / was not, others to nothing", () => {
+  assert.equal(keyMark("1"), true);
+  assert.equal(keyMark("2"), false);
+  assert.equal(keyMark("3"), undefined);
+  assert.equal(keyMark("Enter"), undefined);
+});
+
+test("arrow keys step between cells", () => {
+  assert.deepEqual(arrowStep("ArrowLeft"), [0, -1]);
+  assert.deepEqual(arrowStep("ArrowRight"), [0, 1]);
+  assert.deepEqual(arrowStep("ArrowUp"), [-1, 0]);
+  assert.deepEqual(arrowStep("ArrowDown"), [1, 0]);
+  assert.equal(arrowStep("a"), undefined);
+  assert.equal(arrowStep("toString"), undefined);
 });
 
 test("markable: writable lesson and enrolled by its date", () => {

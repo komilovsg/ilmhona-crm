@@ -1,4 +1,4 @@
-from app.core.errors import VALIDATION_FAILED, errors
+from app.core.errors import NOT_FOUND, VALIDATION_FAILED, errors
 
 ROOM_NAME_TAKEN = errors.define("room_name_taken", 409, "Room name already used in the branch")
 COURSE_NAME_TAKEN = errors.define("course_name_taken", 409, "Course name already used")
@@ -9,6 +9,14 @@ COURSE_GLOBAL_ONLY = errors.define(
 )
 COHORT_IN_USE = errors.define("cohort_in_use", 409, "Cohort has enrollments")
 STUDENT_IN_USE = errors.define("student_in_use", 409, "Student has enrollments")
+ENROLLMENT_NOT_YOURS = errors.define(
+    "enrollment_not_yours", 403, "An instructor removes only the enrollments they added"
+)
+ENROLLMENT_HAS_RECORDS = errors.define(
+    "enrollment_has_records",
+    409,
+    "The enrollment has payments, marks, grades, a job or a status set by a manager",
+)
 # params: cohort (code of the cohort that holds the room), date, start, end
 ROOM_BUSY = errors.define("room_busy", 409, "Room is busy at that time (#7)")
 # params: cohort (code, or «другого филиала» for a cohort the user's branch does not hold), date,
@@ -41,6 +49,10 @@ errors.on_constraint("lesson_room_no_overlap", ROOM_BUSY)
 errors.on_constraint("lesson_instructor_no_overlap", INSTRUCTOR_BUSY)
 errors.on_constraint("enrollment_cohort_student_key", ALREADY_ENROLLED)
 errors.on_constraint("cohort_room_branch_fkey", ROOM_BRANCH_MISMATCH)
+# a mark or grade whose enrollment was removed after the checks (these FKs cascade on delete,
+# so only such an insert can break them)
+errors.on_constraint("attendance_enrollment_id_fkey", NOT_FOUND)
+errors.on_constraint("grade_enrollment_id_fkey", NOT_FOUND)
 # Pydantic rejects these first; the database is the last line when something bypasses the API.
 for _check in (
     "room_capacity_check",

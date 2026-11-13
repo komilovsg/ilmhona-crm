@@ -20,6 +20,16 @@ export function useCanChange(section: string): boolean {
   return !!me && me.role.code !== "instructor" && can(me.permissions, section, "change");
 }
 
+/**
+ * The instructor role: besides marks and grades it adds new students to its own cohorts and removes
+ * the ones it added (no payments, marks or grades yet). The API decides every case.
+ */
+export function useIsInstructor(): boolean {
+  const { data: me } = useMe();
+
+  return me?.role.code === "instructor";
+}
+
 export function useRooms(branchId?: string | null) {
   return useQuery({
     queryKey: ["rooms", branchId ?? null],

@@ -250,6 +250,9 @@ class Student(Versioned, Legacy, Base):
     needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     review_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    created_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
 
 
 class Enrollment(Versioned, Legacy, Base):
@@ -268,6 +271,9 @@ class Enrollment(Versioned, Legacy, Base):
     review_reason: Mapped[str | None] = mapped_column(Text)
     # the old system's total when it had no homework / final to go with it
     legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    created_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
 
 
 class Attendance(Base):

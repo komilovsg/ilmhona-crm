@@ -1,6 +1,7 @@
 """Settings from the environment (`.env` is ignored by git). Defaults fit local development."""
 
 import re
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -11,7 +12,9 @@ _STRONG_SECRET = re.compile(r"[\x21-\x7e]{32,}")
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    env: str = "development"  # development | test | production
+    # An unknown value (a typo like «Production») refuses to load instead of counting as
+    # development, which would skip every production check below.
+    env: Literal["development", "test", "production"] = "development"
     database_url: str = "postgresql+asyncpg://ilm@localhost:55433/ilmhona"
     db_pool_size: int = 5
     db_max_overflow: int = 5

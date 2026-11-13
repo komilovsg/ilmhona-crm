@@ -17,7 +17,7 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { ListSkeleton } from "@/components/Skeletons";
 import { ReviewChip } from "@/components/ReviewChip";
 import { PersonStatus } from "@/components/StatusChip";
-import { useRefreshEducation } from "@/hooks/education";
+import { useIsInstructor, useRefreshEducation } from "@/hooks/education";
 import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
@@ -30,6 +30,7 @@ import { useOverlayMotion } from "@/lib/motion";
 import { lazyModal } from "@/lib/lazy-modal";
 
 const EnrollModal = lazyModal(() => import("./modals").then((m) => m.EnrollModal));
+const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
 const PaymentFormModal = lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
@@ -64,6 +65,9 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const seesMoney = useSeesPayments();
   const canPay = useCanPay();
   const open = cohort.status === "набор" || cohort.status === "активный";
+  // an instructor adds new students to their own cohort (the only cohorts they see)
+  const instructor = useIsInstructor();
+  const canAdd = (canChange || instructor) && open;
 
   const list = useQuery({
     queryKey: ["enrollments", cohort.id],
@@ -104,7 +108,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     mutationFn: (id: string) => api(`/api/v1/enrollments/${id}`, { method: "DELETE" }),
     onSuccess: () => {
       void refresh();
-      notify("Студент убран из потока");
+      notify(instructor ? "Студент удалён" : "Студент убран из потока");
       setRemoving(null);
     },
     onError: (e) => {
@@ -168,8 +172,8 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       </Button>
     );
   const trash = (r: EnrollmentRow) =>
-    canChange && (
-      <Button isIconOnly aria-label={`Убрать: ${r.student_name}`} color="danger" size="sm" variant="light" onPress={() => setRemoving(r)}>
+    (canChange || (instructor && r.deletable)) && (
+      <Button isIconOnly aria-label={`${instructor ? "Удалить" : "Убрать"}: ${r.student_name}`} color="danger" size="sm" variant="light" onPress={() => setRemoving(r)}>
         <Icon name="trash" size={16} />
       </Button>
     );
@@ -188,7 +192,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         </p>
         <div className="flex items-center gap-2">
           <ExportButton path={`/api/v1/cohorts/${cohort.id}/enrollments/export`} />
-          {canChange && open && (
+          {canAdd && (
             <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
               Добавить студента
             </Button>
@@ -200,7 +204,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         empty={
           <EmptyState
             action={
-              canChange && open ? (
+              canAdd ? (
                 <Button color="primary" startContent={<Icon name="user-plus" size={18} />} onPress={() => setEnrolling(true)}>
                   Добавить студента
                 </Button>
@@ -283,18 +287,25 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       </QueryState>
 
       {paying && <PaymentFormModal enrollmentId={paying} payment={null} onClose={() => setPaying(null)} />}
-      {enrolling && <EnrollModal cohort={cohort} onClose={() => setEnrolling(false)} />}
+      {enrolling &&
+        (instructor ? (
+          <NewStudentModal cohortCode={cohort.code} cohortId={cohort.id} onClose={() => setEnrolling(false)} />
+        ) : (
+          <EnrollModal cohort={cohort} onClose={() => setEnrolling(false)} />
+        ))}
       {removing && (
         <ConfirmModal
-          confirmLabel="Убрать"
+          confirmLabel={instructor ? "Удалить" : "Убрать"}
           danger
           isLoading={remove.isPending}
           isOpen
-          title="Убрать студента из потока"
+          title={instructor ? "Удалить студента" : "Убрать студента из потока"}
           onClose={() => setRemoving(null)}
           onConfirm={() => confirm()}
         >
-          {removing.student_name} будет убран из потока {cohort.code}. Сам студент останется в списке студентов.
+          {instructor
+            ? `${removing.student_name} будет удалён из потока ${cohort.code}. Если он больше нигде не учится, его карточка тоже удалится.`
+            : `${removing.student_name} будет убран из потока ${cohort.code}. Сам студент останется в списке студентов.`}
         </ConfirmModal>
       )}
     </>
