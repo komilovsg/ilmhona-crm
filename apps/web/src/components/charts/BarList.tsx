@@ -22,22 +22,20 @@ export function BarList({ title, rows, note }: { title: string; rows: Bar[]; not
           {rows.map((r) => (
             <li
               key={r.key}
-              className="grid grid-cols-[minmax(5rem,8rem)_1fr] items-center gap-3 text-sm md:grid-cols-[10rem_1fr]"
+              className="grid grid-cols-[minmax(0,1fr)_8rem] items-center gap-x-3 gap-y-1 text-sm md:grid-cols-[minmax(6rem,10rem)_minmax(0,1fr)_8rem]"
               title={`${r.label}: ${r.text}${r.hint ? `, ${r.hint}` : ""}`}
             >
-              <span className="truncate text-default-600">{r.label}</span>
-              <span className="flex items-center gap-2">
-                {/* the track takes what the figure leaves, the bar is a share of the track: 3 vs 2 looks 3:2 */}
-                <span className="min-w-0 flex-1">
-                  <span
-                    className="block h-4 min-w-0.5 rounded-r"
-                    style={{ width: `${(r.value / max) * 100}%`, background: "var(--series-1)" }}
-                  />
-                </span>
-                <span className="w-24 shrink-0 whitespace-nowrap tabular-nums">
-                  {r.text}
-                  {r.hint && <span className="text-xs text-default-500"> {r.hint}</span>}
-                </span>
+              <span className="col-span-2 min-w-0 truncate text-default-600 md:col-span-1">{r.label}</span>
+              {/* the track takes what the figure leaves, the bar is a share of the track: 3 vs 2 looks 3:2 */}
+              <span className="min-w-0">
+                <span
+                  className="block h-4 min-w-0.5 rounded-r"
+                  style={{ width: `${(r.value / max) * 100}%`, background: "var(--series-1)" }}
+                />
+              </span>
+              <span className="min-w-0 shrink-0 text-right tabular-nums leading-tight">
+                <span className="block truncate whitespace-nowrap">{r.text}</span>
+                {r.hint && <span className="block truncate whitespace-nowrap text-xs text-default-500">{r.hint.replace(/^·\s*/, "")}</span>}
               </span>
             </li>
           ))}

@@ -33,7 +33,7 @@ export default function AppError({ error, reset }: { error: Error & { digest?: s
           <Button color="primary" onPress={retry}>
             {copy.retry}
           </Button>
-          <Button as={Link} href="/" variant="flat">
+          <Button as={Link} href="/" color="primary" variant="flat">
             {copy.home}
           </Button>
         </>

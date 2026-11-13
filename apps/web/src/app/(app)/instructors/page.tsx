@@ -1,10 +1,10 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
-import { Input } from "@heroui/input";
 
 import type { RateRecord } from "./RateModal";
 
@@ -132,7 +132,7 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
             aria-label={`Изменить ставку: ${c.full_name}`}
             size="sm"
             startContent={<Icon name="edit" size={16} />}
-            variant="flat"
+            color="primary" variant="flat"
             onPress={() =>
               edit({
                 title: `Ставка: ${c.full_name}`,
@@ -179,7 +179,7 @@ export default function InstructorsPage() {
       <PageHeader actions={<ExportButton params={{ q: q.trim() }} path="/api/v1/instructors/export" />} title="Инструкторы" />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: имя или телефон"

@@ -1,10 +1,10 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
-import { Input } from "@heroui/input";
 import clsx from "clsx";
 
 
@@ -120,7 +120,7 @@ export default function StudentsPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: имя или телефон"
@@ -150,7 +150,7 @@ export default function StudentsPage() {
           Нужна проверка
         </button>
         {!me?.branch && (
-          <SelectField
+          <SelectField filter
             allLabel="Все филиалы"
             className="w-full md:w-48"
             label="Филиал"

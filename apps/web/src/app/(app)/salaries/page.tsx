@@ -101,7 +101,7 @@ export default function SalariesPage() {
       />
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 md:flex md:flex-wrap">
-        <SelectField
+        <SelectField filter
           className="md:w-52"
           label="Месяц"
           options={[{ key: "all", label: "Все месяцы" }, ...monthOptions(current, 12, 12)]}
@@ -111,7 +111,7 @@ export default function SalariesPage() {
             reset();
           }}
         />
-        <SelectField
+        <SelectField filter
           allLabel="Все инструкторы"
           className="md:w-56"
           label="Инструктор"
@@ -123,7 +123,7 @@ export default function SalariesPage() {
           }}
         />
         {!me?.branch && (
-          <SelectField
+          <SelectField filter
             allLabel="Все филиалы"
             className="md:w-48"
             label="Филиал"

@@ -1,12 +1,12 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { SheetHandle } from "@/components/SheetHandle";
-import { Input } from "@heroui/input";
 
 
 import { ExportButton } from "@/components/ExportButton";
@@ -38,7 +38,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
 
   return (
     <>
-      <SelectField
+      <SelectField filter
         allLabel="Любой статус"
         className="md:w-44"
         label="Статус"
@@ -47,7 +47,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         onChange={(status) => set({ ...filters, status })}
       />
       {!me?.branch && (
-        <SelectField
+        <SelectField filter
           allLabel="Все филиалы"
           className="md:w-48"
           label="Филиал"
@@ -183,7 +183,7 @@ export default function CohortsPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: код, курс, инструктор"
@@ -195,7 +195,7 @@ export default function CohortsPage() {
         <div className="hidden gap-3 md:flex">
           <FilterFields filters={filters} set={set} />
         </div>
-        <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
+        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
       </div>

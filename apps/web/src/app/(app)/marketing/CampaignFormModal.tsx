@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -150,14 +151,13 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
           value={status}
           onChange={(s) => setStatus(s ?? "запланирована")}
         />
-        <Input placeholder=" " isRequired label="Старт" max={MAX_DATE} min={MIN_DATE} type="date" value={start} {...fe.field("start_date", setStart)} />
-        <Input placeholder=" "
+        <DateField isRequired label="Старт" max={MAX_DATE} min={MIN_DATE} value={start} {...fe.field("start_date", setStart)} />
+        <DateField
           errorMessage={fe.hint("end_date").errorMessage ?? "Раньше даты старта"}
           isInvalid={!datesOk || fe.hint("end_date").isInvalid}
           label="Окончание"
           max={MAX_DATE}
           min={start || MIN_DATE}
-          type="date"
           value={end}
           onValueChange={(v) => {
             fe.clear("end_date");

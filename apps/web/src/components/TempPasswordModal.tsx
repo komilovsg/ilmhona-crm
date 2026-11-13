@@ -59,7 +59,7 @@ export function TempPasswordModal({
             <Button
               size="sm"
               startContent={<Icon name={copied ? "check" : "copy"} size={16} />}
-              variant="flat"
+              color="primary" variant="flat"
               onPress={() => void copy()}
             >
               {copied ? "Скопировано" : "Копировать"}

@@ -5,7 +5,7 @@ export default function Loading() {
   return (
     <Late>
       <HeaderSkeleton />
-      <Bone className="mb-4 h-11 w-72 rounded-xl" />
+      <Bone className="mb-4 h-12 w-72 rounded-xl" />
       <StatCardsSkeleton count={3} />
       <StatCardsSkeleton count={3} />
       <StatCardsSkeleton count={3} />

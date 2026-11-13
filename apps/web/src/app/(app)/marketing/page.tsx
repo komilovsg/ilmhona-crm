@@ -1,10 +1,11 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
-import { Input } from "@heroui/input";
 
 import { LeadsChart } from "./LeadsChart";
 
@@ -115,7 +116,7 @@ export default function MarketingPage() {
       )}
 
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input
+        <FilterInput
           isClearable
           placeholder="Поиск по названию"
           startContent={<Icon name="search" size={18} />}
@@ -123,13 +124,13 @@ export default function MarketingPage() {
           onClear={() => setF({ ...f, q: "" })}
           onValueChange={(q) => setF({ ...f, q })}
         />
-        <SelectField allLabel="Любой статус" label="Статус" options={CAMPAIGN_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => setF({ ...f, status })} />
-        <SelectField allLabel="Все платформы" label="Платформа" options={PLATFORMS.map((s) => ({ key: s, label: s }))} value={f.platform} onChange={(platform) => setF({ ...f, platform })} />
+        <SelectField filter allLabel="Любой статус" label="Статус" options={CAMPAIGN_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => setF({ ...f, status })} />
+        <SelectField filter allLabel="Все платформы" label="Платформа" options={PLATFORMS.map((s) => ({ key: s, label: s }))} value={f.platform} onChange={(platform) => setF({ ...f, platform })} />
         {!me?.branch && (
-          <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => setF({ ...f, branch })} />
+          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => setF({ ...f, branch })} />
         )}
-        <Input placeholder=" " label="Старт с" type="date" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
-        <Input placeholder=" " label="Старт по" type="date" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
+        <DateField filter label="Старт с" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
+        <DateField filter label="Старт по" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
       </div>
 
       <QueryState

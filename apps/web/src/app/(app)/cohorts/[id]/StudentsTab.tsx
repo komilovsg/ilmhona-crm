@@ -40,7 +40,7 @@ function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: stri
   return (
     <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
       <DropdownTrigger>
-        <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" variant="flat">
+        <Button aria-label={`Статус: ${row.student_name}`} endContent={<Icon name="chevron-right" size={14} className="rotate-90" />} size="sm" color="primary" variant="flat">
           {row.status}
         </Button>
       </DropdownTrigger>

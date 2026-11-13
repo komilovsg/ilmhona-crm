@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -199,23 +200,19 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
               setRoomId(v);
             }}
           />
-          <Input
+          <DateField
             isRequired
             label="Начало"
             max={MAX_DATE}
             min={MIN_DATE}
-            placeholder=" "
-            type="date"
             value={start}
             {...fe.field("start_date", setStart)}
           />
-          <Input
+          <DateField
             isRequired
             label="Конец"
             max={MAX_DATE}
             min={MIN_DATE}
-            placeholder=" "
-            type="date"
             value={end}
             {...fe.field("end_date", setEnd)}
           />

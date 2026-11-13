@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -236,10 +237,9 @@ export function LeadFormModal({
           value={callStatus}
           onChange={(v) => setCallStatus(v ?? "не звонили")}
         />
-        <Input placeholder=" "
+        <DateField withTime
           description={callStatus === "перезвонить" ? "Пусто — сейчас: лид попадёт в «Перезвонить сегодня»." : undefined}
           label="Когда перезвонить"
-          type="datetime-local"
           value={nextContact}
           {...fe.field("next_contact_at", setNextContact)}
         />

@@ -1,10 +1,10 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Chip } from "@heroui/chip";
-import { Input } from "@heroui/input";
 
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -121,16 +121,16 @@ export default function GraduatesPage() {
       />
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {view === "students" && (
-          <Input isClearable placeholder="Поиск по имени или телефону" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
+          <FilterInput isClearable placeholder="Поиск по имени или телефону" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         )}
         {!me?.branch && (
-          <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
+          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
         )}
         {view === "students" && (
           <>
-            <SelectField allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ ...f, course })} />
-            <SelectField allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
-            <SelectField allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
+            <SelectField filter allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ ...f, course })} />
+            <SelectField filter allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
+            <SelectField filter allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
           </>
         )}
       </div>

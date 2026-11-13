@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -91,7 +92,7 @@ export function LessonFormModal({
         className="space-y-4"
         onSubmit={submit}
       >
-        <Input isRequired label="Дата" max={MAX_DATE} min={MIN_DATE} placeholder=" " type="date" value={date} {...fe.field("date", setDate)} />
+        <DateField isRequired label="Дата" max={MAX_DATE} min={MIN_DATE} value={date} {...fe.field("date", setDate)} />
         <div className="grid grid-cols-2 gap-3">
           <Input isRequired label="Начало" placeholder=" " type="time" value={start} {...fe.field("start_time", setStart)} />
           <Input isRequired label="Конец" placeholder=" " type="time" value={end} {...fe.field("end_time", setEnd)} />

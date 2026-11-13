@@ -82,7 +82,7 @@ export function NewStudentModal({
           <Button className="max-sm:hidden" variant="light" onPress={onClose}>
             Отмена
           </Button>
-          <Button isDisabled={!valid || save.isPending} variant="flat" onPress={() => run(true)}>
+          <Button isDisabled={!valid || save.isPending} color="primary" variant="flat" onPress={() => run(true)}>
             Сохранить и добавить ещё
           </Button>
           <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => run(false)}>
