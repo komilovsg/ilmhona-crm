@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import ColumnElement, exists, func, or_, select
+from sqlalchemy import ColumnElement, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
@@ -19,6 +19,7 @@ from app.auth.deps import Principal, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
+from app.core.search import search_clause
 from app.core.versioning import Version, check_version
 from app.education.scope import student_filters
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -81,13 +82,8 @@ def _where(
     if date_to:
         where.append(Employment.employed_at <= date_to)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
         where.append(
-            or_(
-                Student.full_name.ilike(like),
-                Student.phone.ilike(like),
-                Employment.organization.ilike(like),
-            )
+            search_clause(q, (Student.full_name, Employment.organization), (Student.phone,))
         )
     return where
 

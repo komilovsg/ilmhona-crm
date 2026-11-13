@@ -33,6 +33,7 @@ from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
+from app.core.search import search_clause
 from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
@@ -360,10 +361,7 @@ def _cohort_where(
     if branch_id:
         where.append(Cohort.branch_id == branch_id)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(Cohort.code.ilike(like), Course.name.ilike(like), AppUser.full_name.ilike(like))
-        )
+        where.append(search_clause(q, (Cohort.code, Course.name, AppUser.full_name)))
     return where
 
 

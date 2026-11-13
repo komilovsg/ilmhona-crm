@@ -9,7 +9,7 @@ import { BarList } from "@/components/charts/BarList";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
-import { QueryState } from "@/components/QueryState";
+import { ErrorState, QueryState } from "@/components/QueryState";
 import { Segmented } from "@/components/Segmented";
 import { Bone } from "@/components/Skeletons";
 import { type Stat, StatCards, StatCardsSkeleton } from "@/components/StatCards";
@@ -19,6 +19,7 @@ import { api } from "@/lib/api";
 import { dayTitle, formatPrice } from "@/lib/education";
 import { formatDateTime } from "@/lib/format";
 import { compact, orDash, shortMonth } from "@/lib/reports";
+import type { DebtorsPage } from "@/lib/money-types";
 import type { CourseRow, LeadItem, MonthRow, Overview } from "@/lib/reports-types";
 import { LEAD_STATUSES, percentLabel } from "@/lib/sales";
 import { monthLabel } from "@/lib/money";
@@ -62,6 +63,75 @@ function LeadList({ items, when }: { items: LeadItem[]; when: "created" | "callb
   );
 }
 
+function UnfilledWidget({ data }: { data: Overview }) {
+  return (
+    <Widget count={data.unfilled.count} empty="Всё заполнено" title="Не заполнено">
+      <ul>
+        {data.unfilled.items.map((u) => (
+          <li key={`${u.lesson_id}`}>
+            <Link className="flex min-h-12 items-center justify-between gap-3 rounded-xl px-2 py-1.5 hover:bg-default-100" href={`/lessons/${u.lesson_id}`}>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">
+                  {dayTitle(u.date)} · {u.course_name}
+                </span>
+                <span className="block text-xs text-default-500">{u.cohort_code}</span>
+              </span>
+              <span className="shrink-0 text-xs text-default-500 tabular-nums">
+                {u.marked}/{u.total}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </Widget>
+  );
+}
+
+function CallbacksWidget({ data }: { data: Overview }) {
+  return (
+    <Widget count={data.callbacks.count} empty="Звонков на сегодня нет" title="Перезвонить сегодня">
+      <LeadList items={data.callbacks.items} when="callback" />
+    </Widget>
+  );
+}
+
+const DEBTOR_ROWS = 5;
+
+/** The five biggest debtors (the debtors list's own endpoint, so the numbers are the list's). */
+function DebtorsWidget() {
+  const debtors = useQuery({
+    queryKey: ["dashboard", "debtors"],
+    queryFn: () => api<DebtorsPage>("/api/v1/payments/debtors", { params: { page_size: String(DEBTOR_ROWS) } }),
+  });
+
+  if (debtors.isPending) return <Bone className="h-48 w-full rounded-2xl" />;
+  if (debtors.isError) return <ErrorState onRetry={() => void debtors.refetch()} />;
+  const d = debtors.data;
+
+  return (
+    <Widget count={d.total} empty="Должников нет" title="Должники">
+      <ul>
+        {d.items.map((r) => (
+          <li key={r.enrollment_id}>
+            <Link className="flex min-h-12 items-center justify-between gap-3 rounded-xl px-2 py-1.5 hover:bg-default-100" href="/payments?tab=debtors">
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{r.student_name}</span>
+                <span className="block truncate text-xs text-default-500">{r.cohort_code}</span>
+              </span>
+              <span className="shrink-0 text-sm font-semibold text-danger tabular-nums">{formatPrice(r.debt)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {d.total > DEBTOR_ROWS && (
+        <Link className="mt-1 block px-2 py-2 text-sm text-brand-text" href="/payments?tab=debtors">
+          Все должники · {d.total}
+        </Link>
+      )}
+    </Widget>
+  );
+}
+
 function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
   const total = data.funnel["всего"] ?? 0;
   const funnel = LEAD_STATUSES.map((s) => ({
@@ -71,14 +141,28 @@ function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
     text: String(data.funnel[s] ?? 0),
     hint: total ? percentLabel(Math.round(((data.funnel[s] ?? 0) * 1000) / total) / 10) : undefined,
   }));
+  const debts = data.debt != null;
 
   return (
     <>
+      {/* phone: what needs action comes before the numbers */}
+      <div className="mb-4 grid gap-3 md:hidden">
+        {leads && <CallbacksWidget data={data} />}
+        {debts && <DebtorsWidget />}
+        <UnfilledWidget data={data} />
+      </div>
       <StatCards
+        compact
         stats={([
           { label: "Лиды", value: String(data.leads), hint: `Конверсия: ${percentLabel(data.conversion)}` },
           { label: "Активные студенты", value: String(data.active_students), hint: `Всего в базе: ${data.students_total}` },
           data.income != null && { label: "Оплачено", value: formatPrice(data.income), hint: "Подтверждённые оплаты" },
+          debts && {
+            label: "Долг",
+            value: formatPrice(data.debt ?? 0),
+            hint: "Не оплачено по потокам",
+            tone: Number(data.debt) > 0 ? ("danger" as const) : ("default" as const),
+          },
           { label: "Активные потоки", value: String(data.active_cohorts), hint: `На наборе: ${data.recruiting_cohorts}` },
           data.payroll != null && { label: "Расходы на ЗП", value: formatPrice(data.payroll), hint: "Фактические выплаты" },
           data.profit != null && {
@@ -89,39 +173,28 @@ function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
           },
           data.ads != null && { label: "Реклама", value: formatPrice(data.ads), hint: `Кампаний: ${data.campaigns}` },
           { label: "Выпускники", value: String(data.graduates), hint: "Балл 70 и выше" },
-          data.ads != null && { label: "CAC", value: orDash(data.cac, formatPrice), hint: "Реклама ÷ записавшиеся" },
+          data.ads != null && { label: "CAC (все лиды)", value: orDash(data.cac, (v) => formatPrice(Math.round(Number(v)))), hint: "Реклама ÷ все записавшиеся" },
         ] as (Stat | false)[]).filter((s): s is Stat => !!s)}
       />
       <div className="mb-4 grid gap-4 lg:grid-cols-2">
         <BarList note="доля от всех лидов периода" rows={funnel} title="Воронка лидов" />
-        <Widget count={data.unfilled.count} empty="Всё заполнено" title="Не заполнено">
-          <ul>
-            {data.unfilled.items.map((u) => (
-              <li key={`${u.lesson_id}`}>
-                <Link className="flex min-h-12 items-center justify-between gap-3 rounded-xl px-2 py-1.5 hover:bg-default-100" href={`/lessons/${u.lesson_id}`}>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">
-                      {dayTitle(u.date)} · {u.course_name}
-                    </span>
-                    <span className="block text-xs text-default-500">{u.cohort_code}</span>
-                  </span>
-                  <span className="shrink-0 text-xs text-default-500 tabular-nums">
-                    {u.marked}/{u.total}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </Widget>
+        <div className="hidden md:block">
+          <UnfilledWidget data={data} />
+        </div>
       </div>
       {leads && <div className="grid gap-4 lg:grid-cols-2">
-        <Widget count={data.callbacks.count} empty="Звонков на сегодня нет" title="Перезвонить сегодня">
-          <LeadList items={data.callbacks.items} when="callback" />
-        </Widget>
+        <div className="hidden md:block">
+          <CallbacksWidget data={data} />
+        </div>
         <Widget count={data.recent_leads.length} empty="Лидов пока нет" title="Последние лиды">
           <LeadList items={data.recent_leads} when="created" />
         </Widget>
       </div>}
+      {debts && (
+        <div className="mt-4 hidden md:block lg:w-1/2">
+          <DebtorsWidget />
+        </div>
+      )}
     </>
   );
 }
@@ -236,9 +309,7 @@ export default function DashboardPage() {
           query={overview}
           skeleton={
             <>
-              <StatCardsSkeleton count={3} />
-              <StatCardsSkeleton count={3} />
-              <StatCardsSkeleton count={3} />
+              <StatCardsSkeleton compact count={9} />
               <div className="grid gap-4 lg:grid-cols-2">{chartSkeleton}{chartSkeleton}</div>
             </>
           }

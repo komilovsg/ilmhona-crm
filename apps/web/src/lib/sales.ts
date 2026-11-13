@@ -74,11 +74,11 @@ export function telegramHref(phone: string | null | undefined): string | null {
   return digits.length >= 9 ? `https://t.me/+${digits}` : null;
 }
 
-/** CPL / CAC: «—» when the API has no number (no leads / nobody enrolled). */
+/** CPL / CAC: «—» when the API has no number (no leads / nobody enrolled); whole TJS. */
 export function moneyOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "—";
 
-  return formatPrice(value);
+  return formatPrice(Math.round(Number(value)));
 }
 
 export function percentLabel(value: number): string {

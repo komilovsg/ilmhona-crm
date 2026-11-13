@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,7 @@ from app.auth.deps import Principal, require, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
+from app.core.search import search_clause
 from app.core.versioning import Version, check_version
 from app.education.errors import STUDENT_IN_USE
 from app.education.scope import branch_for_write, cohort_filters, student_filters, writer
@@ -157,8 +158,7 @@ def _student_where(
     if status:
         where.append(student_status_expr() == status)
     if q and q.strip():
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(or_(Student.full_name.ilike(like), Student.phone.ilike(like)))
+        where.append(search_clause(q, (Student.full_name,), (Student.phone,)))
     return where
 
 

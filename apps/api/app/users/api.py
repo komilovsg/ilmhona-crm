@@ -11,7 +11,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +22,7 @@ from app.core.config import settings
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
+from app.core.search import search_clause
 from app.core.security import hash_password, temp_password
 from app.core.versioning import Version, check_version
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -189,14 +190,7 @@ def _user_where(
     if is_active is not None:
         where.append(AppUser.is_active == is_active)
     if q:
-        like = f"%{q.strip().replace('%', r'\%').replace('_', r'\_')}%"
-        where.append(
-            or_(
-                AppUser.login.ilike(like),
-                AppUser.full_name.ilike(like),
-                AppUser.phone.ilike(like),
-            )
-        )
+        where.append(search_clause(q, (AppUser.login, AppUser.full_name), (AppUser.phone,)))
     return where
 
 
