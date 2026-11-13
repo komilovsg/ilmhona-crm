@@ -325,7 +325,7 @@ async def test_rebuild_keeps_lessons_with_marks(admin: httpx.AsyncClient) -> Non
 # ---- #24 ---------------------------------------------------------------------------------
 
 
-async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_still_cannot_enroll(
+async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_writes_nothing_else(
     admin: httpx.AsyncClient, login_as: SignedIn
 ) -> None:
     ins = await login_as("ins", "instructor", branch="Душанбе")
@@ -349,13 +349,149 @@ async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_still_cann
     ):
         assert (r.status_code, r.json()["code"]) == (404, "not_found")
     assert (await sql("SELECT count(*) FROM attendance"))[0][0] == 2  # mine only
-    # the one write an instructor has is attendance and grades: nothing else
+    # besides attendance and grades an instructor only adds new students to their own cohort
+    # (test_bug_24_instructor_adds_new_students_to_own_cohort_...): an existing one is 403
     r = await ins.post(
         f"{C}/{mine['id']}/enrollments", json={"student_id": str(await make_student())}
     )
     assert (r.status_code, r.json()["code"]) == (403, "forbidden")
     r = await ins.patch(f"{C}/{mine['id']}", json={"capacity": 3})
     assert r.status_code == 403
+
+
+NEW = {"new_student": {"full_name": "Новиков Нур", "phone": "+992 90 123 45 67"}}
+
+
+async def test_bug_24_instructor_adds_new_students_to_own_cohort_and_removes_only_own_clean(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    """Owner decision 2026-11-13: an instructor adds new students to their own cohort and
+    removes the ones they added that have no payment, mark or grade. Nothing else."""
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    other = await login_as("ins2", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    mine, my_lessons = await past_cohort(admin, name="A", instructor_id=me)
+    theirs, _ = await past_cohort(admin, name="B")
+
+    r = await ins.post(f"{C}/{mine['id']}/enrollments", json=NEW)
+    assert r.status_code == 201, r.text
+    added = r.json()
+    assert (added["created_by_me"], added["deletable"]) == (True, True)
+    (student,) = await sql(
+        "SELECT s.branch_id, s.created_by, e.created_by FROM student s "
+        "JOIN enrollment e ON e.student_id = s.id WHERE s.id = :i",
+        i=added["student_id"],
+    )
+    assert student[0] == uuid.UUID(mine["branch_id"])
+    assert str(student[1]) == me and str(student[2]) == me
+    actions = {a for (a,) in await sql("SELECT action FROM audit_log WHERE user_id = :u", u=me)}
+    assert {"student.create", "enrollment.create"} <= actions
+
+    # another cohort: invisible; an existing student: 403; no other write
+    r = await ins.post(f"{C}/{theirs['id']}/enrollments", json=NEW)
+    assert (r.status_code, r.json()["code"]) == (404, "not_found")
+    sid = await make_student("Старый")
+    r = await ins.post(f"{C}/{mine['id']}/enrollments", json={"student_id": str(sid)})
+    assert (r.status_code, r.json()["code"]) == (403, "forbidden")
+    eid = added["id"]
+    for r in (
+        await ins.patch(
+            f"{E}/{eid}", json={"status": "отчислен"}, headers={"X-Record-Version": "1"}
+        ),
+        await ins.patch(
+            f"{E}/{eid}/review", json={"needs_review": True}, headers={"X-Record-Version": "1"}
+        ),
+        await ins.patch(
+            f"/api/v1/students/{added['student_id']}",
+            json={"full_name": "X"},
+            headers={"X-Record-Version": "1"},
+        ),
+        await ins.post("/api/v1/students", json={"full_name": "X"}),
+        await ins.get("/api/v1/students"),
+    ):
+        assert r.status_code == 403, r.text
+
+    # another instructor of the same branch does not see it
+    assert (await other.delete(f"{E}/{eid}")).status_code == 404
+    listed = (await ins.get(f"{C}/{mine['id']}/enrollments")).json()
+    assert [x["deletable"] for x in listed] == [True]
+
+    # own, clean: removed, and the student they created goes with it
+    assert (await ins.delete(f"{E}/{eid}")).status_code == 204
+    assert await sql("SELECT 1 FROM student WHERE id = :i", i=added["student_id"]) == []
+    actions = [a for (a,) in await sql("SELECT action FROM audit_log WHERE user_id = :u", u=me)]
+    assert {"enrollment.delete", "student.delete"} <= set(actions)
+
+    # a mark, a grade or a payment keeps it
+    async def add() -> str:
+        r = await ins.post(f"{C}/{mine['id']}/enrollments", json=NEW)
+        assert r.status_code == 201, r.text
+        await sql(
+            "UPDATE enrollment SET enrolled_at = :d WHERE id = :i",
+            d=today() - timedelta(days=30),
+            i=r.json()["id"],
+        )
+        return str(r.json()["id"])
+
+    marked = await add()
+    assert (await mark(ins, my_lessons[0], marked)).status_code == 200
+    graded = await add()
+    assert (await ins.patch(f"{E}/{graded}/grade", json={"homework": 5})).status_code == 200
+    paid = await add()
+    await sql(
+        "INSERT INTO payment (enrollment_id, month_no, amount, method, paid_at, "
+        "idempotency_key) VALUES (:e, 1, 100, 'alif', :d, gen_random_uuid())",
+        e=paid,
+        d=today(),
+    )
+    listed = (await ins.get(f"{C}/{mine['id']}/enrollments")).json()
+    assert [x["deletable"] for x in listed] == [False, False, False]
+    for e in (marked, graded, paid):
+        r = await ins.delete(f"{E}/{e}")
+        assert (r.status_code, r.json()["code"]) == (409, "enrollment_has_records")
+
+    # one a manager added: not theirs
+    by_admin = await enroll(admin, mine, "От менеджера")
+    r = await ins.delete(f"{E}/{by_admin}")
+    assert (r.status_code, r.json()["code"]) == (403, "enrollment_not_yours")
+    assert (await sql("SELECT count(*) FROM enrollment WHERE cohort_id = :c", c=mine["id"]))[0][
+        0
+    ] == 4
+
+
+async def test_bug_24_instructor_removal_keeps_a_student_held_elsewhere(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    mine, _ = await past_cohort(admin, name="A", instructor_id=me)
+    theirs, _ = await past_cohort(admin, name="B")
+    added = (await ins.post(f"{C}/{mine['id']}/enrollments", json=NEW)).json()
+    r = await admin.post(
+        f"{C}/{theirs['id']}/enrollments", json={"student_id": added["student_id"]}
+    )
+    assert r.status_code == 201
+    assert (await ins.delete(f"{E}/{added['id']}")).status_code == 204
+    # enrolled elsewhere too: the student stays
+    assert len(await sql("SELECT 1 FROM student WHERE id = :i", i=added["student_id"])) == 1
+
+
+async def test_manager_enroll_fills_created_by(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    me = (await admin.get("/api/v1/auth/me")).json()["id"]
+    cohort, _ = await past_cohort(admin)
+    r = await admin.post(f"{C}/{cohort['id']}/enrollments", json=NEW)
+    assert r.status_code == 201
+    (row,) = await sql(
+        "SELECT s.created_by, e.created_by FROM enrollment e JOIN student s "
+        "ON s.id = e.student_id WHERE e.id = :i",
+        i=r.json()["id"],
+    )
+    assert (str(row[0]), str(row[1])) == (me, me)
+    # a manager still removes any enrollment; the student stays
+    assert (await admin.delete(f"{E}/{r.json()['id']}")).status_code == 204
+    assert len(await sql("SELECT 1 FROM student WHERE id = :i", i=r.json()["student_id"])) == 1
 
 
 async def test_attendance_rights_view_does_not_write_and_branch_scope(

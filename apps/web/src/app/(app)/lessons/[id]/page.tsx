@@ -15,13 +15,17 @@ import { LoadingButton } from "@/components/LoadingButton";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
+import { useIsInstructor } from "@/hooks/education";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
 import { dayTitle, fullDate, todayIso } from "@/lib/education";
 import { useReducedMotion } from "@/lib/client-store";
 import { SPRING_POP, SPRING_SNAPPY } from "@/lib/motion";
+import { lazyModal } from "@/lib/lazy-modal";
 import { notify, notifyError } from "@/lib/toast";
 import type { LessonAttendance, MarkRow } from "@/lib/types";
+
+const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
 
 type Cell = { present: boolean; reason: string | null; state: "saving" | "saved" | "error" };
 
@@ -195,6 +199,12 @@ function LessonMark({ data }: { data: LessonAttendance }) {
   const [bulk, setBulk] = useState(false);
   const ahead = lesson.date > todayIso(); // the API takes marks from the lesson's day on
   const disabled = lesson.cancelled || ahead;
+  // the instructor adds a student right from the lesson; enrolled today, they are on today's
+  // lesson (and later ones) only: on an earlier lesson they are listed apart, without marks
+  const canAdd = useIsInstructor() && !lesson.cancelled;
+  const past = lesson.date < todayIso();
+  const [adding, setAdding] = useState(false);
+  const [late, setLate] = useState<{ id: string; name: string }[]>([]);
 
   const patchCache = useCallback(
     (enrollmentId: string, present: boolean, reason: string | null) =>
@@ -315,20 +325,27 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         </p>
       )}
 
-      <div className="mb-4 flex items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <span aria-live="polite" className="text-sm font-medium">
           {markedLabel(marked, total)}
         </span>
-        {canMark && !disabled && total > 0 && (
-          <LoadingButton
-            color="primary"
-            isLoading={bulk}
-            startContent={<Icon name="check" size={18} />}
-            onPress={() => void allPresent()}
-          >
-            Все присутствуют
-          </LoadingButton>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {canAdd && (
+            <Button startContent={<Icon name="user-plus" size={18} />} variant="flat" onPress={() => setAdding(true)}>
+              Студент
+            </Button>
+          )}
+          {canMark && !disabled && total > 0 && (
+            <LoadingButton
+              color="primary"
+              isLoading={bulk}
+              startContent={<Icon name="check" size={18} />}
+              onPress={() => void allPresent()}
+            >
+              Все присутствуют
+            </LoadingButton>
+          )}
+        </div>
       </div>
 
       {total === 0 ? (
@@ -348,6 +365,17 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         </ul>
       )}
 
+      {late.length > 0 && (
+        <ul aria-label="Добавлены после урока" className="mt-2 space-y-2">
+          {late.map((s) => (
+            <li key={s.id} className="rounded-2xl border border-dashed border-default-300 p-4">
+              <div className="truncate text-base font-medium">{s.name}</div>
+              <p className="text-xs text-default-500">Добавлен сегодня, после этого урока: отметки — с сегодняшних уроков.</p>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="mt-6 flex justify-between gap-3">
         {data.prev_id ? (
           <Button as={Link} href={`/lessons/${data.prev_id}`} variant="flat" startContent={<Icon name="chevron-left" size={18} />}>
@@ -363,6 +391,18 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         )}
       </div>
       <p className="mt-4 text-center text-xs text-default-400">{fullDate(lesson.date)}</p>
+      {adding && (
+        <NewStudentModal
+          cohortCode={lesson.cohort_code}
+          cohortId={lesson.cohort_id}
+          onClose={() => setAdding(false)}
+          onSaved={(row) => {
+            if (past) setLate((l) => [...l, { id: row.id, name: row.student_name }]);
+            void queryClient.invalidateQueries({ queryKey: key });
+            void refreshAttendance();
+          }}
+        />
+      )}
     </>
   );
 }
