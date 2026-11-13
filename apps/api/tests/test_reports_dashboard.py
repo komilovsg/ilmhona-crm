@@ -231,3 +231,23 @@ async def test_no_dashboard_right_no_dashboard(
     nobody = await login_as("nobody", await make_role("Пусто", {"students": "view"}))
     for url in (f"{D}/overview", ML, f"{G}/students", "/api/v1/employment"):
         assert (await nobody.get(url)).status_code == 403, url
+
+
+async def test_dashboard_debt_equals_the_debtors_total(
+    admin: httpx.AsyncClient, browser: Callable[[], httpx.AsyncClient]
+) -> None:
+    await world(admin, browser)
+    debtors = (await admin.get(f"{P}/debtors")).json()
+    overview = (await admin.get(f"{D}/overview")).json()
+    assert Decimal(debtors["total_debt"]) > 0
+    assert overview["debt"] == debtors["total_debt"]
+
+
+async def test_dashboard_debt_hidden_without_payments(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    role = await make_role("Без оплат", {"dashboard": "view"})
+    c = await login_as("nopay", role)
+    r = await c.get(f"{D}/overview")
+    assert r.status_code == 200, r.text
+    assert r.json()["debt"] is None

@@ -1,14 +1,14 @@
 """The one `where` of the lead list: the screen, the funnel numbers and the Excel export all
 build their selection here, so they can never disagree."""
 
-import re
 import uuid
 from datetime import date
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, or_
+from sqlalchemy import ColumnElement
 
 from app.auth.deps import Principal
+from app.core.search import search_clause
 from app.leads.scope import lead_filters
 from app.metrics.sales import callback_filter, lead_period
 from app.models import Lead
@@ -52,9 +52,5 @@ def lead_where(
         where.extend(callback_filter())
     where.extend(lead_period(date_from, date_to))
     if q and q.strip():
-        terms = [Lead.full_name.ilike(like(q)), Lead.raw_name.ilike(like(q))]
-        digits = re.sub(r"\D", "", q)
-        if len(digits) >= 3:  # a phone typed in any form: +992 90 123…, (90) 123…
-            terms.append(func.regexp_replace(Lead.phone, r"\D", "", "g").like(f"%{digits}%"))
-        where.append(or_(*terms))
+        where.append(search_clause(q, (Lead.full_name, Lead.raw_name), (Lead.phone,)))
     return where

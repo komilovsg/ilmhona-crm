@@ -164,16 +164,43 @@ async def test_month_states_and_due_months(admin: httpx.AsyncClient) -> None:
     assert len(states) == m["months"]
     # started months: 1, 2, 3 (this one)
     assert m["due_months"] == [
-        {"month_no": 2, "remaining": "300.00"},
-        {"month_no": 3, "remaining": "500.00"},
+        {"month_no": 2, "remaining": "300.00", "awaiting": False},
+        {"month_no": 3, "remaining": "500.00", "awaiting": False},
     ]
     debtors = (await admin.get(f"{P}/debtors")).json()["items"]
     assert debtors[0]["due_months"] == m["due_months"]
     late = await enroll(admin, cohort, "Поздний", since=add_months(this_month(), 0))
     late_money = (await admin.get(f"{P}/enrollment/{late}")).json()
-    assert late_money["due_months"] == [{"month_no": 3, "remaining": "500.00"}]
+    assert late_money["due_months"] == [{"month_no": 3, "remaining": "500.00", "awaiting": False}]
     opts = (await admin.get(f"{P}/options", params={"enrollment_id": e})).json()
     assert opts[0]["full_months"] == [1]
+
+
+async def test_pending_only_month_is_awaiting_and_still_a_debt(admin: httpx.AsyncClient) -> None:
+    cohort = await running_cohort(admin, back=2, weeks=30, price=500)
+    e = await enroll(admin, cohort)
+    await pay(admin, e, month=1, amount=500, confirm=True)
+    await pay(admin, e, month=2, amount=500)  # entered in full, not confirmed yet
+    m = (await admin.get(f"{P}/enrollment/{e}")).json()
+    by = {s["month_no"]: s for s in m["month_states"]}
+    assert (by[1]["state"], by[1]["awaiting"]) == ("оплачен", False)
+    # the payment cap still counts the pending money: the month takes no more payments
+    assert (by[2]["state"], by[2]["awaiting"], by[2]["confirmed"]) == ("оплачен", True, "0.00")
+    assert all(s["started"] for s in m["month_states"][:3])
+    # the debt is confirmed only: months 2 (awaiting) and 3 are owed
+    assert m["debt"] == "1000.00"
+    assert m["due_months"] == [
+        {"month_no": 2, "remaining": "500.00", "awaiting": True},
+        {"month_no": 3, "remaining": "500.00", "awaiting": False},
+    ]
+    row = (await admin.get(f"{P}/debtors")).json()["items"][0]
+    assert row["due_months"] == m["due_months"] and row["debt"] == m["debt"]
+    # once confirmed the month leaves the due list
+    pending = (await admin.get(P, params={"status": "ожидает"})).json()["items"][0]
+    assert (await admin.post(f"{P}/{pending['id']}/confirm")).status_code == 200
+    after = (await admin.get(f"{P}/enrollment/{e}")).json()
+    assert [d["month_no"] for d in after["due_months"]] == [3]
+    assert after["month_states"][1]["awaiting"] is False
 
 
 # ---- the hold ----------------------------------------------------------------------------
@@ -279,7 +306,8 @@ async def test_historic_overpaid_month_reads_and_edits_safely(admin: httpx.Async
     money = (await admin.get(f"{P}/enrollment/{e}")).json()
     m2 = next(x for x in money["month_states"] if x["month_no"] == 2)
     assert (m2["state"], m2["remaining"], m2["overpaid"]) == ("оплачен", "0.00", "200.00")
-    assert 2 not in [d["month_no"] for d in money["due_months"]]
+    # 400 confirmed + 300 pending: awaiting confirmation, the debt (confirmed only) counts 100
+    assert {"month_no": 2, "remaining": "100.00", "awaiting": True} in money["due_months"]
     assert all(float(d["remaining"]) >= 0 for d in money["due_months"])
     # no new payment for it
     r = await admin.post(P, json=body(e, amount="1"))
