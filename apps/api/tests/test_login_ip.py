@@ -1,6 +1,7 @@
 """Login lockout per (login, client address) with a higher per-login ceiling, and the daily purge."""
 
 import httpx
+import pytest
 
 from app.cli import purge_login_attempts
 from tests.conftest import PASSWORD, make_client, make_user, sign_in, sql
@@ -63,3 +64,20 @@ async def test_daily_purges_old_login_attempts() -> None:
     assert await purge_login_attempts() == 2
     assert [r[0] for r in await sql("SELECT login FROM login_attempt")] == ["fresh"]
     assert [r[0] for r in await sql("SELECT login FROM login_ip_attempt")] == ["fresh"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="open: failed logins with invented login names are not capped per address; each one "
+    "costs a blocking argon2 check and leaves audit_log rows that are never purged",
+)
+async def test_unknown_login_flood_from_one_address_is_capped() -> None:
+    """An outsider who invents a new login name for every try never trips the (login, address)
+    lock, so one address can write audit rows without end and keep the event loop busy."""
+    async with make_client("203.0.113.9") as attacker:
+        for n in range(40):
+            await _bad(attacker, f"nobody{n}", 1)
+        r = await attacker.post(f"{A}/login", json={"login": "nobody-last", "password": "x"})
+    assert r.status_code == 429
+    rows = await sql("SELECT count(*) FROM audit_log WHERE action = 'auth.login_failed'")
+    assert rows[0][0] < 40
