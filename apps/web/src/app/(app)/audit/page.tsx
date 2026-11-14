@@ -1,11 +1,12 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
+import { DateField } from "@/components/DateField";
 import { useDeferredValue, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { SheetHandle } from "@/components/SheetHandle";
-import { Input } from "@heroui/input";
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon";
@@ -96,23 +97,19 @@ function FilterFields({
 
   return (
     <>
-      <Input
+      <DateField filter
         className="md:w-44"
         label="С даты"
-        placeholder=" "
-        type="date"
         value={filters.from}
         onValueChange={(from) => set({ ...filters, from })}
       />
-      <Input
+      <DateField filter
         className="md:w-44"
         label="По дату"
-        placeholder=" "
-        type="date"
         value={filters.to}
         onValueChange={(to) => set({ ...filters, to })}
       />
-      <SelectField
+      <SelectField filter
         allLabel="Все разделы"
         className="md:w-48"
         label="Раздел"
@@ -121,7 +118,7 @@ function FilterFields({
         onChange={(section) => set({ ...filters, section })}
       />
       {!me?.branch && (
-        <SelectField
+        <SelectField filter
           allLabel="Все филиалы"
           className="md:w-48"
           label="Филиал"
@@ -130,7 +127,7 @@ function FilterFields({
           onChange={(branch) => set({ ...filters, branch })}
         />
       )}
-      <SelectField
+      <SelectField filter
         allLabel="Все пользователи"
         className="md:w-56"
         label="Кто"
@@ -138,7 +135,7 @@ function FilterFields({
         value={filters.user}
         onChange={(user) => set({ ...filters, user })}
       />
-      <SelectField
+      <SelectField filter
         allLabel="Любое действие"
         className="md:w-56"
         label="Действие"
@@ -226,7 +223,7 @@ export default function AuditPage() {
         title="Журнал"
       />
       <div className="mb-4 flex items-center gap-3">
-        <Input
+        <FilterInput
           isClearable
           className="min-w-0 flex-1 md:max-w-sm"
           label="Поиск"
@@ -235,7 +232,7 @@ export default function AuditPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(v) => set({ ...filters, q: v })}
         />
-        <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
+        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
       </div>

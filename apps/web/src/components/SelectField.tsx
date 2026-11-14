@@ -1,6 +1,7 @@
 "use client";
 
 import { Select, SelectItem } from "@heroui/select";
+import { FILTER_H } from "@/lib/filter-controls";
 import { useOverlayMotion } from "@/lib/motion";
 
 const ALL = "__all__";
@@ -21,6 +22,7 @@ export function SelectField({
   className,
   isInvalid,
   errorMessage,
+  filter,
   onChange,
 }: {
   label: string;
@@ -32,6 +34,8 @@ export function SelectField({
   className?: string;
   isInvalid?: boolean;
   errorMessage?: string;
+  /** sits in a filter row: the shared filter height */
+  filter?: boolean;
   onChange: (value: string | null) => void;
 }) {
   const items: Option[] = allLabel ? [{ key: ALL, label: allLabel }, ...options] : options;
@@ -42,6 +46,7 @@ export function SelectField({
     <Select
       popoverProps={{ motionProps: overlayMotion }}
       className={className}
+      classNames={filter ? { trigger: FILTER_H } : undefined}
       disallowEmptySelection
       errorMessage={errorMessage}
       isDisabled={isDisabled}
@@ -50,6 +55,7 @@ export function SelectField({
       items={items}
       label={label}
       selectedKeys={selected ? [selected] : []}
+      size={filter ? "sm" : "md"}
       onSelectionChange={(keys) => {
         const key = [...keys][0];
 

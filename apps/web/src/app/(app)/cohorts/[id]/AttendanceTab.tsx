@@ -40,7 +40,7 @@ const ImportJournal = dynamic(() => import("./ImportJournal").then((m) => m.Impo
 
 function ImportButton({ onPress }: { onPress: () => void }) {
   return (
-    <Button startContent={<Icon name="upload" size={18} />} variant="flat" onPress={onPress}>
+    <Button startContent={<Icon name="upload" size={18} />} color="primary" variant="flat" onPress={onPress}>
       Импорт из Excel
     </Button>
   );
@@ -411,7 +411,7 @@ function Grid({
                         className="h-6 min-w-0 px-1.5 text-xs"
                         isLoading={bulk === l.id}
                         size="sm"
-                        variant="flat"
+                        color="primary" variant="flat"
                         onPress={() => void allPresent(l)}
                       >
                         Все ✓

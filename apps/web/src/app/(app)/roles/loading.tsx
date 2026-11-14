@@ -4,7 +4,7 @@ export default function Loading() {
   return (
     <Late>
       <HeaderSkeleton action />
-      <div className="grid items-start gap-5 md:grid-cols-[18rem_1fr]">
+      <div className="grid items-start gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
         <div className="space-y-2">
           {[0, 1, 2].map((i) => (
             <Bone key={i} className="h-12 w-full rounded-xl" />

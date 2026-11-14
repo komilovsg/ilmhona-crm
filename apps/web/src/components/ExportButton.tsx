@@ -44,7 +44,7 @@ export function ExportButton({
         className="hidden md:inline-flex"
         isLoading={busy}
         startContent={<Icon name="download" size={18} />}
-        variant="flat"
+        color="primary" variant="flat"
         onPress={() => void run()}
       >
         {label}

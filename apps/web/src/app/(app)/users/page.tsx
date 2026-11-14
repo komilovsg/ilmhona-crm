@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -8,7 +9,6 @@ import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@
 import { useMenu } from "@/components/useMenu";
 import { SheetHandle } from "@/components/SheetHandle";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
-import { Input } from "@heroui/input";
 
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -70,7 +70,7 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
             <Button color="primary" size="sm" onPress={() => onIssue(r.user_id, r.login)}>
               Выдать временный пароль
             </Button>
-            <Button isLoading={reject.isPending && reject.variables === r.id} size="sm" variant="flat" onPress={() => reject.mutate(r.id)}>
+            <Button isLoading={reject.isPending && reject.variables === r.id} size="sm" color="danger" variant="flat" onPress={() => reject.mutate(r.id)}>
               Отклонить
             </Button>
           </li>
@@ -81,7 +81,12 @@ function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) =
 }
 
 function StatusChip({ user }: { user: UserRow }) {
-  if (!user.is_active) return <Chip size="sm">Нет доступа</Chip>;
+  if (!user.is_active)
+    return (
+      <Chip size="sm" variant="flat">
+        Нет доступа
+      </Chip>
+    );
   if (user.must_change_password)
     return (
       <Chip color="warning" size="sm" variant="flat">
@@ -152,7 +157,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
   return (
     <>
       {!me?.branch && (
-        <SelectField
+        <SelectField filter
           allLabel="Все филиалы"
           className="md:w-48"
           label="Филиал"
@@ -161,7 +166,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
           onChange={(branch) => set({ ...filters, branch })}
         />
       )}
-      <SelectField
+      <SelectField filter
         allLabel="Все роли"
         className="md:w-52"
         label="Роль"
@@ -169,7 +174,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         value={filters.role}
         onChange={(role) => set({ ...filters, role })}
       />
-      <SelectField
+      <SelectField filter
         allLabel="Любой статус"
         className="md:w-44"
         label="Статус"
@@ -244,7 +249,7 @@ export default function UsersPage() {
   const activate = (u: UserRow) =>
     canChange &&
     !u.is_active && (
-      <Button aria-label={`Активировать: ${u.full_name}`} className="ml-2" size="sm" variant="flat" onPress={() => setAction({ kind: "activate", user: u })}>
+      <Button aria-label={`Активировать: ${u.full_name}`} color="primary" size="sm" variant="flat" onPress={() => setAction({ kind: "activate", user: u })}>
         Активировать
       </Button>
     );
@@ -297,7 +302,7 @@ export default function UsersPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: логин, ФИО, телефон"
@@ -306,10 +311,10 @@ export default function UsersPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(q) => set({ ...filters, q })}
         />
-        <div className="hidden gap-3 md:flex">
+        <div className="hidden flex-wrap gap-3 md:flex">
           <FilterFields filters={filters} set={set} />
         </div>
-        <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
+        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
       </div>
@@ -333,7 +338,7 @@ export default function UsersPage() {
         skeleton={<ListSkeleton cols={7} />}
       >
         <>
-          <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+          <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
@@ -343,7 +348,7 @@ export default function UsersPage() {
                   <th className="px-4 py-3 font-medium">Филиал</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Статус</th>
-                  <th className="w-12" />
+                  <th className="px-4 py-3 font-medium">Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -364,12 +369,16 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <StatusChip user={u} />
-                      {activate(u)}
-                      {u.must_change_password && u.temp_password_expires_at && (
-                        <div className="mt-1 text-xs text-default-500">до {formatDateTime(u.temp_password_expires_at)}</div>
+                      {u.is_active && u.must_change_password && u.temp_password_expires_at && (
+                        <div className="mt-1 whitespace-nowrap text-xs text-default-500">до {formatDateTime(u.temp_password_expires_at)}</div>
                       )}
                     </td>
-                    <td className="px-2">{menu(u)}</td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-end gap-1">
+                        {activate(u)}
+                        {menu(u)}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -388,7 +397,6 @@ export default function UsersPage() {
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                   <StatusChip user={u} />
-                  {activate(u)}
                   <span>{u.role_name}</span>
                   <span className="text-default-500">· {u.branch_name ?? "Все филиалы"}</span>
                 </div>
@@ -398,6 +406,10 @@ export default function UsersPage() {
                     {u.phone}
                   </a>
                 )}
+                {u.is_active && u.must_change_password && u.temp_password_expires_at && (
+                  <div className="mt-2 text-xs text-default-500">Ждёт входа до {formatDateTime(u.temp_password_expires_at)}</div>
+                )}
+                {canChange && !u.is_active && <div className="mt-3 flex justify-end border-t border-divider pt-3">{activate(u)}</div>}
               </li>
             ))}
           </ul>

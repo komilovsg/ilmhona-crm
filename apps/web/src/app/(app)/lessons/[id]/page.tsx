@@ -331,7 +331,7 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         </span>
         <div className="flex flex-wrap gap-2">
           {canAdd && (
-            <Button startContent={<Icon name="user-plus" size={18} />} variant="flat" onPress={() => setAdding(true)}>
+            <Button startContent={<Icon name="user-plus" size={18} />} color="primary" variant="flat" onPress={() => setAdding(true)}>
               Студент
             </Button>
           )}
@@ -378,14 +378,14 @@ function LessonMark({ data }: { data: LessonAttendance }) {
 
       <div className="mt-6 flex justify-between gap-3">
         {data.prev_id ? (
-          <Button as={Link} href={`/lessons/${data.prev_id}`} variant="flat" startContent={<Icon name="chevron-left" size={18} />}>
+          <Button as={Link} href={`/lessons/${data.prev_id}`} color="primary" variant="flat" startContent={<Icon name="chevron-left" size={18} />}>
             Предыдущий
           </Button>
         ) : (
           <span />
         )}
         {data.next_id && (
-          <Button as={Link} href={`/lessons/${data.next_id}`} variant="flat" endContent={<Icon name="chevron-right" size={18} />}>
+          <Button as={Link} href={`/lessons/${data.next_id}`} color="primary" variant="flat" endContent={<Icon name="chevron-right" size={18} />}>
             Следующий
           </Button>
         )}

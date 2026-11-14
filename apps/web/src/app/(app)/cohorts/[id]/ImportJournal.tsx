@@ -141,7 +141,7 @@ export function ImportJournal({ cohortId, onClose }: { cohortId: string; onClose
               e.target.value = "";
             }}
           />
-          <LoadingButton isLoading={run.isPending} startContent={<Icon name="upload" size={18} />} variant="flat" onPress={() => input.current?.click()}>
+          <LoadingButton isLoading={run.isPending} startContent={<Icon name="upload" size={18} />} color="primary" variant="flat" onPress={() => input.current?.click()}>
             {file ? "Другой файл" : "Выбрать файл"}
           </LoadingButton>
           <span className="min-w-0 truncate text-sm text-default-500">

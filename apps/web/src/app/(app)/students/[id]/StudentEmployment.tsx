@@ -33,7 +33,7 @@ export function StudentEmployment({ student, graduateEnrollmentId }: { student: 
       <div className="mb-3 flex items-center justify-between gap-3">
         <h2 className="text-lg font-semibold">Трудоустройство</h2>
         {canChange && graduateEnrollmentId && (
-          <Button size="sm" startContent={<Icon name="plus" size={16} />} variant="flat" onPress={() => setEditing("new")}>
+          <Button size="sm" startContent={<Icon name="plus" size={16} />} color="primary" variant="flat" onPress={() => setEditing("new")}>
             Добавить
           </Button>
         )}
