@@ -155,11 +155,12 @@ function Risk({ rows, cohortId }: { rows: RiskRow[]; cohortId: string }) {
 
 function Top({ rows, data, cohortId }: { rows: TopRow[]; data: CohortAnalytics; cohortId: string }) {
   const t = data.thresholds;
+  const basis = data.grades.basis;
 
   return (
     <Card aside={<span className="text-xs text-default-500">{rows.length}</span>} className="min-h-56" title="Отличники">
       <p className="mb-3 text-xs text-default-500">
-        Посещаемость от {t.top_attendance} % и прогноз от {t.top_projected} баллов.
+        Посещаемость от {t.top_attendance} % и {basis === "actual" ? "итог" : "прогноз"} от {t.top_projected} баллов.
       </p>
       {rows.length === 0 ? (
         <p className="py-8 text-center text-sm text-default-500">Пока таких студентов нет</p>
@@ -169,7 +170,7 @@ function Top({ rows, data, cohortId }: { rows: TopRow[]; data: CohortAnalytics; 
             <li key={r.enrollment_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-divider p-3 text-sm">
               <StudentLink cohortId={cohortId} row={r} />
               <span className="tabular-nums text-default-600">
-                {pct(r.attendance_percent)} · прогноз {r.projected}
+                {pct(r.attendance_percent)} · {basis === "actual" ? "итог" : "прогноз"} {r.projected}
               </span>
             </li>
           ))}

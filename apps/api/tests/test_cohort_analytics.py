@@ -245,6 +245,17 @@ async def test_weekly_attendance_equals_sql(admin: httpx.AsyncClient) -> None:
         if w["marked"]
     }
     assert got == {k.isoformat(): v for k, v in expected.items()}
+    # the course axis ends with the week of the last held lesson, not today
+    last_held = (
+        await sql(
+            "SELECT max(lesson_date) FROM lesson WHERE cohort_id = :c AND NOT cancelled",
+            c=cohort["id"],
+        )
+    )[0][0]
+    assert (
+        d["attendance"]["weeks"][-1]["week_start"]
+        == (last_held - timedelta(days=last_held.weekday())).isoformat()
+    )
     for w in d["attendance"]["weeks"]:
         monday = date.fromisoformat(w["week_start"])
         assert monday.weekday() == 0 and w["week_end"] == (monday + timedelta(days=6)).isoformat()

@@ -302,7 +302,8 @@ async def cohort_analytics(
     weeks: list[dict[str, Any]] = []
     if first_week is not None:
         w0 = first_week
-        while w0 <= week_start(end if end else today):
+        last_week = week_start(end) if end else week_start(held[-1].lesson_date)
+        while w0 <= last_week:
             w = by_week.get(w0, {"lessons": 0, "present": 0, "marked": 0})
             weeks.append(
                 {
