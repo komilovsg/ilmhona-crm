@@ -224,7 +224,11 @@ export default function CohortPage() {
             : []),
         ]}
         value={tab}
-        onChange={setTab}
+        onChange={(t) => {
+          setTab(t);
+          // the address names the tab, so a reload (and a copied link) opens the same one
+          router.replace(`?tab=${t}`, { scroll: false });
+        }}
       />
       {tab === "students" && <StudentsTab canChange={canChange} cohort={c} />}
       {tab === "lessons" && <LessonsTab canChange={canChange} cohort={c} />}

@@ -74,11 +74,22 @@ async def seed(admin: httpx.AsyncClient, **extra: Any) -> tuple[dict[str, Any], 
     return cohort, ids
 
 
+async def ahead(cohort: dict[str, Any]) -> None:
+    """Make the cancelled last lesson a real lesson still ahead: the course is running."""
+    await sql(
+        "UPDATE lesson SET cancelled = false, starts_at = now() + interval '2 days', "
+        "ends_at = now() + interval '2 days 1 hour', lesson_date = CURRENT_DATE + 2 WHERE cohort_id = :c AND cancelled",
+        c=cohort["id"],
+    )
+
+
 def half_up(x: Fraction) -> int:
     return floor(x + Fraction(1, 2))
 
 
-def ref_reasons(name: str, *, target: int = 80, pass_score: int = 70) -> set[str]:
+def ref_reasons(
+    name: str, *, target: int = 80, pass_score: int = 70, over: bool = True
+) -> set[str]:
     """The risk reasons of a student, computed from the pattern string alone."""
     pattern = PATTERNS[name]
     first = 9 - LATE[name] if name in LATE else 0
@@ -96,7 +107,8 @@ def ref_reasons(name: str, *, target: int = 80, pass_score: int = 70) -> set[str
     counted = 20 * (1 if held else 0) + 40 * len(scores)
     total = half_up(Fraction(20 * present, len(held))) + sum(scores.values())
     if (
-        counted
+        not over
+        and counted
         and (scores or len(held) >= 4)
         and half_up(Fraction(100 * total, counted)) < pass_score
     ):
@@ -128,7 +140,8 @@ async def test_risk_reasons_match_an_independent_computation(admin: httpx.AsyncC
         else:
             assert name not in risk, name
     # the hand-checked cases behind the reference
-    assert ref_reasons("A") == {"stopped", "low_attendance", "forecast"}
+    assert ref_reasons("A") == {"stopped", "low_attendance"}  # no forecast once the course is over
+    assert ref_reasons("A", over=False) == {"stopped", "low_attendance", "forecast"}
     assert ref_reasons("B") == {
         "missed_2",
         "low_attendance",
@@ -138,6 +151,21 @@ async def test_risk_reasons_match_an_independent_computation(admin: httpx.AsyncC
     assert ref_reasons("N1") == ref_reasons("N2") == set()
     assert risk["A"]["level"] == "red" and risk["F"]["level"] == "red"
     assert risk["B"]["level"] == risk["C"]["level"] == "orange"
+
+
+async def test_forecast_reason_only_while_the_course_runs(admin: httpx.AsyncClient) -> None:
+    cohort, _ = await seed(admin)
+    await ahead(cohort)
+    d = await data(admin, cohort)
+    assert d["final"]["available"] is False
+    risk = risk_by_name(d)
+    for name in PATTERNS:
+        expected = ref_reasons(name, over=False)
+        if name == "G" or not expected:
+            assert name not in risk, name
+        else:
+            assert {x["code"] for x in risk[name]["reasons"]} == expected, name
+    assert "forecast" in {x["code"] for x in risk["A"]["reasons"]}
 
 
 async def test_risk_is_sorted_red_first_and_texts_are_russian(admin: httpx.AsyncClient) -> None:
@@ -351,7 +379,9 @@ async def test_sunday_and_monday_lessons_fall_in_different_iso_weeks(
 
 async def test_grade_distribution_and_pass_rate(admin: httpx.AsyncClient) -> None:
     cohort, ids = await seed(admin)
+    await ahead(cohort)  # running course: projected totals
     d = (await data(admin, cohort))["grades"]
+    assert d["basis"] == "projected"
     rows = await sql(
         "SELECT e.id FROM enrollment e WHERE e.cohort_id = :c AND e.status <> 'отчислен'",
         c=cohort["id"],
@@ -368,6 +398,56 @@ async def test_grade_distribution_and_pass_rate(admin: httpx.AsyncClient) -> Non
     assert d["pass_rate"]["passed"] == passed and d["pass_rate"]["of"] == len(projected)
     assert d["pass_rate"]["percent"] == round(100 * passed / len(projected), 1)
     assert d["pass_rate"]["status"] == ("ok" if 100 * passed >= 70 * len(projected) else "below")
+
+
+async def test_finished_course_uses_actual_totals_and_flags_missing_scores(
+    admin: httpx.AsyncClient,
+) -> None:
+    cohort, ids = await seed(admin)
+    # C has homework only: the final is missing
+    await sql(
+        "INSERT INTO grade_score (enrollment_id, category_key, points) VALUES (:e, 'homework', 10)",
+        e=ids["C"],
+    )
+    d = await data(admin, cohort)
+    g, final = d["grades"], d["final"]
+    assert final["available"] is True and g["basis"] == "actual"
+    rows = {r["student_name"]: r for r in final["rows"]}
+    graded = {n for n, r in rows.items() if r["status"] != "ungraded"}
+    assert graded == {"N1", "N2"}
+    assert rows["N1"]["status"] == "passed" and rows["N2"]["status"] == "passed"
+    # nobody without scores is «не набрал»; the missing categories are named
+    assert not any(r["status"] == "failed" for r in final["rows"])
+    assert rows["A"]["missing"] == ["Домашние задания", "Финал"]
+    assert rows["C"]["missing"] == ["Финал"]
+    assert rows["A"]["passed"] is False and rows["A"]["excellent"] is False
+    # the grades card counts actual totals of the graded only; the rest is «без оценок»
+    totals = [rows[n]["total"] for n in graded]
+    assert (g["students"], g["no_data"]) == (2, 4)
+    assert g["pass_rate"] == {
+        "passed": 2,
+        "of": 2,
+        "percent": 100.0,
+        "target": 70,
+        "status": "ok",
+    }
+    assert g["average"] == round(sum(totals) / 2, 1)
+    for bucket in g["buckets"]:
+        assert bucket["count"] == sum(1 for t in totals if bucket["from"] <= t <= bucket["to"])
+    assert [t["student_name"] for t in d["top"]] == ["N1"]
+    # a failing student with every score entered is «не набрал»
+    for key in ("homework", "final"):
+        await sql(
+            "INSERT INTO grade_score (enrollment_id, category_key, points) VALUES (:e, :k, 1) "
+            "ON CONFLICT (enrollment_id, category_key) DO NOTHING",
+            e=ids["B"],
+            k=key,
+        )
+    d = await data(admin, cohort)
+    rows = {r["student_name"]: r for r in d["final"]["rows"]}
+    assert rows["B"]["status"] == "failed" and rows["B"]["missing"] == []
+    assert d["grades"]["pass_rate"]["of"] == 3 and d["grades"]["pass_rate"]["passed"] == 2
+    assert d["grades"]["no_data"] == 3
 
 
 async def test_top_students_need_90_attendance_and_85_projected(admin: httpx.AsyncClient) -> None:
@@ -414,14 +494,16 @@ async def test_end_of_course_table_rows_and_excel(admin: httpx.AsyncClient) -> N
         "Домашние задания (из 40)",
         "Финал (из 40)",
         "Итого",
-        "Зачёт (от 70)",
+        "Результат (зачёт от 70)",
         "Отличник",
     )
     assert len(table) - 1 == len(final["rows"])
     exported = {row[0]: row for row in table[1:]}
     for name, row in by_name.items():
         assert exported[name][4] == row["total"]
-        assert exported[name][5] == ("Да" if row["passed"] else "Нет")
+        assert exported[name][5] == (
+            "зачёт" if row["passed"] else "оценки не выставлены: Домашние задания, Финал"
+        )
         assert exported[name][6] == ("Да" if row["excellent"] else "Нет")
     assert len(list(wb["В зоне риска"].iter_rows())) - 1 == len(d["risk"])
     assert len(list(wb["Отличники"].iter_rows())) - 1 == len(d["top"])

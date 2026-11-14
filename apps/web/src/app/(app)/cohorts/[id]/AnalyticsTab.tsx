@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Chip } from "@heroui/chip";
 
@@ -15,7 +15,9 @@ import { Segmented } from "@/components/Segmented";
 import { AnalyticsSkeleton } from "@/components/Skeletons";
 import { api } from "@/lib/api";
 import {
+  analyticsQuery,
   leftLine,
+  periodFromQuery,
   pct,
   periodLabel,
   PERIODS,
@@ -76,12 +78,13 @@ function Grades({ data }: { data: CohortAnalytics }) {
         Проходят {rate.passed} из {rate.of} · {pct(rate.percent)}
       </p>
       <p className="mt-1 mb-3 text-sm text-default-500">
-        Цель {rate.target} % · проходной {g.pass_score} · средний прогноз {g.average === null ? "—" : String(g.average).replace(".", ",")}
-        {g.no_data > 0 && ` · без оценок ${g.no_data}`}
+        Цель {rate.target} % · проходной {g.pass_score} · {g.basis === "actual" ? "средний итог" : "средний прогноз"}{" "}
+        {g.average === null ? "—" : String(g.average).replace(".", ",")}
+        {g.no_data > 0 && ` · без оценок: ${g.no_data}`}
       </p>
       <BarList
         rows={g.buckets.map((b) => ({ key: b.label, label: b.label, value: b.count, text: `${b.count} чел.` }))}
-        title="Прогноз итога, баллы"
+        title={g.basis === "actual" ? "Итог, баллы" : "Прогноз итога, баллы"}
       />
     </Card>
   );
@@ -179,14 +182,21 @@ function Top({ rows, data, cohortId }: { rows: TopRow[]; data: CohortAnalytics; 
 function PassChip({ row }: { row: FinalRow }) {
   return (
     <span className="flex flex-wrap gap-1">
-      <Chip color={row.passed ? "success" : "default"} size="sm" variant="flat">
-        {row.passed ? "зачёт" : "не набрал"}
-      </Chip>
+      {row.status === "ungraded" ? (
+        <Chip color="default" size="sm" variant="flat">
+          оценки не выставлены
+        </Chip>
+      ) : (
+        <Chip color={row.status === "passed" ? "success" : "danger"} size="sm" variant="flat">
+          {row.status === "passed" ? "зачёт" : "не набрал"}
+        </Chip>
+      )}
       {row.excellent && (
         <Chip color="primary" size="sm" variant="flat">
           отличник
         </Chip>
       )}
+      {row.missing.length > 0 && <span className="w-full text-xs text-default-500">нет: {row.missing.join(", ")}</span>}
     </span>
   );
 }
@@ -254,8 +264,13 @@ function Final({ data, cohortId }: { data: CohortAnalytics; cohortId: string }) 
 }
 
 export function AnalyticsTab({ cohortId }: { cohortId: string }) {
-  const [period, setPeriod] = useState<Period>("course");
-  const [offset, setOffset] = useState(0);
+  // the period and the step live in the address: a reload keeps them and «назад» steps back
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const { period, offset } = periodFromQuery(params.get("period"), params.get("offset"));
+  const go = (p: Period, o: number) => router.push(`${pathname}?${analyticsQuery(p, o)}`, { scroll: false });
+  const setOffset = (o: number) => go(period, o);
   const query = useQuery({
     queryKey: ["analytics", cohortId, period, offset],
     queryFn: () => api<CohortAnalytics>(`/api/v1/cohorts/${cohortId}/analytics?period=${period}&offset=${offset}`),
@@ -270,10 +285,7 @@ export function AnalyticsTab({ cohortId }: { cohortId: string }) {
             label="Период аналитики"
             options={PERIODS}
             value={period}
-            onChange={(p) => {
-              setPeriod(p);
-              setOffset(0);
-            }}
+            onChange={(p) => go(p, 0)}
           />
           <div className="mt-2 flex h-9 items-center gap-1 text-sm">
             {period !== "course" && (

@@ -13,7 +13,11 @@ No money anywhere in here. Targets and the pass score are the cohort's EFFECTIVE
 - Attendance of a week / period = present ÷ marked marks of the not expelled students over held
   lessons (unmarked is not an absence); a student's own attendance % is the metrics one
   (present ÷ held since enrollment).
-- Grades: projected totals of the not expelled students, buckets 0–49 / 50–69 / 70–84 / 85–100;
+- Once the course is over (end-of-course table shown) every total is the ACTUAL one and there is
+  no forecast reason; a student with any manual category unscored is «оценки не выставлены»,
+  counted in `no_data`, not in pass / fail and never «не набрал».
+- Grades: projected totals (actual totals when over) of the not expelled students,
+  buckets 0–49 / 50–69 / 70–84 / 85–100;
   pass rate = projected ≥ pass score among those with a projected total.
 - Risk (expelled are never listed; every matching reason is shown):
   red «перестал ходить» = the last 3+ held lessons of the student are all absences (an unmarked
@@ -112,6 +116,7 @@ def risk_reasons(
     has_scores: bool,
     held: int,
     scheme: grading.Scheme,
+    over: bool = False,
 ) -> tuple[str | None, list[dict[str, str]]]:
     """(level, reasons) of one student; level None = not at risk."""
     reasons: list[dict[str, str]] = []
@@ -132,7 +137,8 @@ def risk_reasons(
             }
         )
     if (
-        projected is not None
+        not over
+        and projected is not None
         and (has_scores or held >= FORECAST_MIN_HELD)
         and projected < scheme.pass_score
     ):
@@ -213,6 +219,13 @@ async def cohort_analytics(
             )
         )
     active = [x for x in students if x.enrollment.status != EXPELLED]
+    # the course is over: every total on the tab is the actual one, never a projection
+    available = cohort.status == st.DONE or (bool(held) and not upcoming)
+    manual_names = {c.key: c.name for c in scheme.manual}
+
+    def missing_of(enrollment_id: uuid.UUID) -> list[str]:
+        scores = results[enrollment_id]["scores"]
+        return [name for key, name in manual_names.items() if key not in scores]
 
     # ---- risk ------------------------------------------------------------------------------
     cutoff = today - timedelta(days=WINDOW_DAYS - 1)
@@ -230,6 +243,7 @@ async def cohort_analytics(
             has_scores=any(k in manual_keys for k in res["scores"]),
             held=res["held"],
             scheme=scheme,
+            over=available,
         )
         if level == RED:
             stopped_ids.add(x.enrollment.id)
@@ -314,7 +328,16 @@ async def cohort_analytics(
     }
 
     # ---- grades ----------------------------------------------------------------------------
-    projected = {x.enrollment.id: results[x.enrollment.id]["projected"] for x in active}
+    if available:  # actual totals; a student with a manual category unscored is not counted
+        shown = {
+            x.enrollment.id: None
+            if missing_of(x.enrollment.id)
+            else results[x.enrollment.id]["total"]
+            for x in active
+        }
+    else:
+        shown = {x.enrollment.id: results[x.enrollment.id]["projected"] for x in active}
+    projected = shown
     values = [v for v in projected.values() if v is not None]
     passed = sum(1 for v in values if v >= scheme.pass_score)
     grades = {
@@ -327,6 +350,7 @@ async def cohort_analytics(
             }
             for lo, hi in BUCKETS
         ],
+        "basis": "actual" if available else "projected",
         "students": len(values),
         "no_data": len(projected) - len(values),
         "average": round(sum(values) / len(values), 1) if values else None,
@@ -348,20 +372,20 @@ async def cohort_analytics(
                 "student_id": x.student.id,
                 "student_name": x.student.full_name,
                 "attendance_percent": results[x.enrollment.id]["percent"],
-                "projected": results[x.enrollment.id]["projected"],
+                "projected": shown[x.enrollment.id],
             }
             for x in active
-            if is_top(results[x.enrollment.id]["percent"], results[x.enrollment.id]["projected"])
+            if is_top(results[x.enrollment.id]["percent"], shown[x.enrollment.id])
         ),
         key=lambda r: (-r["projected"], -r["attendance_percent"], r["student_name"]),
     )
 
     # ---- end of course ---------------------------------------------------------------------
-    available = cohort.status == st.DONE or (bool(held) and not upcoming)
     final_rows: list[dict[str, Any]] = []
     if available:
         for x in active:
             res = results[x.enrollment.id]
+            missing = missing_of(x.enrollment.id)
             final_rows.append(
                 {
                     "enrollment_id": x.enrollment.id,
@@ -369,8 +393,10 @@ async def cohort_analytics(
                     "student_name": x.student.full_name,
                     "points": res["points"],
                     "total": res["total"],
-                    "passed": res["passed"],
-                    "excellent": is_top(res["percent"], res["total"]),
+                    "missing": missing,
+                    "status": "ungraded" if missing else ("passed" if res["passed"] else "failed"),
+                    "passed": res["passed"] and not missing,
+                    "excellent": not missing and is_top(res["percent"], res["total"]),
                     "attendance_percent": res["percent"],
                 }
             )

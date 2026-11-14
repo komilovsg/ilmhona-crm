@@ -41,6 +41,9 @@ export type FinalRow = {
   student_name: string;
   points: Record<string, number>;
   total: number;
+  status: "passed" | "failed" | "ungraded";
+  /** manual categories without a score */
+  missing: string[];
   passed: boolean;
   excellent: boolean;
   attendance_percent: number | null;
@@ -73,6 +76,7 @@ export type CohortAnalytics = {
     status: Status;
   };
   grades: {
+    basis: "actual" | "projected";
     buckets: { label: string; from: number; to: number; count: number }[];
     students: number;
     no_data: number;
@@ -158,4 +162,24 @@ export function leftLine(left: { expelled: number; stopped: number }): string | 
 /** Position (0..1 from the bottom) of a percent on the 0–100 axis. */
 export function share(percent: number): number {
   return Math.min(1, Math.max(0, percent / 100));
+}
+
+const PERIOD_KEYS: Period[] = ["week", "month", "course"];
+
+/** `period` and `offset` of the address (anything unknown = the whole course, no step). */
+export function periodFromQuery(period: string | null, offset: string | null): { period: Period; offset: number } {
+  const p = PERIOD_KEYS.find((k) => k === period) ?? "course";
+  const n = Number(offset);
+
+  return { period: p, offset: p === "course" || !Number.isInteger(n) ? 0 : n };
+}
+
+/** The query string that keeps the tab, the period and the step (`course` / 0 are left out). */
+export function analyticsQuery(period: Period, offset: number): string {
+  const q = new URLSearchParams({ tab: "analytics" });
+
+  if (period !== "course") q.set("period", period);
+  if (period !== "course" && offset !== 0) q.set("offset", String(offset));
+
+  return q.toString();
 }

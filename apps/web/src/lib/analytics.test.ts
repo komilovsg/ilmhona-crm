@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { dayMonth, leftLine, pct, periodLabel, retentionLine, share, statusLabel, weekRange } from "./analytics.ts";
+import { analyticsQuery, dayMonth, periodFromQuery, leftLine, pct, periodLabel, retentionLine, share, statusLabel, weekRange } from "./analytics.ts";
 
 test("status always has words, never colour alone", () => {
   assert.equal(statusLabel("ok"), "в норме");
@@ -34,4 +34,15 @@ test("period labels", () => {
   assert.equal(periodLabel("week", "2026-11-30", "2026-12-06"), "30 ноября – 6 декабря");
   assert.equal(periodLabel("month", "2026-11-01", "2026-11-30"), "Ноябрь 2026");
   assert.equal(periodLabel("course", null, "2026-11-14"), "Весь курс");
+});
+
+test("period and step live in the address", () => {
+  assert.deepEqual(periodFromQuery(null, null), { period: "course", offset: 0 });
+  assert.deepEqual(periodFromQuery("month", "-2"), { period: "month", offset: -2 });
+  assert.deepEqual(periodFromQuery("week", "x"), { period: "week", offset: 0 });
+  assert.deepEqual(periodFromQuery("year", "3"), { period: "course", offset: 0 });
+  assert.deepEqual(periodFromQuery("course", "3"), { period: "course", offset: 0 });
+  assert.equal(analyticsQuery("course", 0), "tab=analytics");
+  assert.equal(analyticsQuery("month", 0), "tab=analytics&period=month");
+  assert.equal(analyticsQuery("week", -1), "tab=analytics&period=week&offset=-1");
 });

@@ -52,6 +52,15 @@ async def analytics(
     return await cohort_analytics(db, cohort, period, with_phone=_phones(p), offset=offset)
 
 
+RESULT = {"passed": "зачёт", "failed": "не набрал"}
+
+
+def _result(r: dict[str, Any]) -> str:
+    if r["status"] == "ungraded":
+        return f"оценки не выставлены: {', '.join(r['missing'])}"
+    return RESULT[r["status"]]
+
+
 def _reasons(r: dict[str, Any]) -> str:
     return "; ".join(x["text"] for x in r["reasons"])
 
@@ -78,7 +87,7 @@ async def export_analytics(
         ]
         columns += [
             Col("Итого", lambda r: r["total"], "int"),
-            Col(f"Зачёт (от {final['pass_score']})", lambda r: r["passed"], "bool"),
+            Col(f"Результат (зачёт от {final['pass_score']})", _result),
             Col("Отличник", lambda r: r["excellent"], "bool"),
         ]
         sheets.append(Sheet("Итоги курса", columns, final["rows"]))
