@@ -22,11 +22,12 @@ test("several matches: none preselected, matches first", () => {
   assert.deepEqual([...r.match], ["b", "c"]);
 });
 
-test("full and finished cohorts do not count", () => {
+test("finished cohorts do not count; full ones stay, after the roomy ones, and are never preselected", () => {
   const r = convertCohorts([cohort("a", "c1", "набор", 10, 10), cohort("b", "c1", "завершён"), cohort("c", "c1")], "c1");
 
-  assert.equal(r.auto, "c");
-  assert.equal(r.items.length, 1);
+  assert.deepEqual(r.items.map((c) => c.id), ["c", "a"]);
+  assert.equal(r.auto, null);
+  assert.equal(convertCohorts([cohort("a", "c1", "набор", 12, 10)], "c1").auto, null);
 });
 
 test("lead without a course: nothing preselected", () => {
