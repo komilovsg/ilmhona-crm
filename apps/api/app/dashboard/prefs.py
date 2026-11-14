@@ -16,9 +16,9 @@ from app.audit.log import record
 from app.auth.deps import CurrentUser, Principal, require_csrf_header
 from app.core import clock
 from app.core.db import DB
-from app.core.errors import STALE_VERSION, DomainError
+from app.core.errors import FORBIDDEN, STALE_VERSION, DomainError
 from app.core.versioning import Version, check_version
-from app.dashboard.catalog import clean, resolve
+from app.dashboard.catalog import available, clean, resolve
 from app.models import UserPref
 
 router = APIRouter(
@@ -54,6 +54,8 @@ async def get_layout(p: CurrentUser, db: DB) -> dict[str, Any]:
 
 @router.put("")
 async def put_layout(body: LayoutIn, version: Version, p: CurrentUser, db: DB) -> dict[str, Any]:
+    if not available(p):  # an instructor (or a role with nothing to show) has no dashboard
+        raise DomainError(FORBIDDEN, section="dashboard", level="view")
     new: dict[str, Any] = {} if body.reset else clean(p, body.order, body.hidden)
     action = "dashboard_pref.reset" if body.reset else "dashboard_pref.update"
     row = await db.get(UserPref, p.id)

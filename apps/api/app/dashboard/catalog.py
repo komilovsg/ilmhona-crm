@@ -73,7 +73,9 @@ DEFAULTS: dict[str, tuple[tuple[str, bool], ...]] = {
 
 
 def layout_of(p: Principal) -> str:
-    return "admin" if p.is_superadmin else "manager"
+    """Leadership layout for whoever sees all branches (cards still filtered by their rights);
+    «Мой день» for a user bound to one branch."""
+    return "admin" if p.branch_id is None else "manager"
 
 
 def available(p: Principal) -> list[Card]:
@@ -111,8 +113,12 @@ def resolve(p: Principal, stored: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def clean(p: Principal, order: list[str], hidden: list[str]) -> dict[str, Any]:
-    """What to store: a complete layout over the cards the user may have."""
+    """What to store: a complete layout over the cards the user may have. A card the request
+    leaves out is appended with its default visibility (a partial list never switches a
+    default-hidden card on)."""
     have = {c.id for c in available(p)}
     ordered = [i for i in dict.fromkeys(order) if i in have]
-    ordered += [i for i, _ in default_layout(p) if i not in ordered]
-    return {"order": ordered, "hidden": [i for i in dict.fromkeys(hidden) if i in have]}
+    missing = [(i, v) for i, v in default_layout(p) if i not in ordered]
+    ordered += [i for i, _ in missing]
+    off = [i for i in dict.fromkeys(hidden) if i in have] + [i for i, v in missing if not v]
+    return {"order": ordered, "hidden": list(dict.fromkeys(off))}
