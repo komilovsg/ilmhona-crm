@@ -90,10 +90,11 @@ def debtor_where() -> list[ColumnElement[bool]]:
     return [Enrollment.status != EXPELLED, Cohort.status != CANCELLED]
 
 
-async def total_debt(
+async def debt_summary(
     db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]], on: date | None = None
-) -> Decimal:
-    """The sum of every enrollment's debt in the given cohort scope (= the debtors total)."""
+) -> tuple[int, Decimal]:
+    """(debtors, total debt) in the given cohort scope: enrollments owing more than 0 and their
+    sum. The debtors list shows the same rows."""
     rows = (
         await db.execute(
             select(
@@ -110,7 +111,17 @@ async def total_debt(
         )
     ).all()
     by = await enrollment_money_rows(db, [(r[0], r[1], r[2], r[3], r[4], r[5]) for r in rows], on)
-    return money(sum((m["debt"] for m in by.values()), ZERO))
+    return (
+        sum(1 for m in by.values() if m["debt"] > 0),
+        money(sum((m["debt"] for m in by.values()), ZERO)),
+    )
+
+
+async def total_debt(
+    db: AsyncSession, cohort_where: Sequence[ColumnElement[bool]], on: date | None = None
+) -> Decimal:
+    """The sum of every enrollment's debt in the given cohort scope (= the debtors total)."""
+    return (await debt_summary(db, cohort_where, on))[1]
 
 
 def debt_of(expected: Decimal, paid: Decimal, status: str) -> Decimal:

@@ -104,6 +104,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "note.create": ("добавлена", "заметка"),
     "note.update": ("изменена", "заметка"),
     "note.delete": ("удалена", "заметка"),
+    "dashboard_pref.update": ("изменены", "настройки дашборда"),
+    "dashboard_pref.reset": ("сброшены", "настройки дашборда"),
 }
 # grading schemes: «Курбон: изменена шкала оценок потока G-012 — баллы: Посещаемость 20, … → …»
 GRADING = {

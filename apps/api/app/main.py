@@ -18,6 +18,8 @@ from app.core.errors import install_error_handlers
 from app.core.monitoring import init_sentry
 from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
+from app.dashboard.api import router as dashboard_cards_router
+from app.dashboard.prefs import router as dashboard_prefs_router
 from app.employment.api import router as employment_router
 from app.export import XLSX
 from app.goals.api import academy_router as academy_goal_router
@@ -90,6 +92,8 @@ for router in (
     goals_router,
     notes_router,
     grading_router,
+    dashboard_cards_router,
+    dashboard_prefs_router,
 ):
     app.include_router(router)
 
