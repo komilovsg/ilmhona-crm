@@ -11,7 +11,7 @@ const PAD = { top: 12, right: 16, bottom: 26, left: 52 };
 
 /** The width of an element, followed on resize: the SVG is drawn at its real pixel size, so
  * the text stays 11-12px on a phone instead of scaling down with a viewBox. */
-function useWidth() {
+export function useWidth() {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 

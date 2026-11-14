@@ -221,3 +221,30 @@ export function SchemeSkeleton() {
     </div>
   );
 }
+
+/** The «Аналитика» tab of a cohort: toolbar, two cards, the chart card and two lists. */
+export function AnalyticsSkeleton() {
+  const card = (h: string, lines = 3) => (
+    <div className={clsx("rounded-2xl bg-content1 p-4", h)}>
+      <Bone className="h-5 w-32" />
+      <Bone className="mt-3 h-8 w-3/4" />
+      {Array.from({ length: lines }, (_, i) => (
+        <Bone key={i} className="mt-2 h-4 w-full" />
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 md:grid-cols-2">
+        {card("min-h-52", 2)}
+        {card("min-h-52", 4)}
+      </div>
+      {card("min-h-80", 5)}
+      <div className="grid gap-4 md:grid-cols-2">
+        {card("min-h-56", 4)}
+        {card("min-h-56", 4)}
+      </div>
+    </div>
+  );
+}

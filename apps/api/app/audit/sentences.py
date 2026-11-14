@@ -24,7 +24,7 @@ MAX_FIELDS = 4
 # audit filter «section» -> the entities it covers; `auth` is by action (sign-ins, lockouts)
 SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "students": ("student",),
-    "cohorts": ("cohort", "lesson", "enrollment", "grading_scheme"),
+    "cohorts": ("cohort", "lesson", "enrollment", "grading_scheme", "cohort_analytics"),
     "rooms": ("room", "course"),
     "users": ("app_user", "role"),
     "payments": ("payment",),
@@ -138,6 +138,7 @@ TABLES: dict[str, str] = {
     "employment": "трудоустройство",
     "dashboard_month": "дашборд по месяцам",
     "grade": "оценки потока",
+    "cohort_analytics": "аналитика потока",
     "grading_scheme": "шкала оценок",
     "today": "сегодня и не заполнено",
     "student_card": "карточка студента",
@@ -162,6 +163,7 @@ FILTERS = {
     "status": "статус",
     "method": "способ",
     "month": "месяц",
+    "period": "период",
     "instructor_id": "инструктор",
     "student": "студент",
 }

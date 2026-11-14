@@ -3,7 +3,7 @@ export type Bar = { key: string; label: string; value: number; text: string; hin
 /**
  * One measure over named rows: horizontal bars in the first series colour, the value at the end
  * of each bar, the exact figure also in the row's title. Single series, so no legend; the heading
- * names it. Rows with 0 keep their line (an empty bar is data, a missing row is not).
+ * names it. Rows with 0 keep their label and figure but draw no bar (no stub).
  */
 export function BarList({ title, rows, note }: { title: string; rows: Bar[]; note?: string }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
@@ -28,10 +28,12 @@ export function BarList({ title, rows, note }: { title: string; rows: Bar[]; not
               <span className="col-span-2 min-w-0 truncate text-default-600 md:col-span-1">{r.label}</span>
               {/* the track takes what the figure leaves, the bar is a share of the track: 3 vs 2 looks 3:2 */}
               <span className="min-w-0">
-                <span
-                  className="block h-4 min-w-0.5 rounded-r"
-                  style={{ width: `${(r.value / max) * 100}%`, background: "var(--series-1)" }}
-                />
+                {r.value > 0 && (
+                  <span
+                    className="block h-4 min-w-0.5 rounded-r"
+                    style={{ width: `${(r.value / max) * 100}%`, background: "var(--series-1)" }}
+                  />
+                )}
               </span>
               <span className="min-w-0 shrink-0 text-right tabular-nums leading-tight">
                 <span className="block truncate whitespace-nowrap">{r.text}</span>

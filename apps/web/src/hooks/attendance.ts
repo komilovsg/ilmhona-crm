@@ -32,7 +32,7 @@ export function useToday(enabled = true) {
   });
 }
 
-const KEYS = ["today", "grid", "grades"];
+const KEYS = ["today", "grid", "grades", "analytics"];
 
 /** A mark or a grade changes the home screen, the grid and the grades: mark them stale. */
 export function useRefreshAttendance() {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Chip } from "@heroui/chip";
@@ -31,10 +31,12 @@ import { lazyModal } from "@/lib/lazy-modal";
 const tabLoading = () => <ListSkeleton />;
 const LessonsTab = dynamic(() => import("./LessonsTab").then((m) => m.LessonsTab), { loading: tabLoading });
 const AttendanceTab = dynamic(() => import("./AttendanceTab").then((m) => m.AttendanceTab), { loading: tabLoading });
+const AnalyticsTab = dynamic(() => import("./AnalyticsTab").then((m) => m.AnalyticsTab), { loading: tabLoading });
 const GradesTab = dynamic(() => import("./GradesTab").then((m) => m.GradesTab), { loading: tabLoading });
 const CohortFormModal = lazyModal(() => import("../CohortFormModal").then((m) => m.CohortFormModal));
 
-type Tab = "students" | "lessons" | "attendance" | "grades";
+type Tab = "students" | "lessons" | "attendance" | "grades" | "analytics";
+const TABS: Tab[] = ["students", "lessons", "attendance", "grades", "analytics"];
 type Action = "cancel" | "restore" | "delete";
 
 const CONFIRM: Record<Action, { title: string; label: string; text: string; danger: boolean }> = {
@@ -79,7 +81,20 @@ export default function CohortPage() {
   const canChange = useCanChange("cohorts");
   const canMark = useCanMark();
   const seesAttendance = useCanSeeAttendance();
-  const [tab, setTab] = useState<Tab>("students");
+  const params = useSearchParams();
+  const wanted = params.get("tab");
+  // a link from elsewhere (`?tab=attendance&student=<enrollment>`) opens that tab
+  const [tab, setTab] = useState<Tab>(TABS.find((t) => t === wanted) ?? "students");
+  const focusStudent = params.get("student");
+  const [seenTab, setSeenTab] = useState(wanted);
+
+  // the address changed under the page (a link from the analytics tab): follow it
+  if (wanted !== seenTab) {
+    setSeenTab(wanted);
+    const next = TABS.find((t) => t === wanted);
+
+    if (next) setTab(next);
+  }
   const [editing, setEditing] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
 
@@ -204,16 +219,22 @@ export default function CohortPage() {
             ? [
                 { key: "attendance" as const, label: "Посещаемость" },
                 { key: "grades" as const, label: "Оценки" },
+                { key: "analytics" as const, label: "Аналитика" },
               ]
             : []),
         ]}
         value={tab}
-        onChange={setTab}
+        onChange={(t) => {
+          setTab(t);
+          // the address names the tab, so a reload (and a copied link) opens the same one
+          router.replace(`?tab=${t}`, { scroll: false });
+        }}
       />
       {tab === "students" && <StudentsTab canChange={canChange} cohort={c} />}
       {tab === "lessons" && <LessonsTab canChange={canChange} cohort={c} />}
-      {tab === "attendance" && <AttendanceTab canMark={canMark} cohortId={c.id} />}
+      {tab === "attendance" && <AttendanceTab canMark={canMark} cohortId={c.id} focusEnrollment={focusStudent} />}
       {tab === "grades" && <GradesTab canMark={canMark} cohortId={c.id} />}
+      {tab === "analytics" && seesAttendance && <AnalyticsTab cohortId={c.id} />}
 
       {editing && <CohortFormModal cohort={c} onClose={() => setEditing(false)} />}
       {action && (
