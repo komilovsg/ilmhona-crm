@@ -1,7 +1,7 @@
 "use client";
 
 import { FilterInput } from "@/components/FilterInput";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -356,7 +356,13 @@ export default function PaymentsPage() {
   const urlTab = useBrowserValue<Tab>(() => (new URLSearchParams(window.location.search).get("tab") === "debtors" ? "debtors" : "payments"), "payments", "ilm-payments-tab");
   const [picked, setTab] = useState<Tab | null>(null);
   const tab = picked ?? urlTab;
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  // the dashboard links here with ?status=ожидает; a pick on the page wins
+  const urlStatus = useBrowserValue<string | null>(() => new URLSearchParams(window.location.search).get("status"), null, "ilm-payments-status");
+  const [pickedFilters, setFilters] = useState<Filters | null>(null);
+  const filters = useMemo<Filters>(
+    () => pickedFilters ?? { ...NO_FILTERS, status: PAYMENT_STATUSES.find((s) => s === urlStatus) ?? null },
+    [pickedFilters, urlStatus],
+  );
   const [page, setPage] = useState(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [form, setForm] = useState<{ payment: PaymentRow | null; enrollmentId: string | null } | null>(null);

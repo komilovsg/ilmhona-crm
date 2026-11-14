@@ -13,6 +13,9 @@
   --series-3: #6b5bb5;
   --series-4: #2e9b6e;
   --chart-grid: rgb(21 26 30 / 0.1);
+  /* role dashboards: bar fill, second series and the «today» line */
+  --chart-fill: #00a0dc;
+  --chart-accent: #d65a2f;
   color-scheme: light;
 }
 
@@ -24,6 +27,8 @@
   --series-3: #9085e9;
   --series-4: #2aa073;
   --chart-grid: rgb(230 237 243 / 0.12);
+  --chart-fill: #0b8fc4;
+  --chart-accent: #e26a3d;
   color-scheme: dark;
 }
 
@@ -31,6 +36,7 @@
   --color-sidebar: var(--sidebar);
   --color-brand-text: var(--brand-text);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-onest), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 body {

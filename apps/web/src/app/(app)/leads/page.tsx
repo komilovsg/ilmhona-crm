@@ -3,6 +3,7 @@
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useState } from "react";
+import { useBrowserValue } from "@/lib/client-store";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
@@ -153,7 +154,10 @@ export default function LeadsPage() {
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
   const refresh = useRefreshSales();
-  const [tab, setTab] = useState<"all" | "callback">("all");
+  // the dashboard links here with ?tab=callback; a pick on the page wins
+  const urlTab = useBrowserValue<"all" | "callback">(() => (new URLSearchParams(window.location.search).get("tab") === "callback" ? "callback" : "all"), "all", "ilm-leads-tab");
+  const [picked, setTab] = useState<"all" | "callback" | null>(null);
+  const tab = picked ?? urlTab;
   const [f, setF] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [editing, setEditing] = useState<LeadRow | "new" | null>(null);
