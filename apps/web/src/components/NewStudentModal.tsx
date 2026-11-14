@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
@@ -9,12 +9,15 @@ import { AppModal } from "./AppModal";
 import { LoadingButton } from "./LoadingButton";
 import { Segmented } from "./Segmented";
 
+import { OverCapacityNotice } from "./OverCapacityNotice";
+
 import { useRefreshEducation } from "@/hooks/education";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { api } from "@/lib/api";
+import { overToast, wouldExceed } from "@/lib/capacity";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
-import type { EnrollmentRow } from "@/lib/types";
+import type { CohortRow, EnrollmentRow } from "@/lib/types";
 
 type Gender = "none" | "male" | "female";
 
@@ -40,6 +43,10 @@ export function NewStudentModal({
   onClose: () => void;
 }) {
   const refresh = useRefreshEducation();
+  // the live fill: refetched after every save, so «сохранить и добавить ещё» keeps the warning right
+  const cohort = useQuery({ queryKey: ["cohort", cohortId], queryFn: () => api<CohortRow>(`/api/v1/cohorts/${cohortId}`) });
+  const fill = cohort.data?.fill;
+  const exceeds = wouldExceed(fill);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<Gender>("none");
@@ -58,7 +65,7 @@ export function NewStudentModal({
     onSuccess: (row) => {
       void refresh();
       onSaved?.(row);
-      notify("Студент добавлен");
+      notify(`Студент добавлен${overToast(row.over_capacity)}`);
       if (!again.current) return onClose();
       setName("");
       setPhone("");
@@ -83,10 +90,10 @@ export function NewStudentModal({
             Отмена
           </Button>
           <Button isDisabled={!valid || save.isPending} color="primary" variant="flat" onPress={() => run(true)}>
-            Сохранить и добавить ещё
+            {exceeds ? "Всё равно и ещё" : "Сохранить и добавить ещё"}
           </Button>
           <LoadingButton color="primary" isDisabled={!valid} isLoading={save.isPending} onPress={() => run(false)}>
-            Сохранить
+            {exceeds ? "Записать всё равно" : "Сохранить"}
           </LoadingButton>
         </>
       }
@@ -146,6 +153,7 @@ export function NewStudentModal({
           />
           {fe.hint("gender").errorMessage && <p className="mt-1 text-xs text-danger">{fe.hint("gender").errorMessage}</p>}
         </div>
+        <OverCapacityNotice fill={fill} />
         {fe.message && (
           <p className="text-sm text-danger" role="alert">
             {fe.message}

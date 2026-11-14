@@ -22,7 +22,7 @@ from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
-from app.education.errors import COHORT_CLOSED, COHORT_FULL, STUDENT_BRANCH_MISMATCH
+from app.education.errors import COHORT_CLOSED, STUDENT_BRANCH_MISMATCH
 from app.education.scope import (
     branch_for_write,
     check_cohort_visible,
@@ -40,7 +40,7 @@ from app.leads.errors import (
 from app.leads.hygiene import ManualPhone, clean_name, phone_key, phone_parts
 from app.leads.query import lead_where
 from app.leads.scope import LeadReader, LeadWriter
-from app.metrics import cohort_enrolled
+from app.metrics import cohort_enrolled, over_capacity_of
 from app.metrics.sales import CALL_STATUSES, CONVERTED, LEAD_STATUSES
 from app.models import Branch, Campaign, Cohort, Course, Enrollment, Lead, Student
 from app.permissions import allows
@@ -600,9 +600,13 @@ async def _enroll(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        return {"id": existing.id, "cohort_id": cohort.id, "cohort_code": cohort.code, "new": False}
-    if (await cohort_enrolled(db, [cohort.id]))[cohort.id] >= cohort.capacity:
-        raise DomainError(COHORT_FULL)
+        return {
+            "id": existing.id, "cohort_id": cohort.id, "cohort_code": cohort.code, "new": False,
+            "over_capacity": None,
+        }  # fmt: skip
+    over = over_capacity_of(
+        (await cohort_enrolled(db, [cohort.id]))[cohort.id] + 1, cohort.capacity
+    )
     enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
     db.add(enrollment)
     await db.flush()
@@ -612,10 +616,14 @@ async def _enroll(
             "cohort": [None, cohort.code],
             "student": [None, student.full_name],
             "status": [None, enrollment.status],
+            **({"over_capacity": [None, over]} if over else {}),
         },
         branch_id=cohort.branch_id,
     )  # fmt: skip
-    return {"id": enrollment.id, "cohort_id": cohort.id, "cohort_code": cohort.code, "new": True}
+    return {
+        "id": enrollment.id, "cohort_id": cohort.id, "cohort_code": cohort.code, "new": True,
+        "over_capacity": over,
+    }  # fmt: skip
 
 
 # ---- CSV import -------------------------------------------------------------------------

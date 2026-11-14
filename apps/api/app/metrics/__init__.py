@@ -58,6 +58,16 @@ async def cohort_enrolled(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict
     return {cid: counts.get(cid, 0) for cid in cohort_ids}
 
 
+def fill_percent(enrolled: int, capacity: int) -> int:
+    """Fill in percent; capacity is a soft limit, so this may exceed 100."""
+    return round(enrolled / capacity * 100) if capacity > 0 else 0
+
+
+def over_capacity_of(enrolled: int, capacity: int) -> dict[str, int] | None:
+    """`{enrolled, capacity}` when the cohort is over its planned seats, else None."""
+    return {"enrolled": enrolled, "capacity": capacity} if enrolled > capacity else None
+
+
 def fill_of(enrolled: int, capacity: int) -> dict[str, Any]:
     return {"enrolled": enrolled, "capacity": capacity}
 
@@ -138,6 +148,8 @@ __all__ = [
     "enrollment_attendance",
     "enrollment_results",
     "fill_of",
+    "fill_percent",
+    "over_capacity_of",
     "grade_total",
     "has_marks",
     "passed",

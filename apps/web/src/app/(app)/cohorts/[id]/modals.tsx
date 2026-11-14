@@ -11,17 +11,19 @@ import { AppModal } from "@/components/AppModal";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { Segmented } from "@/components/Segmented";
 import { SelectField } from "@/components/SelectField";
+import { OverCapacityNotice } from "@/components/OverCapacityNotice";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshEducation, useRooms } from "@/hooks/education";
 import { useMe } from "@/hooks/queries";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
+import { overToast, wouldExceed } from "@/lib/capacity";
 import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
 import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
-import type { CohortRow, LessonRow, Paged, StudentRow } from "@/lib/types";
+import type { CohortRow, EnrollmentRow, LessonRow, Paged, StudentRow } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
 
 /** Add a lesson by hand (no `lesson`) or move one (with `lesson`). A busy room answers 409 with the other cohort's name. */
@@ -147,14 +149,15 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const enroll = useMutation({
     mutationFn: (body: { student_id: string } | { new_student: { full_name: string; phone: string | null; gender: string | null } }) =>
-      api(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body }),
-    onSuccess: () => {
+      api<EnrollmentRow>(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body }),
+    onSuccess: (row) => {
       void refresh();
-      notify("Студент зачислен");
+      notify(`Студент зачислен${overToast(row.over_capacity)}`);
       onClose();
     },
   });
 
+  const exceeds = wouldExceed(cohort.fill);
   const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
   const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender"]);
   const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
@@ -178,7 +181,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
               isLoading={enroll.isPending}
               onPress={() => submitNew()}
             >
-              Создать и зачислить
+              {exceeds ? "Создать и зачислить всё равно" : "Создать и зачислить"}
             </LoadingButton>
           </>
         ) : (
@@ -193,6 +196,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
       onClose={onClose}
     >
       <div className="space-y-4">
+        <OverCapacityNotice fill={cohort.fill} />
         {modes.length > 1 && <Segmented label="Способ" options={modes} value={mode} onChange={setMode} />}
         {mode === "existing" ? (
           <>
@@ -221,7 +225,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
                     <div className="flex items-center gap-2">
                       <PersonStatus status={s.status} />
                       <LoadingButton color="primary" isDisabled={enroll.isPending} isLoading={enroll.isPending} size="sm" onPress={() => enroll.mutate({ student_id: s.id })}>
-                        Зачислить
+                        {exceeds ? "Всё равно" : "Зачислить"}
                       </LoadingButton>
                     </div>
                   </li>
