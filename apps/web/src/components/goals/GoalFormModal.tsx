@@ -13,7 +13,7 @@ import { useBranches } from "@/hooks/queries";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
-import { GOAL_TITLE_MAX, METRICS, metricOf, validTarget, type Goal } from "@/lib/goals";
+import { GOAL_TITLE_MAX, METRICS, STOCK_METRICS, metricOf, validTarget, type Goal } from "@/lib/goals";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 
@@ -21,6 +21,7 @@ type Values = {
   title: string;
   metric: string;
   target: string;
+  baseline: string;
   start_date: string;
   deadline: string;
   branch_id: string | null;
@@ -40,13 +41,19 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
   const [title, setTitle] = useState(goal?.title ?? "");
   const [metric, setMetric] = useState(goal?.metric ?? METRICS[0].key);
   const [target, setTarget] = useState(goal ? plain(goal.target) : "");
+  const [baseline, setBaseline] = useState(goal ? plain(goal.baseline) : "");
   const [start, setStart] = useState(goal?.start_date ?? today());
   const [deadline, setDeadline] = useState(goal?.deadline ?? "");
   const [branch, setBranch] = useState<string | null>(goal?.branch_id ?? null);
-  const values: Values = { title: title.trim(), metric, target: target.trim(), start_date: start, deadline, branch_id: branch };
+  const values: Values = { title: title.trim(), metric, target: target.trim(), baseline: STOCK_METRICS.includes(metric) ? baseline.trim() : "", start_date: start, deadline, branch_id: branch };
   const valid = values.title !== "" && validTarget(target, metric) && start !== "" && deadline > start;
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["goals"] });
-  const body = (v: Partial<Values>) => ({ ...v, ...(v.target !== undefined ? { target: asNumber(v.target) } : {}) });
+  const body = (v: Partial<Values>) => ({
+    ...v,
+    ...(v.target !== undefined ? { target: asNumber(v.target) } : {}),
+    // empty = «значение сейчас» (the server fills it in)
+    ...(v.baseline !== undefined ? { baseline: v.baseline === "" ? null : asNumber(v.baseline) } : {}),
+  });
 
   const create = useMutation({
     mutationFn: () => api<Goal>("/api/v1/goals", { method: "POST", body: body(values) }),
@@ -63,6 +70,7 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
       title: r.title,
       metric: r.metric,
       target: plain(r.target),
+      baseline: STOCK_METRICS.includes(r.metric) ? plain(r.baseline) : "",
       start_date: r.start_date,
       deadline: r.deadline,
       branch_id: r.branch_id,
@@ -71,12 +79,13 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
       setTitle(v.title);
       setMetric(v.metric);
       setTarget(v.target);
+      setBaseline(v.baseline);
       setStart(v.start_date);
       setDeadline(v.deadline);
       setBranch(v.branch_id);
     },
     request: (changed, version) => api<Goal>(`/api/v1/goals/${goal?.id}`, { method: "PATCH", body: body(changed), version }),
-    labels: { title: "Название", metric: "Показатель", target: "План", start_date: "Начало", deadline: "Срок", branch_id: "Филиал" },
+    labels: { title: "Название", metric: "Показатель", target: "План", baseline: "Старт", start_date: "Начало", deadline: "Срок", branch_id: "Филиал" },
     show: { metric: (m: string) => metricOf(m).label, branch_id: (b: string | null) => branches.find((x) => x.id === b)?.name ?? "Все филиалы" },
     onSaved: () => {
       void refresh();
@@ -132,12 +141,22 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
           isInvalid={(target !== "" && !validTarget(target, metric)) || fe.hint("target").isInvalid}
           errorMessage={fe.hint("target").errorMessage ?? (metric === "collection_rate_month" ? "От 1 до 100" : "Больше нуля")}
           label="План"
+          validationBehavior="aria"
           value={target}
           onValueChange={(v) => {
             fe.clear("target");
             setTarget(v);
           }}
         />
+        {STOCK_METRICS.includes(metric) && (
+          <Input
+            description="Сколько было в начале. Пусто — возьмём значение на момент сохранения."
+            inputMode="decimal"
+            label="Старт"
+            value={baseline}
+            onValueChange={setBaseline}
+          />
+        )}
         <SelectField
           allLabel="Все филиалы"
           label="Филиал"
@@ -151,6 +170,7 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
           errorMessage={fe.hint("deadline").errorMessage ?? "Срок должен быть позже начала"}
           isInvalid={(deadline !== "" && deadline <= start) || fe.hint("deadline").isInvalid}
           label="Срок"
+          validationBehavior="aria"
           placeholder=" "
           type="date"
           value={deadline}

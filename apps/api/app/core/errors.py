@@ -73,6 +73,12 @@ class DomainError(StarletteHTTPException):
         super().__init__(error.status, error.code)
         self.error = error
         self.params = params
+        self.errs: list[dict[str, Any]] | None = None
+
+    def for_field(self, field: str, code: str) -> DomainError:
+        """Name the rejected form field of a 422 ({loc: [.., field], code}) for the form hint."""
+        self.errs = [{"loc": ["body", field], "code": code}]
+        return self
 
 
 def _problem(
@@ -98,7 +104,7 @@ def _problem(
 
 async def _domain(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, DomainError)
-    return _problem(request, exc.error, exc.params)
+    return _problem(request, exc.error, exc.params, exc.errs)
 
 
 async def _http(request: Request, exc: Exception) -> Response:

@@ -499,3 +499,108 @@ async def test_note_audit_has_no_text(admin: httpx.AsyncClient) -> None:
     ]
     # and the audit search cannot find the text either
     assert (await admin.get(A, params={"q": secret})).json()["items"] == []
+
+
+# ---- 422s name their field, baseline of stock metrics, half-up rounding ----------------------
+
+
+def fields_of(r: httpx.Response) -> list[str]:
+    assert r.status_code == 422, r.text
+    return [str(e["loc"][-1]) for e in r.json()["errors"]]
+
+
+async def test_patch_null_on_a_required_field_is_422_with_the_field(
+    admin: httpx.AsyncClient,
+) -> None:
+    goal = await mk_goal(admin)
+    for field in ("title", "metric", "target", "start_date", "deadline"):
+        r = await admin.patch(f"{G}/{goal['id']}", json={field: None}, headers=v(goal["version"]))
+        assert fields_of(r) == [field], field
+    # an all-branches goal may still be set by branch_id: null
+    r = await admin.patch(f"{G}/{goal['id']}", json={"branch_id": None}, headers=v(goal["version"]))
+    assert r.status_code == 200
+
+
+async def test_every_goal_422_names_its_field(admin: httpx.AsyncClient) -> None:
+    base = {
+        "title": "t",
+        "metric": "income",
+        "target": 5,
+        "start_date": "2027-01-01",
+        "deadline": "2027-02-01",
+    }
+    cases = [
+        ({"title": ""}, "title"),
+        ({"title": "x" * 121}, "title"),
+        ({"metric": "nope"}, "metric"),
+        ({"target": 0}, "target"),
+        ({"target": "abc"}, "target"),
+        ({"deadline": "2027-01-01"}, "deadline"),
+        ({"metric": "collection_rate_month", "target": 101}, "target"),
+        ({"metric": "active_students", "target": 5, "baseline": 5}, "target"),
+        ({"baseline": -1, "metric": "active_students"}, "baseline"),
+        ({"start_date": None}, "start_date"),
+    ]
+    for change, field in cases:
+        r = await admin.post(G, json={**base, **change})
+        assert field in fields_of(r), (change, r.text)
+    goal = await mk_goal(admin, metric="collection_rate_month", target=50)
+    r = await admin.patch(f"{G}/{goal['id']}", json={"target": 150}, headers=v(goal["version"]))
+    assert fields_of(r) == ["target"]
+    r = await admin.patch(
+        f"{G}/{goal['id']}", json={"deadline": "2000-01-01"}, headers=v(goal["version"])
+    )
+    assert (r.json()["code"], fields_of(r)) == ("goal_dates_invalid", ["deadline"])
+
+
+async def test_stock_goal_takes_the_value_now_as_baseline_and_counts_from_it(
+    admin: httpx.AsyncClient,
+) -> None:
+    await seed(admin)  # 3 active students
+    goal = await mk_goal(admin, metric="active_students", target=6, **WINDOW)
+    assert (goal["baseline"], goal["current"]) == (3, 3)
+    assert goal["progress_pct"] == 0.0  # not 50 %: nothing has been gained yet
+    # a cumulative metric always starts from 0, a sent baseline is ignored
+    other = await mk_goal(admin, metric="income", baseline=7, **WINDOW)
+    assert other["baseline"] == 0
+    # the superadmin may set the start by hand, and the form can send it back empty = now
+    r = await admin.patch(f"{G}/{goal['id']}", json={"baseline": 1}, headers=v(goal["version"]))
+    assert r.json()["baseline"] == 1 and r.json()["progress_pct"] == 40.0  # (3-1)/(6-1)
+    r = await admin.patch(
+        f"{G}/{goal['id']}", json={"baseline": None}, headers=v(r.json()["version"])
+    )
+    assert r.json()["baseline"] == 3
+    # moving to a flow metric drops the baseline, back to a stock metric takes the value now
+    r = await admin.patch(
+        f"{G}/{goal['id']}", json={"metric": "income"}, headers=v(r.json()["version"])
+    )
+    assert r.json()["baseline"] == 0
+    r = await admin.patch(
+        f"{G}/{goal['id']}", json={"metric": "active_students"}, headers=v(r.json()["version"])
+    )
+    assert r.json()["baseline"] == 3
+
+
+@pytest.mark.parametrize(
+    ("on", "current", "progress", "expected", "status"),
+    [
+        (START, 24, 0.0, 0.0, "по графику"),  # day 1: 24 of 48 with a baseline of 24 is 0 %
+        (date(2027, 1, 6), 36, 50.0, 50.0, "по графику"),
+        (date(2027, 1, 6), 35, 45.8, 50.0, "отстаём"),
+        (END, 47, 95.8, 100.0, "отстаём"),
+        (END, 48, 100.0, 100.0, "достигнута"),
+        (date(2027, 1, 12), 40, 66.7, 100.0, "срок прошёл"),
+    ],
+)
+def test_pace_of_a_stock_metric_counts_from_the_baseline(
+    on: date, current: float, progress: float, expected: float, status: str
+) -> None:
+    r = pace("active_stu" + "dents", current, 48, START, END, on, baseline=24)
+    assert (r["progress_pct"], r["expected_pct"], r["status"]) == (progress, expected, status)
+
+
+def test_percentages_round_half_up() -> None:
+    assert pace("income", 5625, 10000, START, END, START)["progress_pct"] == 56.3
+    assert pace("income", 0, 10, START, END, date(2027, 1, 2))["expected_pct"] == 10.0
+    # 1 day of 16 is 6.25 %: half up gives 6.3 (float round() would give 6.2)
+    assert pace("income", 0, 10, START, date(2027, 1, 17), date(2027, 1, 2))["expected_pct"] == 6.3

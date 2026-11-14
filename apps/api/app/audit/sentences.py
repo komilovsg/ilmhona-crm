@@ -226,6 +226,7 @@ FIELDS: dict[str, str] = {
     "target": "план",
     "deadline": "срок",
     "archived": "в архиве",
+    "baseline": "старт",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}

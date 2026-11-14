@@ -40,6 +40,8 @@ def upgrade() -> None:
             CHECK (char_length(title) BETWEEN 1 AND 120),
           metric text NOT NULL CONSTRAINT goal_metric_check CHECK (metric IN ({metrics})),
           target numeric(14, 2) NOT NULL CONSTRAINT goal_target_check CHECK (target > 0),
+          baseline numeric(14, 2) NOT NULL DEFAULT 0 CONSTRAINT goal_baseline_check
+            CHECK (baseline >= 0),
           start_date date NOT NULL,
           deadline date NOT NULL,
           branch_id uuid REFERENCES branch (id),
@@ -49,6 +51,7 @@ def upgrade() -> None:
           updated_at timestamptz NOT NULL DEFAULT now(),
           version integer NOT NULL DEFAULT 1,
           CONSTRAINT goal_dates_order_check CHECK (deadline > start_date),
+          CONSTRAINT goal_baseline_target_check CHECK (baseline = 0 OR baseline < target),
           CONSTRAINT goal_rate_target_check
             CHECK (metric <> 'collection_rate_month' OR target <= 100)
         )

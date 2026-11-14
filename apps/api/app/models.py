@@ -428,6 +428,7 @@ class Goal(Versioned, Base):
     title: Mapped[str] = mapped_column(Text)
     metric: Mapped[str] = mapped_column(Text)
     target: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    baseline: Mapped[Decimal] = mapped_column(Numeric(14, 2), server_default=text("0"))
     start_date: Mapped[date] = mapped_column(Date)
     deadline: Mapped[date] = mapped_column(Date)
     branch_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("branch.id"))

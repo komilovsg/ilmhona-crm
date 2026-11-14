@@ -11,7 +11,8 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic_core import PydanticCustomError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +22,7 @@ from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError, errors
 from app.core.versioning import Version, check_version
-from app.metrics.goals import METRICS, RATE_METRICS, current_value, pace
+from app.metrics.goals import METRICS, RATE_METRICS, STOCK_METRICS, current_value, pace
 from app.models import AcademyGoal, AppUser, Branch, Goal, Note
 
 GOAL_DATES_INVALID = errors.define(
@@ -48,6 +49,7 @@ Metric = Literal[
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 GoalText = Annotated[str, StringConstraints(strip_whitespace=True, max_length=280)]
 Target = Annotated[Decimal, Field(gt=0, le=Decimal("999999999999.99"), decimal_places=2)]
+Baseline = Annotated[Decimal, Field(ge=0, le=Decimal("999999999999.99"), decimal_places=2)]
 
 
 class Strict(BaseModel):
@@ -134,6 +136,8 @@ class GoalCreate(Strict):
     start_date: date
     deadline: date
     branch_id: uuid.UUID | None = None
+    # a stock metric counts from this value; empty = the value now
+    baseline: Baseline | None = None
 
 
 class GoalUpdate(Strict):
@@ -142,7 +146,18 @@ class GoalUpdate(Strict):
     target: Target | None = None
     start_date: date | None = None
     deadline: date | None = None
-    branch_id: uuid.UUID | None = None
+    branch_id: uuid.UUID | None = None  # null = all branches
+    baseline: Baseline | None = None
+
+    @field_validator(
+        "title", "metric", "target", "start_date", "deadline", "baseline", mode="before"
+    )
+    @classmethod
+    def _not_null(cls, value: Any, info: Any) -> Any:
+        # an omitted field is fine, an explicit null is not (baseline: null = take the value now)
+        if value is None and info.field_name != "baseline":
+            raise PydanticCustomError("missing", "Field required")
+        return value
 
 
 def _num(value: Decimal) -> int | float:
@@ -154,6 +169,7 @@ def _snapshot(g: Goal) -> dict[str, Any]:
         "title": g.title,
         "metric": g.metric,
         "target": _num(g.target),
+        "baseline": _num(g.baseline),
         "start_date": g.start_date,
         "deadline": g.deadline,
         "branch_id": g.branch_id,
@@ -161,11 +177,17 @@ def _snapshot(g: Goal) -> dict[str, Any]:
     }
 
 
-def _validate(metric: str, target: Decimal, start: date, deadline: date) -> None:
+def _fail(field: str, code: str) -> DomainError:
+    return DomainError(VALIDATION_FAILED).for_field(field, code)
+
+
+def _validate(metric: str, target: Decimal, baseline: Decimal, start: date, deadline: date) -> None:
     if deadline <= start:
-        raise DomainError(GOAL_DATES_INVALID)
+        raise DomainError(GOAL_DATES_INVALID).for_field("deadline", "deadline_before_start")
     if metric in RATE_METRICS and target > 100:
-        raise DomainError(VALIDATION_FAILED)
+        raise _fail("target", "percent_over_100")
+    if metric in STOCK_METRICS and baseline >= target:
+        raise _fail("target", "target_not_above_baseline")
 
 
 async def _check_branch(db: AsyncSession, branch_id: uuid.UUID | None) -> None:
@@ -199,6 +221,7 @@ async def _out(db: AsyncSession, p: Principal, goals: list[Goal]) -> list[dict[s
                 "metric": g.metric,
                 "metric_label": METRICS[g.metric],
                 "target": float(g.target),
+                "baseline": float(g.baseline),
                 "start_date": g.start_date,
                 "deadline": g.deadline,
                 "branch_id": g.branch_id,
@@ -208,7 +231,7 @@ async def _out(db: AsyncSession, p: Principal, goals: list[Goal]) -> list[dict[s
                 "created_at": g.created_at,
                 "current": current,
                 "notes_count": notes.get(g.id, 0),
-                **pace(g.metric, current, g.target, g.start_date, g.deadline, on),
+                **pace(g.metric, current, g.target, g.start_date, g.deadline, on, g.baseline),
             }
         )
     return out
@@ -243,12 +266,21 @@ async def list_goals(p: Superadmin, db: DB, archived: bool = False) -> dict[str,
 
 @router.post("", status_code=201)
 async def create_goal(body: GoalCreate, p: Superadmin, db: DB) -> dict[str, Any]:
-    _validate(body.metric, body.target, body.start_date, body.deadline)
     await _check_branch(db, body.branch_id)
+    baseline = Decimal(0)
+    if body.metric in STOCK_METRICS:
+        baseline = body.baseline if body.baseline is not None else Decimal(0)
+        if body.baseline is None:
+            now = await current_value(
+                db, p, body.metric, body.branch_id, body.start_date, body.deadline
+            )
+            baseline = Decimal(str(now))
+    _validate(body.metric, body.target, baseline, body.start_date, body.deadline)
     goal = Goal(
         title=body.title,
         metric=body.metric,
         target=body.target,
+        baseline=baseline,
         start_date=body.start_date,
         deadline=body.deadline,
         branch_id=body.branch_id,
@@ -287,7 +319,16 @@ async def update_goal(
     if "branch_id" in sent:
         await _check_branch(db, body.branch_id)
         goal.branch_id = body.branch_id
-    _validate(goal.metric, goal.target, goal.start_date, goal.deadline)
+    if goal.metric not in STOCK_METRICS:
+        goal.baseline = Decimal(0)
+    elif body.baseline is not None:
+        goal.baseline = body.baseline
+    elif before["metric"] not in STOCK_METRICS or "baseline" in sent:
+        now = await current_value(
+            db, p, goal.metric, goal.branch_id, goal.start_date, goal.deadline
+        )
+        goal.baseline = Decimal(str(now))
+    _validate(goal.metric, goal.target, goal.baseline, goal.start_date, goal.deadline)
     goal.updated_at = clock.now()
     await db.flush()
     await record(db, p.id, "goal.update", "goal", goal.id, diff_of(before, _snapshot(goal)))

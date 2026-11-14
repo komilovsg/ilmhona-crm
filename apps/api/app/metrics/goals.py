@@ -12,13 +12,16 @@ days included):
 - new_enrollments: enrollments made inside the period (Dushanbe day), cohorts not cancelled.
 - courses_launched: courses whose FIRST cohort (not cancelled) starts inside the period.
 
+Baseline: a stock metric (active students) starts counting from its value when the goal
+was made, so progress = (now - baseline) / (target - baseline). Others start from 0.
+
 Pace: cumulative metrics are expected to grow linearly from start_date to deadline (0 % on the
 start day, 100 % on the deadline); a rate metric is expected to sit at its target all the time.
 """
 
 import uuid
 from datetime import date
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from sqlalchemy import ColumnElement, Date, cast, func, select
@@ -48,6 +51,8 @@ METRICS: dict[str, str] = {
     "courses_launched": "Запуски курсов: курсы, у которых первый поток стартовал в период",
 }
 RATE_METRICS = frozenset({"collection_rate_month"})
+# a level, not a count of events: progress is measured from the value at the goal's start
+STOCK_METRICS = frozenset({"active_students"})
 
 REACHED, ON_TRACK, BEHIND, OVERDUE = "достигнута", "по графику", "отстаём", "срок прошёл"
 
@@ -78,7 +83,7 @@ async def _collection_rate(db: AsyncSession, cohort_where: list[ColumnElement[bo
             continue
         expected += price
         collected += min(info["confirmed"], price)
-    return round(float(collected * 100 / expected), 1) if expected else 0.0
+    return pct(collected, expected) if expected else 0.0
 
 
 async def _new_enrollments(
@@ -138,17 +143,31 @@ async def current_value(
     raise ValueError(f"unknown goal metric {metric!r}")
 
 
+def pct(part: Decimal | float, whole: Decimal | float) -> float:
+    """A percentage to one decimal, half up (56.25 -> 56.3)."""
+    value = Decimal(str(part)) * 100 / Decimal(str(whole))
+    return float(value.quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
+
+
 def pace(
-    metric: str, current: float, target: Decimal | float, start: date, deadline: date, on: date
+    metric: str,
+    current: float,
+    target: Decimal | float,
+    start: date,
+    deadline: date,
+    on: date,
+    baseline: Decimal | float = 0,
 ) -> dict[str, Any]:
-    """progress %, expected % and the status of a goal on day `on`."""
+    """progress %, expected % and the status of a goal on day `on`. Progress counts from the
+    baseline (the value a stock metric had when the goal started; 0 for the others)."""
     goal = float(target)
-    progress = min(round(current * 100 / goal, 1), 100.0)
+    base = float(baseline)
+    progress = min(max(pct(current - base, goal - base), 0.0), 100.0)
     if metric in RATE_METRICS:
         expected = 100.0
     else:
         elapsed = (min(max(on, start), deadline) - start).days
-        expected = round(elapsed * 100 / (deadline - start).days, 1)
+        expected = pct(elapsed, (deadline - start).days)
     on_pace = progress >= expected
     if current >= goal:
         status = REACHED

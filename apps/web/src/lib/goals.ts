@@ -16,6 +16,7 @@ export type Goal = {
   metric: string;
   metric_label: string;
   target: number;
+  baseline: number;
   current: number;
   start_date: string;
   deadline: string;
@@ -42,6 +43,9 @@ export type Note = {
   created_at: string;
   updated_at: string;
 };
+
+/** Metrics counted from their value when the goal started (the rest start from 0). */
+export const STOCK_METRICS = ["active_students"];
 
 export const GOAL_TEXT_MAX = 280;
 export const NOTE_TEXT_MAX = 2000;

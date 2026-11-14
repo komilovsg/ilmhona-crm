@@ -13,7 +13,7 @@ import { Bone } from "@/components/Skeletons";
 import { useGoals, useNotes } from "@/hooks/goals";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/format";
-import { progressText, statusTone, type Goal } from "@/lib/goals";
+import { formatNumber, progressText, statusTone, type Goal } from "@/lib/goals";
 import { notify, notifyError } from "@/lib/toast";
 import { GoalFormModal } from "./GoalFormModal";
 
@@ -91,6 +91,7 @@ function GoalRow({ goal, onEdit }: { goal: Goal; onEdit: (g: Goal) => void }) {
         <p className="text-sm tabular-nums">
           <span className="font-medium">{progressText(goal.current, goal.target, goal.metric)}</span>
           <span className="ml-2 text-xs text-default-500">{Math.round(goal.progress_pct)}%</span>
+          {goal.baseline > 0 && <span className="ml-2 text-xs text-default-500">старт: {formatNumber(goal.baseline)}</span>}
         </p>
         <div className="flex items-center gap-1">
           {goal.notes_count > 0 && (
