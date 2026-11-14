@@ -51,7 +51,7 @@ export function CardsGrid({ branch, cards }: { branch: string; cards: LayoutCard
   return (
     <div className="grid grid-cols-1 items-start gap-4 md:gap-6 lg:grid-cols-5">
       {shown.map((c) => (
-        <div key={c.id} className={clsx("min-w-0", SPAN[CARDS[c.id].span])}>
+        <div key={c.id} className={clsx("min-w-0 empty:hidden", SPAN[CARDS[c.id].span])}>
           {CARDS[c.id].render(branch)}
         </div>
       ))}

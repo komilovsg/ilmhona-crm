@@ -30,6 +30,9 @@ import { compact } from "@/lib/reports";
 import type { CourseRow } from "@/lib/reports-types";
 import { CardSkeleton, DashCard, GrowX, GrowY, Legend, PulseLine, RowLink, TONE_TEXT, ViewToggle } from "./shell";
 
+/** Chart labels in thousands: 1 840 -> «1,8» (the caption says «тыс. TJS»). */
+const thousands = (n: number) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(n / 1000);
+
 const num = (s: string) => formatPrice(s).replace(/\s*TJS$/, "");
 
 // ---- the month in one sentence --------------------------------------------------------------
@@ -56,9 +59,9 @@ export function MonthHeroCard({ branch }: { branch: string }) {
         query={query}
         skeleton={
           <div className="flex flex-col gap-4.5">
-            <Bone className="h-[2.75rem] w-3/4 rounded-xl md:h-[3.0625rem]" />
+            <Bone className="h-[6.25rem] w-full rounded-xl md:h-[3.0625rem] md:w-3/4" />
             <Bone className="h-3.5 w-full rounded-full" />
-            <Bone className="h-6 w-full rounded-lg" />
+            <Bone className="h-[3.75rem] w-full rounded-lg md:h-6" />
           </div>
         }
       >
@@ -371,7 +374,7 @@ function BranchChart({ d }: { d: BranchMonths }) {
   return (
     <div className="flex flex-col gap-1.5">
       <div className="relative">
-        <span className="absolute -top-1 left-0 text-[0.6875rem] text-default-500 tabular-nums">{compact(max)}</span>
+        <span className="absolute -top-1 left-0 text-[0.6875rem] text-default-500 tabular-nums">{thousands(max)}</span>
         <div className="grid h-52 grid-cols-6 items-end gap-2.5 border-b border-divider pt-4 md:gap-3.5">
           {d.months.map((m, mi) => {
             const tip = `${monthName(m)}: ${d.series.map((s, si) => `${s.name} ${formatPrice(values[si][mi])}`).join(" · ")}`;
@@ -388,7 +391,7 @@ function BranchChart({ d }: { d: BranchMonths }) {
                 {d.series.map((s, si) => (
                   <span key={s.branch_id} className="relative flex h-full w-[38%] max-w-[1.375rem] flex-col justify-end">
                     {mi === last && (
-                      <span className="mb-0.5 whitespace-nowrap text-center text-[0.6875rem] font-medium tabular-nums">{compact(values[si][mi])}</span>
+                      <span className="mb-0.5 whitespace-nowrap text-center text-[0.6875rem] font-medium tabular-nums">{thousands(values[si][mi])}</span>
                     )}
                     <GrowY
                       className="w-full rounded-t"
@@ -485,7 +488,7 @@ export function BranchMonthsCard({ branch }: { branch: string }) {
       >
         {(d) => (table ? <BranchTable d={d} /> : <BranchChart d={d} />)}
       </QueryState>
-      <p className="-mt-2 text-xs text-default-500">Подтверждённые оплаты, TJS, по месяцам оплаты</p>
+      <p className="-mt-2 text-xs text-default-500">Подтверждённые оплаты, тыс. TJS, по месяцам оплаты</p>
     </DashCard>
   );
 }

@@ -67,7 +67,7 @@ export function QueuesCard({ branch }: { branch: string }) {
                   className={clsx("flex h-[8.25rem] min-w-0 flex-col gap-1.5 rounded-[1.125rem] border-t-[3px] bg-content1 p-4 transition-colors hover:bg-content2 md:p-5", v.accent)}
                   href={v.href}
                 >
-                  <span className="truncate text-sm text-default-500">{v.label}</span>
+                  <span className="truncate text-[0.8125rem] text-default-500 md:text-sm">{v.label}</span>
                   <span className="font-display text-[2.5rem] font-bold leading-none tabular-nums">{t.count}</span>
                   <span className="truncate text-[0.8125rem] text-default-500">{v.hint}</span>
                 </Link>
@@ -90,7 +90,6 @@ export function CallQueueCard({ branch }: { branch: string }) {
   return (
     <DashCard
       aside={<span className="text-[0.8125rem] text-default-500">{query.data ? `${query.data.count} · ` : ""}перезвонить сегодня</span>}
-      className="min-h-[24rem]"
       delay={0.1}
       title="Очередь звонков"
     >
@@ -99,7 +98,7 @@ export function CallQueueCard({ branch }: { branch: string }) {
         empty={<EmptyState bare hint="Звонки появятся, когда у лида назначен перезвон." title="На сегодня звонков нет" />}
         isEmpty={(d) => d.items.length === 0}
         query={query}
-        skeleton={<CardSkeleton rowClass="h-[4.5rem]" rows={5} />}
+        skeleton={<CardSkeleton rowClass="h-[4.5rem]" rows={3} />}
       >
         {(d) => (
           <div className="flex flex-col gap-2.5">
@@ -145,13 +144,13 @@ export function SeatsCard({ branch }: { branch: string }) {
   const query = useCard<{ items: SeatRow[] }>("seats", branch);
 
   return (
-    <DashCard className="min-h-[24rem]" delay={0.18} title="Наборы: свободные места">
+    <DashCard delay={0.18} title="Наборы: свободные места">
       <QueryState
         bare
         empty={<EmptyState bare hint="Потоки на наборе появятся здесь." title="Наборов сейчас нет" />}
         isEmpty={(d) => d.items.length === 0}
         query={query}
-        skeleton={<CardSkeleton rowClass="h-[4.25rem]" rows={4} />}
+        skeleton={<CardSkeleton rowClass="h-[4.25rem]" rows={2} />}
       >
         {(d) => (
           <ul className="flex flex-col gap-3.5">
