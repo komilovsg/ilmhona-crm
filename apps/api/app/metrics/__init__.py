@@ -127,19 +127,15 @@ async def education_summary(
 
 
 from app.metrics.attendance import (  # noqa: E402
-    attendance_score,
     enrollment_attendance,
     enrollment_results,
-    grade_total,
     has_marks,
-    passed,
     today_lessons,
     unfilled_lessons,
     unfilled_top,
 )
 
 __all__ = [
-    "attendance_score",
     "cohort_counts",
     "cohort_enrolled",
     "cohort_fill",
@@ -150,9 +146,7 @@ __all__ = [
     "fill_of",
     "fill_percent",
     "over_capacity_of",
-    "grade_total",
     "has_marks",
-    "passed",
     "student_counts",
     "student_statuses",
     "today_lessons",

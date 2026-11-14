@@ -37,15 +37,24 @@ async def test_grades_export_equals_list(admin: httpx.AsyncClient) -> None:
     cohort, lessons = await past_cohort(admin)
     zed, amy = await enroll(admin, cohort, "Zed"), await enroll(admin, cohort, "Amy")
     await mark(admin, lessons[0], amy)
-    await admin.patch(f"/api/v1/enrollments/{amy}/grade", json={"homework": 30, "final": 25})
-    listed = (await admin.get(f"{C}/{cohort['id']}/grades")).json()
+    await admin.patch(
+        f"/api/v1/enrollments/{amy}/grade", json={"scores": {"homework": 30, "final": 25}}
+    )
+    listed = (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"]
     book = sheets(await admin.get(f"{C}/{cohort['id']}/grades/export"))
     assert list(book) == ["Оценки"]
     rows = book["Оценки"]
     assert [r[0] for r in rows[1:]] == [g["student_name"] for g in listed] == ["Amy", "Zed"]
-    assert rows[0][2:6] == ("Д/З", "Финал", "Баллы за посещаемость", "Итого")
+    assert rows[0][2:8] == (
+        "Посещаемость (авто, из 20)",
+        "Домашние задания (из 40)",
+        "Финал (из 40)",
+        "Итого",
+        "Прогноз",
+        "Зачёт (от 70)",
+    )
     assert [r[5] for r in rows[1:]] == [g["total"] for g in listed]
-    assert rows[1][2:4] == (30, 25)
+    assert rows[1][3:5] == (30, 25)
     assert zed
     entry = (await _exports("grade"))[0]
     assert entry[1] == {"rows": 2, "filters": {"cohort": cohort["code"]}}
@@ -117,7 +126,7 @@ async def test_today_export_equals_screen_for_manager(
     await mark(
         admin,
         lessons[-1],
-        (await admin.get(f"{C}/{cohort['id']}/grades")).json()[0]["enrollment_id"],
+        (await admin.get(f"{C}/{cohort['id']}/grades")).json()["rows"][0]["enrollment_id"],
     )
     mgr = await login_as("mgr", "manager", branch="Душанбе")
     screen = (await mgr.get("/api/v1/me/today")).json()

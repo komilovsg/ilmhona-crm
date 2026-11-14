@@ -21,7 +21,8 @@ The dashboard, the lists and the Excel files take their numbers from here and fr
   («записан»); enrolled = not expelled; paid month 1/2/3 = enrollments with a confirmed payment of
   that month; LTV/чел = income ÷ enrolled; graduates = enrollments «выпускник»; employed =
   graduates whose student has an employment record.
-- Graduates: enrollments «выпускник». Score = attendance + homework + final (`enrollment_results`),
+- Graduates: enrollments «выпускник». Score = the total on the cohort's scheme
+  (`enrollment_results`),
   paid = confirmed sum, employed = the student has an employment record (the only table, #13).
 """
 
@@ -251,8 +252,6 @@ async def graduate_rows(
     for e, s, c, course, instructor, branch in found:
         own = jobs.get(s.id, [])
         res = results[e.id]
-        # an old total that came without homework / final stands until real grades exist
-        legacy = e.legacy_total is not None and res["homework"] is None and res["final"] is None
         rows.append(
             {
                 "enrollment_id": e.id,
@@ -269,8 +268,8 @@ async def graduate_rows(
                 "instructor_name": instructor,
                 "enrolled_at": e.enrolled_at,
                 "cohort_end": c.end_date,
-                "score": round(e.legacy_total) if legacy else res["total"],
-                "score_legacy": legacy,
+                "score": res["score"],
+                "score_legacy": res["legacy"],
                 "paid": paid[e.id]["paid"],
                 "certificate_no": e.certificate_no,
                 "certificate_issued_at": e.certificate_issued_at,

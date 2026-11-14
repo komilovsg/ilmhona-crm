@@ -86,7 +86,9 @@ async def test_instructor_cross_references_and_no_status_override(
         f"{L}/{my_lessons[1]}/attendance/{my_e}", json={"present": True, "marked_by": me}
     )
     assert r.status_code == 422
-    r = await ins.patch(f"{E}/{my_e}/grade", json={"homework": 1, "status": "выпускник"})
+    r = await ins.patch(
+        f"{E}/{my_e}/grade", json={"scores": {"homework": 1}, "status": "выпускник"}
+    )
     assert r.status_code == 422
     assert (await sql("SELECT status FROM enrollment WHERE id = :i", i=my_e))[0][0] == "активный"
 
@@ -96,10 +98,12 @@ async def test_empty_grade_patch_does_not_bump_the_version(admin: httpx.AsyncCli
     grader could make every other editor's save fail with stale_version."""
     cohort, _ = await past_cohort(admin)
     e = await enroll(admin, cohort, "Алиев")
-    assert (await admin.patch(f"{E}/{e}/grade", json={"homework": 10})).status_code == 200
+    assert (
+        await admin.patch(f"{E}/{e}/grade", json={"scores": {"homework": 10}})
+    ).status_code == 200
     r = await admin.patch(f"{E}/{e}/grade", json={}, headers={"X-Record-Version": "2"})
     assert r.status_code == 200 and r.json()["version"] == 2
     r = await admin.patch(
-        f"{E}/{e}/grade", json={"homework": 10}, headers={"X-Record-Version": "2"}
+        f"{E}/{e}/grade", json={"scores": {"homework": 10}}, headers={"X-Record-Version": "2"}
     )
     assert r.status_code == 200 and r.json()["version"] == 2

@@ -16,6 +16,7 @@ COUNTED = (
     "enrollment",
     "attendance",
     "grade",
+    "grade_score",
     "payment",
     "instructor_payout",
     "lead",

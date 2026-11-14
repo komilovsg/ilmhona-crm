@@ -48,6 +48,9 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "users", href: "/users", label: "Пользователи", icon: "users" },
   { section: "users", href: "/roles", label: "Роли и права", icon: "roles" },
   { section: "audit", href: "/audit", label: "Журнал", icon: "audit" },
+  // «Настройки → Стандарты академии»: staff who grade read it, the superadmin changes it (an
+  // instructor sees the scheme of their cohort on the cohort page)
+  { section: "attendance", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
 ];
 
 function forRole(item: NavItem, roleCode: string | null | undefined): boolean {

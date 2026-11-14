@@ -24,7 +24,7 @@ MAX_FIELDS = 4
 # audit filter «section» -> the entities it covers; `auth` is by action (sign-ins, lockouts)
 SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "students": ("student",),
-    "cohorts": ("cohort", "lesson", "enrollment"),
+    "cohorts": ("cohort", "lesson", "enrollment", "grading_scheme"),
     "rooms": ("room", "course"),
     "users": ("app_user", "role"),
     "payments": ("payment",),
@@ -97,6 +97,12 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
 }
+# grading schemes: «Курбон: изменена шкала оценок потока G-012 — баллы: Посещаемость 20, … → …»
+GRADING = {
+    "grading.standard_update": "{who}: изменён стандарт оценок академии",
+    "grading.cohort_update": "{who}: изменена шкала оценок потока {lab}",
+    "grading.cohort_reset": "{who}: потоку {lab} возвращён стандарт оценок академии",
+}
 # creations that also read their values: «создана оплата … — сумма 500 TJS, способ alif»
 WITH_VALUES = {"payment.create", "payout.create"}
 
@@ -124,6 +130,7 @@ TABLES: dict[str, str] = {
     "employment": "трудоустройство",
     "dashboard_month": "дашборд по месяцам",
     "grade": "оценки потока",
+    "grading_scheme": "шкала оценок",
     "today": "сегодня и не заполнено",
     "student_card": "карточка студента",
     "reset_request": "запросы пароля",
@@ -210,6 +217,11 @@ FIELDS: dict[str, str] = {
     "position": "должность",
     "employed_at": "дата трудоустройства",
     "reason": "причина",
+    "categories": "баллы",
+    "pass_score": "проходной балл",
+    "target_retention": "цель по удержанию, %",
+    "target_attendance": "цель по посещаемости, %",
+    "target_pass_rate": "цель по проходным, %",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -455,6 +467,11 @@ def sentence(
         _, review = _pair(e.diff.get("needs_review"))
         tail = f", из них на проверку: {review}" if review else ""
         return f"{who}: импортировано лидов из CSV: {n}{tail}"
+    if a in GRADING:
+        diff = {k: v for k, v in e.diff.items() if k != "archived"}
+        _, archived = _pair(e.diff.get("archived"))
+        tail = f"; оценки сохранены в архиве: {archived}" if archived else ""
+        return _with_changes(GRADING[a].format(who=who, lab=lab), diff, names, sections) + tail
     if a == "grade.update":
         student, cohort = _pieces(lab)
         return _with_changes(

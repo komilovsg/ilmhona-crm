@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { lessonProgress, lessonsWord, markedLabel, markState, parseGrade, percentLabel } from "./attendance.ts";
+import { lessonProgress, lessonsWord, markedLabel, markState, percentLabel } from "./attendance.ts";
 
 test("percent and marked labels never pass an unmarked lesson off as attended (#12)", () => {
   assert.equal(percentLabel(null), "—");
@@ -13,14 +13,6 @@ test("percent and marked labels never pass an unmarked lesson off as attended (#
   assert.equal(markState(0, 5), "none");
   assert.equal(markState(3, 5), "partial");
   assert.equal(markState(5, 5), "done");
-});
-
-test("grade input accepts empty and 0..40 whole numbers only", () => {
-  assert.deepEqual(parseGrade(""), { ok: true, value: null });
-  assert.deepEqual(parseGrade(" 35 "), { ok: true, value: 35 });
-  assert.deepEqual(parseGrade("0"), { ok: true, value: 0 });
-  assert.deepEqual(parseGrade("40"), { ok: true, value: 40 });
-  for (const bad of ["41", "-1", "3.5", "abc", "100"]) assert.deepEqual(parseGrade(bad), { ok: false });
 });
 
 test("Russian plural of lessons", () => {

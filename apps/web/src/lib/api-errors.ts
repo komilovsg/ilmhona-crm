@@ -70,7 +70,7 @@ export const apiErrors: Record<string, string> = {
   campaign_in_use: "У кампании есть лиды. Удалить нельзя.",
   campaign_dates_invalid: "Дата окончания раньше даты старта.",
   import_too_large: "Файл слишком большой (больше 2 МБ).",
-  import_too_many_rows: "В файле больше 2000 строк. Разделите его на части.",
+  import_too_many_rows: "В файле больше {limit} строк. Разделите его на части.",
   import_unreadable: "Не удалось прочитать файл. Нужен Excel (.xlsx) или CSV.",
   import_no_rows: "В файле нет строк для импорта.",
   journal_no_dates: "Не нашли строку с датами уроков. Укажите её номер вручную.",
@@ -79,6 +79,9 @@ export const apiErrors: Record<string, string> = {
   not_graduate: "Сертификат и трудоустройство — только у выпускника.",
   certificate_issued: "Сертификат уже выдан: статус «выпускник» не меняется.",
   employment_enrollment_mismatch: "Это зачисление другого студента.",
+  grading_scheme_invalid: "Шкала оценок не сходится: {problems}.",
+  grading_scores_archived: "У удаляемых категорий есть оценки: они сохранятся в архиве. Подтвердите удаление.",
+  cohort_not_completed: "Поток ещё не завершён: статусы выпускников определятся при завершении.",
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -96,6 +99,7 @@ export function errorText(code: string | undefined, params?: Record<string, unkn
   return text.replace(/\{(\w+)\}/g, (_, key: string) => {
     const value = params?.[key];
 
+    if (Array.isArray(value)) return value.join("; ");
     // a day arrives as ISO (2026-11-17), people read 17.11.2026
     return typeof value === "string" && ISO_DAY.test(value) ? fullDate(value) : String(value ?? "");
   });
