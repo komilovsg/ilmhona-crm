@@ -6,7 +6,7 @@ export function DashPageSkeleton({ manager = false }: { manager?: boolean }) {
     return (
       <div className="grid gap-4 md:gap-6">
         <Bone className="h-[4.875rem] w-full rounded-2xl md:h-14" />
-        <Bone className="h-[17.25rem] w-full rounded-[1.125rem] lg:h-[8.25rem]" />
+        <Bone className="h-[19.375rem] w-full rounded-[1.125rem] lg:h-[9.25rem]" />
         <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
           <Bone className="h-[11.5rem] w-full rounded-2xl lg:col-span-3" />
           <Bone className="h-[9rem] w-full rounded-2xl lg:col-span-2" />

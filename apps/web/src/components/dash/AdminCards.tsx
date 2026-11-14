@@ -229,7 +229,6 @@ export function TimelineCard({ branch }: { branch: string }) {
   return (
     <DashCard
       aside={<ViewToggle table={table} onChange={setTable} />}
-      className="min-h-[24rem]"
       delay={0.08}
       title="Лента наборов"
     >
@@ -275,7 +274,7 @@ export function AttentionCard({ branch }: { branch: string }) {
   const query = useCard<{ items: AlertItem[] }>("attention", branch);
 
   return (
-    <DashCard className="min-h-[24rem]" delay={0.16} title="Требует внимания">
+    <DashCard delay={0.16} title="Требует внимания">
       <QueryState
         bare
         empty={<EmptyState bare hint="Переплат, пропущенных отметок и ожидающих оплат нет." title="Срочного ничего нет" />}
@@ -316,7 +315,6 @@ export function DemandCard({ branch }: { branch: string }) {
   return (
     <DashCard
       aside={<span className="text-[0.8125rem] text-default-500">лиды, 30 дней</span>}
-      className="min-h-[22rem]"
       delay={0.1}
       title="Спрос на курсы"
     >
@@ -475,7 +473,6 @@ export function BranchMonthsCard({ branch }: { branch: string }) {
           <ViewToggle table={table} onChange={setTable} />
         </div>
       }
-      className="min-h-[22rem]"
       delay={0.24}
       title="Филиалы по месяцам"
     >
@@ -514,7 +511,6 @@ export function CoursesIncomeCard({ branch }: { branch: string }) {
           <ViewToggle table={table} onChange={setTable} />
         </div>
       }
-      className="min-h-[22rem]"
       delay={0.32}
       title="Доход по курсам"
     >

@@ -32,6 +32,28 @@
   color-scheme: dark;
 }
 
+/* Dashboard card groups on a wide screen: two columns, every card as tall as its content. Each card sets
+   --span (its height in 1 px rows plus the gap); dense flow puts the next card into the shorter column. */
+@media (min-width: 1024px) {
+  .masonry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 1px;
+    grid-auto-flow: dense;
+    column-gap: 1.5rem;
+    row-gap: 0;
+    align-items: start;
+    margin-bottom: -1.5rem;
+  }
+
+  .masonry > * {
+    grid-row-end: span var(--span, 400);
+  }
+
+  .masonry > :only-child {
+    grid-column: 1 / -1;
+  }
+}
+
 @theme inline {
   --color-sidebar: var(--sidebar);
   --color-brand-text: var(--brand-text);

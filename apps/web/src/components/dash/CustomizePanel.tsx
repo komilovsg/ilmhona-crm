@@ -74,24 +74,24 @@ function Row({
         {card.title}
         <span className="sr-only">{card.visible ? ": показана" : ": скрыта"}</span>
       </Switch>
-      <span className="flex shrink-0 flex-col">
+      <span className="flex shrink-0">
         <button
           aria-label={`Выше: ${card.title}`}
-          className="flex size-6 items-center justify-center rounded text-default-400 hover:text-foreground disabled:opacity-30"
+          className="flex size-8 items-center justify-center rounded-lg text-default-500 hover:bg-default-200 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent [@media(pointer:coarse)]:size-10"
           disabled={first}
           type="button"
           onClick={() => onMove(-1)}
         >
-          <Icon name="arrow-up" size={14} />
+          <Icon name="arrow-up" size={18} />
         </button>
         <button
           aria-label={`Ниже: ${card.title}`}
-          className="flex size-6 items-center justify-center rounded text-default-400 hover:text-foreground disabled:opacity-30"
+          className="flex size-8 items-center justify-center rounded-lg text-default-500 hover:bg-default-200 hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent [@media(pointer:coarse)]:size-10"
           disabled={last}
           type="button"
           onClick={() => onMove(1)}
         >
-          <Icon name="arrow-down" size={14} />
+          <Icon name="arrow-down" size={18} />
         </button>
       </span>
     </Reorder.Item>

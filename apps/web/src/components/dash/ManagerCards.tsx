@@ -46,7 +46,7 @@ export function QueuesCard({ branch }: { branch: string }) {
       skeleton={
         <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
           {Array.from({ length: 4 }, (_, i) => (
-            <Bone key={i} className="h-[8.25rem] rounded-[1.125rem]" />
+            <Bone key={i} className="h-[9.25rem] rounded-[1.125rem]" />
           ))}
         </div>
       }
@@ -64,10 +64,10 @@ export function QueuesCard({ branch }: { branch: string }) {
                 transition={{ duration: reduced ? 0 : 0.5, ease: EASE_OUT, delay: reduced ? 0 : i * 0.06 }}
               >
                 <Link
-                  className={clsx("flex h-[8.25rem] min-w-0 flex-col gap-1.5 rounded-[1.125rem] border-t-[3px] bg-content1 p-4 transition-colors hover:bg-content2 md:p-5", v.accent)}
+                  className={clsx("flex h-[9.25rem] min-w-0 flex-col gap-1.5 rounded-[1.125rem] border-t-[3px] bg-content1 p-4 transition-colors hover:bg-content2 md:p-5", v.accent)}
                   href={v.href}
                 >
-                  <span className="truncate text-[0.8125rem] text-default-500 md:text-sm">{v.label}</span>
+                  <span className="line-clamp-2 min-h-8 text-[0.8125rem] leading-4 text-default-500 md:text-sm md:leading-4">{v.label}</span>
                   <span className="font-display text-[2.5rem] font-bold leading-none tabular-nums">{t.count}</span>
                   <span className="truncate text-[0.8125rem] text-default-500">{v.hint}</span>
                 </Link>
