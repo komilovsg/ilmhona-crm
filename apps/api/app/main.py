@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from starlette.middleware.gzip import DEFAULT_EXCLUDED_CONTENT_TYPES, GZipMiddleware
 
+from app.attendance.analytics_api import router as analytics_router
 from app.attendance.api import router as attendance_router
 from app.attendance.journal_api import router as journal_router
 from app.audit.api import router as audit_router
@@ -75,6 +76,7 @@ for router in (
     rooms_router,
     cohorts_router,
     attendance_router,
+    analytics_router,
     journal_router,
     students_router,
     metrics_router,
