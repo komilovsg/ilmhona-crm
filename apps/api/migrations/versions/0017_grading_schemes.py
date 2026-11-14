@@ -80,10 +80,15 @@ def upgrade() -> None:
         """
         CREATE FUNCTION grading_scheme_check() RETURNS trigger LANGUAGE plpgsql AS $$
         DECLARE
-          sid uuid := COALESCE(NEW.scheme_id, OLD.scheme_id);
+          sid uuid;
           total int;
           att int;
         BEGIN
+          IF TG_TABLE_NAME = 'grading_scheme' THEN
+            sid := NEW.id;  -- a new or changed scheme row: it must have its categories
+          ELSE
+            sid := COALESCE(NEW.scheme_id, OLD.scheme_id);
+          END IF;
           IF NOT EXISTS (SELECT 1 FROM grading_scheme WHERE id = sid) THEN
             RETURN NULL;  -- the scheme itself was deleted
           END IF;
@@ -104,6 +109,11 @@ def upgrade() -> None:
     op.execute(
         "CREATE CONSTRAINT TRIGGER grading_category_check AFTER INSERT OR UPDATE OR DELETE "
         "ON grading_category DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
+        "EXECUTE FUNCTION grading_scheme_check()"
+    )
+    op.execute(
+        "CREATE CONSTRAINT TRIGGER grading_scheme_check AFTER INSERT OR UPDATE "
+        "ON grading_scheme DEFERRABLE INITIALLY DEFERRED FOR EACH ROW "
         "EXECUTE FUNCTION grading_scheme_check()"
     )
     op.execute(
@@ -158,5 +168,5 @@ def downgrade() -> None:
     op.execute("DROP TABLE grading_key")
     op.execute("DROP TABLE grade_score")
     op.execute("DROP TABLE grading_category")
-    op.execute("DROP FUNCTION grading_scheme_check()")
     op.execute("DROP TABLE grading_scheme")
+    op.execute("DROP FUNCTION grading_scheme_check()")

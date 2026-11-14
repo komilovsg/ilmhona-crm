@@ -572,8 +572,9 @@ async def test_excel_import_hostile_files(admin: httpx.AsyncClient) -> None:
     preview = (await admin.post(url, content=buf.getvalue())).json()
     messages = [e["message"] for e in preview["errors"]]
     assert preview["ok"] is False
-    assert "Строка 2: баллы «» — нужно целое число от 0 до 100" in messages
-    assert "Строка 3: нет названия категории" in messages
+    assert "Формулы не поддерживаются — вставьте значения (ячейка B2)" in messages
+    assert "Формулы не поддерживаются — вставьте значения (ячейка A3)" in messages
+    assert not any("нет названия" in m or "баллы «»" in m for m in messages)
     # control characters are refused (openpyxl cannot even write them: a CSV brings them)
     csv_bad = "Категория;Баллы;Тип\nПосещаемость;20;авто\nПлохо\x07;80;вручную\n".encode()
     preview = (await admin.post(url, content=csv_bad)).json()
@@ -582,3 +583,24 @@ async def test_excel_import_hostile_files(admin: httpx.AsyncClient) -> None:
     csv = "Категория;Баллы;Тип\nПосещаемость;20;авто\n'-Минус;80;вручную\n".encode()
     preview = (await admin.post(url, content=csv)).json()
     assert preview["ok"] and preview["categories"][1]["name"] == "-Минус"
+
+
+async def test_a_scheme_without_categories_is_refused_by_the_db(admin: httpx.AsyncClient) -> None:
+    cohort, _ = await past_cohort(admin)
+    with pytest.raises(IntegrityError, match="sums to 0 points, not 100"):
+        await sql("INSERT INTO grading_scheme (cohort_id) VALUES (:c)", c=cohort["id"])
+    assert (await sql("SELECT count(*) FROM grading_scheme"))[0][0] == 1
+    # the API path (a new own scheme row, then its categories) still works in one transaction
+    r = await admin.patch(f"{C}/{cohort['id']}/grading", json={"pass_score": 60})
+    assert r.status_code == 200 and r.json()["source"] == "cohort"
+
+
+async def test_template_downloads_need_a_view_of_cohorts_or_grades(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    seller = await login_as("sales", await make_role("Продажи", {"leads": "view"}))
+    assert (await seller.get(f"{S}/template")).status_code == 403
+    assert (await seller.get(S)).status_code == 200  # reading the standard stays open
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    assert (await ins.get(f"{S}/template")).status_code == 200
+    assert (await admin.get(f"{S}/template")).status_code == 200

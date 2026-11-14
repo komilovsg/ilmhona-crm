@@ -229,7 +229,7 @@ async def write(
     await remember_names(db, draft.categories)
     await db.flush()
     # the sum-100 / one-attendance trigger runs now, not at commit
-    await db.execute(text("SET CONSTRAINTS grading_category_check IMMEDIATE"))
+    await db.execute(text("SET CONSTRAINTS grading_category_check, grading_scheme_check IMMEDIATE"))
 
 
 async def remember_names(db: AsyncSession, categories: Sequence[g.Category]) -> None:

@@ -127,7 +127,7 @@ async def update_standard(
 
 
 @router.get("/grading/standard/template")
-async def standard_template(p: CurrentUser, db: DB) -> Response:
+async def standard_template(p: Reader, db: DB) -> Response:
     return await _template(db, p, await g.standard_scheme(db), "standart_ocenok", None)
 
 

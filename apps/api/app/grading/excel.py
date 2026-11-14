@@ -13,7 +13,10 @@ our own export put before a formula-like name is taken off again.
 """
 
 import re
+from io import BytesIO
 from typing import Any
+
+from openpyxl.utils import get_column_letter
 
 from app.attendance import journal as jr
 from app.core.errors import DomainError
@@ -22,6 +25,7 @@ from app.grading import schemes as sc
 from app.leads.errors import IMPORT_NO_ROWS, IMPORT_TOO_MANY_ROWS, IMPORT_UNREADABLE
 from app.metrics import grading as g
 
+FORMULA_COLS = 20  # the three columns sit at the left
 MAX_ROWS = 60  # a scheme has at most 12 categories and 4 settings: anything bigger is not one
 KIND_TEXT = {g.ATTENDANCE: "авто", g.MANUAL: "вручную"}
 _KINDS = {
@@ -78,19 +82,46 @@ def _number(raw: str) -> int | None:
     return n if 0 <= n <= 100 else None
 
 
-def _table(data: bytes) -> list[list[jr.Cell]]:
+def _formulas(data: bytes) -> set[tuple[int, int]]:
+    """(row 1-based, column 0-based) of the formula cells of the first sheet. The values are read
+    cached (`data_only`): a formula without a cached value would read as empty, so it is named
+    instead. Called after the zip check of `_read_xlsx`; never calculates anything."""
+    from openpyxl import load_workbook
+
+    found: set[tuple[int, int]] = set()
+    try:
+        wb = load_workbook(BytesIO(data), read_only=True, data_only=False)
+        try:
+            ws = wb[wb.sheetnames[0]]
+            for r, cells in enumerate(
+                ws.iter_rows(min_row=1, max_row=MAX_ROWS + 1, max_col=FORMULA_COLS), start=1
+            ):
+                for c, cell in enumerate(cells):
+                    if getattr(cell, "data_type", None) == "f":
+                        found.add((r, c))
+        finally:
+            wb.close()
+    except Exception:  # noqa: BLE001 - unreadable here = unreadable for `_read_xlsx` already
+        raise DomainError(IMPORT_UNREADABLE) from None
+    return found
+
+
+def _table(data: bytes) -> tuple[list[list[jr.Cell]], set[tuple[int, int]]]:
+    formulas: set[tuple[int, int]] = set()
     if data[:2] == b"PK":
         _, tables = jr._read_xlsx(data, None)  # the shared hardened reader
         if not tables:
             raise DomainError(IMPORT_UNREADABLE)
         rows = tables[0].rows
+        if len(rows) <= MAX_ROWS:
+            formulas = _formulas(data)
     else:
         if b"\x00" in data:
             raise DomainError(IMPORT_UNREADABLE)
         rows = jr._read_csv(data).rows
     if len(rows) > MAX_ROWS:
         raise DomainError(IMPORT_TOO_MANY_ROWS, limit=MAX_ROWS)
-    return rows
+    return rows, formulas
 
 
 def _columns(rows: list[list[jr.Cell]]) -> tuple[int, tuple[int, int, int]]:
@@ -109,7 +140,7 @@ def _columns(rows: list[list[jr.Cell]]) -> tuple[int, tuple[int, int, int]]:
 def read_scheme(data: bytes) -> dict[str, Any]:
     """The preview: categories and settings as understood, the problems (row = the line in the
     file, None = the scheme as a whole) and `ok` when it can be applied."""
-    rows = _table(data)
+    rows, formulas = _table(data)
     start, (cat, pts, kind_col) = _columns(rows)
     categories: list[dict[str, Any]] = []
     settings: dict[str, int] = {}
@@ -121,6 +152,17 @@ def read_scheme(data: bytes) -> dict[str, Any]:
 
     for r, row in enumerate(rows[start:], start=start + 1):
         name, raw_points, raw_kind = cell(row, cat), cell(row, pts), cell(row, kind_col)
+        in_formula = sorted(c for c in (cat, pts, kind_col) if (r, c) in formulas)
+        if in_formula:
+            for c in in_formula:
+                errors.append(
+                    {
+                        "row": r,
+                        "message": "Формулы не поддерживаются — вставьте значения "
+                        f"(ячейка {get_column_letter(c + 1)}{r})",
+                    }
+                )
+            continue
         if not (name or raw_points or raw_kind):
             continue
         if _CONTROL.search(name + raw_points + raw_kind):

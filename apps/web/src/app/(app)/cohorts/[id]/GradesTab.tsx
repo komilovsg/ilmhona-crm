@@ -34,6 +34,7 @@ function ScoreInput({
   category,
   student,
   value,
+  stored,
   invalid,
   onFocus,
   onChange,
@@ -42,6 +43,8 @@ function ScoreInput({
   category: Manual;
   student: string;
   value: string;
+  /** The saved score: above a weight lowered later it counts as the weight. */
+  stored: number | undefined;
   invalid: boolean;
   onFocus: () => void;
   onChange: (value: string) => void;
@@ -71,6 +74,21 @@ function ScoreInput({
           Не больше {category.weight}
         </span>
       )}
+      {!invalid && <Capped stored={stored} weight={category.weight} />}
+    </span>
+  );
+}
+
+/** «больше максимума, засчитано 30»: a score entered before its weight was lowered. */
+function Capped({ stored, weight }: { stored: number | undefined; weight: number }) {
+  if (stored === undefined || stored <= weight) return null;
+
+  return (
+    <span
+      className="mt-0.5 whitespace-nowrap rounded-md bg-warning/15 px-1.5 text-xs text-warning-700 dark:text-warning"
+      title={`Не больше ${weight}: максимум категории уменьшили после того, как балл поставили`}
+    >
+      {stored} → {weight}, больше максимума
     </span>
   );
 }
@@ -242,6 +260,7 @@ function RowEditor({ row, canMark, cohortId, scheme, layout, onDiscard }: RowPro
       <ScoreInput
         category={c}
         invalid={g.invalid === c.key}
+        stored={row.scores[c.key]}
         student={row.student_name}
         value={g.draft[c.key] ?? ""}
         onChange={(v) => g.setDraft((d) => ({ ...d, [c.key]: v }))}
@@ -249,7 +268,10 @@ function RowEditor({ row, canMark, cohortId, scheme, layout, onDiscard }: RowPro
         onFocus={() => g.setFocus(c.key)}
       />
     ) : (
-      <span className="tabular-nums">{row.scores[c.key] ?? "—"}</span>
+      <span className="inline-flex flex-col items-start tabular-nums">
+        {row.scores[c.key] ?? "—"}
+        <Capped stored={row.scores[c.key]} weight={c.weight} />
+      </span>
     );
   const attendance = (
     <span className="tabular-nums" title={`${row.present} из ${row.held} проведённых, ${percentLabel(row.percent)}`}>
