@@ -1,9 +1,9 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Input } from "@heroui/input";
 
 import { BarList } from "@/components/charts/BarList";
 import { TrendChart } from "@/components/charts/TrendChart";
@@ -301,8 +301,8 @@ export default function DashboardPage() {
         )}
         {tab !== "months" && (
           <div className="flex gap-2">
-            <Input placeholder=" " className="w-40" label="С" size="sm" type="date" value={from} onValueChange={setFrom} />
-            <Input placeholder=" " className="w-40" label="По" size="sm" type="date" value={to} onValueChange={setTo} />
+            <DateField filter className="w-40" label="С" value={from} onValueChange={setFrom} />
+            <DateField filter className="w-40" label="По" value={to} onValueChange={setTo} />
           </div>
         )}
       </div>

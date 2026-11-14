@@ -22,7 +22,7 @@ const WIDTHS = ["w-40", "w-28", "w-24", "w-32", "w-20", "w-16"];
 /** Desktop table: header row (text-xs, py-3) and body rows (text-sm, py-3), like the real ones. */
 export function TableSkeleton({ cols = 5, rows = 8 }: { cols?: number; rows?: number }) {
   return (
-    <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+    <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-divider text-xs text-default-500">
           <tr>
@@ -194,10 +194,30 @@ export function ListPageSkeleton({
     <Late>
       <HeaderSkeleton action={action} />
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Bone className="h-10 flex-1 rounded-xl md:max-w-xs md:flex-none md:basis-80" />
-        <Bone className="hidden h-14 w-44 rounded-xl md:block" />
+        <Bone className="h-12 flex-1 rounded-xl md:max-w-xs md:flex-none md:basis-80" />
+        <Bone className="hidden h-12 w-44 rounded-xl md:block" />
       </div>
       {cards ? <CardGridSkeleton lines={cardLines} /> : <ListSkeleton cols={cols} />}
     </Late>
+  );
+}
+
+/** A grading scheme card: the title, the category chips, the pass score and the targets. */
+export function SchemeSkeleton() {
+  return (
+    <div className="space-y-4 rounded-2xl bg-content1 p-4 md:p-5">
+      <Bone className="h-6 w-40" />
+      <Bone className="h-4 w-full max-w-xl" />
+      <div className="flex flex-wrap gap-2">
+        {[0, 1, 2].map((i) => (
+          <Bone key={i} className="h-8 w-36 rounded-lg" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Bone key={i} className="h-10 w-full" />
+        ))}
+      </div>
+    </div>
   );
 }

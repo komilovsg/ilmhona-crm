@@ -140,6 +140,8 @@ export type EnrollmentRow = {
   /** hints for the instructor: they added it, and it has no payments, marks or grades */
   created_by_me: boolean;
   deletable: boolean;
+  /** set by the create response when this enrollment took the cohort over its seats */
+  over_capacity?: Fill | null;
 };
 
 export type StudentRow = {
@@ -291,15 +293,28 @@ export type GradeRow = {
   student_id: string;
   student_name: string;
   status: string;
-  homework: number | null;
-  final: number | null;
+  /** Entered points by category key (archived categories included). */
+  scores: Record<string, number>;
+  /** Counted points by category key of the cohort's scheme. */
+  points: Record<string, number>;
   attendance_score: number;
   total: number;
+  /** The total scaled up from the categories that already count; null = nothing yet. */
+  projected: number | null;
   passed: boolean;
   held: number;
   present: number;
   unmarked: number;
   percent: number | null;
+};
+
+export type GradesData = {
+  scheme: {
+    source: "standard" | "cohort";
+    pass_score: number;
+    categories: { key: string; name: string; weight: number; kind: "attendance" | "manual" }[];
+  };
+  rows: GradeRow[];
 };
 
 export type SessionRow = {

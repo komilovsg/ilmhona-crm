@@ -1,11 +1,12 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
-import { Input } from "@heroui/input";
 import clsx from "clsx";
 
 
@@ -252,18 +253,18 @@ export default function LeadsPage() {
 
   const filterFields = (
     <>
-      <SelectField allLabel="Любой звонок" label="Статус звонка" options={CALL_STATUSES.map((s) => ({ key: s, label: s }))} value={f.call} onChange={(call) => set({ call })} />
-      <SelectField allLabel="Все источники" label="Источник" options={LEAD_SOURCES.map((s) => ({ key: s, label: s }))} value={f.source} onChange={(source) => set({ source })} />
-      <SelectField allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ course })} />
+      <SelectField filter allLabel="Любой звонок" label="Статус звонка" options={CALL_STATUSES.map((s) => ({ key: s, label: s }))} value={f.call} onChange={(call) => set({ call })} />
+      <SelectField filter allLabel="Все источники" label="Источник" options={LEAD_SOURCES.map((s) => ({ key: s, label: s }))} value={f.source} onChange={(source) => set({ source })} />
+      <SelectField filter allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ course })} />
       {!me?.branch && (
-        <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ branch })} />
+        <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ branch })} />
       )}
-      <Input label="С даты" placeholder=" " type="date" value={f.from} onValueChange={(from) => set({ from })} />
-      <Input label="По дату" placeholder=" " type="date" value={f.to} onValueChange={(to) => set({ to })} />
+      <DateField filter label="С даты" value={f.from} onValueChange={(from) => set({ from })} />
+      <DateField filter label="По дату" value={f.to} onValueChange={(to) => set({ to })} />
       <button
         aria-pressed={f.review}
         className={clsx(
-          "flex h-14 items-center justify-center gap-2 rounded-xl px-3 text-sm transition-colors",
+          "flex h-12 items-center justify-center gap-2 rounded-xl px-3 text-sm transition-colors",
           f.review ? "bg-warning/20 text-warning-700 dark:text-warning" : "bg-content1 hover:bg-default-100",
         )}
         type="button"
@@ -285,7 +286,7 @@ export default function LeadsPage() {
               </Button>
             )}
             {canChange && (
-              <Button className="hidden md:inline-flex" startContent={<Icon name="upload" size={18} />} variant="flat" onPress={() => setImporting(true)}>
+              <Button className="hidden md:inline-flex" startContent={<Icon name="upload" size={18} />} color="primary" variant="flat" onPress={() => setImporting(true)}>
                 Импорт CSV
               </Button>
             )}
@@ -335,7 +336,7 @@ export default function LeadsPage() {
 
       <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <div className="flex items-start gap-3 md:col-span-2">
-          <Input
+          <FilterInput
             className="flex-1"
             isClearable
             placeholder="Имя, телефон"
@@ -345,9 +346,9 @@ export default function LeadsPage() {
             onValueChange={(q) => set({ q })}
           />
           <Button
-            className="h-14 shrink-0 md:hidden"
+            className="h-12 shrink-0 md:hidden"
             startContent={<Icon name="filter" size={18} />}
-            variant="flat"
+            color="primary" variant="flat"
             onPress={() => setFiltersOpen(true)}
           >
             Фильтры

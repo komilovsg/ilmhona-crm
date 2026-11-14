@@ -125,7 +125,7 @@ async def test_graduates_show_the_old_total_until_real_grades_exist(
     assert real["score_legacy"] is False and real["score"] >= 80
     # once a grade is entered the computed total takes over
     await sql(
-        "INSERT INTO grade (enrollment_id, homework, final) VALUES (:e, 10, 10)",
+        "INSERT INTO grade_score (enrollment_id, category_key, points) VALUES (:e, 'final', 10)",
         e=old["enrollment_id"],
     )
     r = await admin.get("/api/v1/graduates/students", params={"page_size": 100})

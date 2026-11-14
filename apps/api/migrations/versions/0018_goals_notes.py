@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0017"
-down_revision = "0016"
+revision = "0018"
+down_revision = "0017"
 
 METRICS = (
     "graduates_total",

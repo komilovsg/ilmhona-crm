@@ -1,10 +1,10 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
-import { Input } from "@heroui/input";
 
 import type { RateRecord } from "./RateModal";
 
@@ -101,7 +101,7 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
     <section aria-label={c.full_name} className="flex flex-col gap-4 rounded-2xl bg-content1 p-4">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h2 className="min-w-0 truncate text-base font-semibold">{c.full_name}</h2>
+          <h2 className="min-w-0 break-words text-base font-semibold">{c.full_name}</h2>
           {!c.is_active && <span className="shrink-0 rounded-full bg-default-100 px-2 py-0.5 text-xs">нет доступа</span>}
         </div>
         {/* always mounted: once the account is active the button goes, the password modal stays */}
@@ -122,17 +122,18 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
         <Number_ hint="подтверждённые оплаты" label="Доход с потоков" value={formatPrice(c.income)} />
         <Number_ label="Выплачено" value={formatPrice(c.paid_out)} />
       </div>
-      <div className="flex items-center justify-between gap-2 rounded-xl bg-content2 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-content2 px-3 py-2">
         <div className="min-w-0">
           <div className="text-xs text-default-500">Ставка по умолчанию</div>
-          <div className="truncate text-sm font-semibold">{formatPrice(c.default_rate)} в месяц</div>
+          <div className="break-words text-sm font-semibold">{formatPrice(c.default_rate)} в месяц</div>
         </div>
         {canEdit && (
           <Button
             aria-label={`Изменить ставку: ${c.full_name}`}
+            className="shrink-0"
             size="sm"
             startContent={<Icon name="edit" size={16} />}
-            variant="flat"
+            color="primary" variant="flat"
             onPress={() =>
               edit({
                 title: `Ставка: ${c.full_name}`,
@@ -179,7 +180,7 @@ export default function InstructorsPage() {
       <PageHeader actions={<ExportButton params={{ q: q.trim() }} path="/api/v1/instructors/export" />} title="Инструкторы" />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: имя или телефон"

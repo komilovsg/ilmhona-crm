@@ -70,6 +70,16 @@ def clock() -> Iterator[Callable[[str], None]]:
     app_clock.freeze(None)
 
 
+STANDARD_SQL = """
+WITH s AS (INSERT INTO grading_scheme (cohort_id) VALUES (NULL) RETURNING id)
+INSERT INTO grading_category (scheme_id, key, name, weight, kind, position)
+SELECT s.id, c.key, c.name, c.weight, c.kind, c.position FROM s, (VALUES
+  ('attendance', 'Посещаемость', 20, 'attendance', 0),
+  ('homework', 'Домашние задания', 40, 'manual', 1),
+  ('final', 'Финал', 40, 'manual', 2)) AS c (key, name, weight, kind, position)
+"""
+
+
 @pytest.fixture(autouse=True)
 async def clean(migrated_database: None) -> None:
     """Every test starts with the seeded branches and system roles only."""
@@ -98,6 +108,10 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM password_reset_request",
             "DELETE FROM app_user",
             "DELETE FROM role WHERE code IS NULL",
+            # the academy grading standard back to the default of migration 0017
+            "DELETE FROM grading_scheme",
+            "DELETE FROM grading_key WHERE key NOT IN ('attendance', 'homework', 'final')",
+            STANDARD_SQL,
         ):
             await db.execute(text(sql))
         await db.commit()
@@ -137,6 +151,14 @@ class Browser(httpx.AsyncClient):
         if parts[-1] == "grade":
             rows = await sql("SELECT version FROM grade WHERE enrollment_id = :i", i=parts[-2])
             kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
+            return
+        if parts[-1] == "standard" and parts[-2] == "grading":
+            rows = await sql("SELECT version FROM grading_scheme WHERE cohort_id IS NULL")
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0])}
+            return
+        if parts[-1] == "grading":  # a cohort's own scheme; none yet = 0
+            rows = await sql("SELECT version FROM grading_scheme WHERE cohort_id = :i", i=parts[-2])
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 0)}
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
             return

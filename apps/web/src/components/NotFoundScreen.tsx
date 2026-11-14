@@ -19,7 +19,7 @@ export function NotFoundScreen({ inShell = false }: { inShell?: boolean }) {
           <Button as={Link} color="primary" href="/">
             {copy.home}
           </Button>
-          <Button variant="flat" onPress={() => (window.history.length > 1 ? router.back() : router.push("/"))}>
+          <Button color="primary" variant="flat" onPress={() => (window.history.length > 1 ? router.back() : router.push("/"))}>
             {copy.back}
           </Button>
         </>

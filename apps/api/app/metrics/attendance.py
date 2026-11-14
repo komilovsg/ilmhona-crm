@@ -5,8 +5,9 @@
 - A student's lessons start at their enrollment: held lessons dated on or after the local date of
   `enrolled_at`. Attendance % = present / held. `unmarked` = held lessons without a mark, shown
   next to the percentage so «100 % of 1 marked lesson out of 13» can never pass as 100 % (#12).
-- Attendance score (0-20) = round(20 × present / held). Total = attendance score + homework +
-  final (an empty grade counts as 0). Total ≥ 70 graduates a student when the cohort closes.
+- Points, totals and pass come from the cohort's grading scheme (`app.metrics.grading`); the
+  default academy standard is attendance 20 + homework 40 + final 40, pass 70. A passed total
+  graduates a student when the cohort closes.
 - «Не заполнено» (#21) = held lessons of the last 30 days where some enrolled (not expelled)
   student has no mark.
 """
@@ -19,33 +20,25 @@ from sqlalchemy import ColumnElement, Date, and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
-from app.models import Attendance, Cohort, Course, Enrollment, Grade, Lesson, Room
+from app.metrics import grading
+from app.models import (
+    Attendance,
+    Cohort,
+    Course,
+    Enrollment,
+    Grade,
+    GradeScore,
+    Lesson,
+    Room,
+)
 
 TZ_NAME = "Asia/Dushanbe"
-ATTENDANCE_MAX = 20
-GRADE_MAX = 40
-PASS_TOTAL = 70
 UNFILLED_DAYS = 30
 EXPELLED = "отчислен"
 
 
 def _now() -> datetime:
     return clock.now()
-
-
-def attendance_score(present: int, held: int) -> int:
-    """round(20 × present / held), halves up; no held lessons yet = 0."""
-    if held <= 0:
-        return 0
-    return (2 * ATTENDANCE_MAX * present + held) // (2 * held)
-
-
-def grade_total(att_score: int, homework: int | None, final: int | None) -> int:
-    return att_score + (homework or 0) + (final or 0)
-
-
-def passed(total: int) -> bool:
-    return total >= PASS_TOTAL
 
 
 def has_marks() -> ColumnElement[bool]:
@@ -65,14 +58,12 @@ def enrolled_by(lesson_date: Any = None) -> ColumnElement[bool]:
 
 
 def stats_of(held: int, present: int, marked: int) -> dict[str, Any]:
-    score = attendance_score(present, held)
     return {
         "held": held,
         "present": present,
         "absent": marked - present,
         "unmarked": held - marked,
         "percent": round(100 * present / held, 1) if held else None,
-        "score": score,
     }
 
 
@@ -117,28 +108,49 @@ async def enrollment_results(
     now: datetime | None = None,
     enrollment_ids: list[uuid.UUID] | None = None,
 ) -> dict[uuid.UUID, dict[str, Any]]:
-    """Attendance stats plus homework, final, total, grade version (1 until a grade exists)."""
+    """Attendance stats plus the grade of each enrollment on its cohort's effective scheme:
+    `scores` (entered, by category key, archived ones included), `points`, `attendance_score`,
+    `total`, `projected`, `passed`, `grade_version` (1 until a grade exists), and `score` /
+    `legacy`: an old-system total that came without any score stands as the score until real
+    scores exist."""
     stats = await enrollment_attendance(db, cohort_id, now=now, enrollment_ids=enrollment_ids)
     if not stats:
         return {}
-    grades = {
-        g.enrollment_id: g
-        for g in (await db.execute(select(Grade).where(Grade.enrollment_id.in_(list(stats)))))
-        .scalars()
-        .all()
-    }
+    ids = list(stats)
+    rows = (
+        await db.execute(
+            select(
+                Enrollment.id,
+                Enrollment.cohort_id,
+                Enrollment.legacy_total,
+                Grade.version,
+                GradeScore.category_key,
+                GradeScore.points,
+            )
+            .outerjoin(Grade, Grade.enrollment_id == Enrollment.id)
+            .outerjoin(GradeScore, GradeScore.enrollment_id == Enrollment.id)
+            .where(Enrollment.id.in_(ids))
+        )
+    ).all()
+    info: dict[uuid.UUID, tuple[uuid.UUID, Any, int]] = {}
+    scores: dict[uuid.UUID, dict[str, int]] = {i: {} for i in ids}
+    for eid, cid, old_total, version, key, points in rows:
+        info[eid] = (cid, old_total, version or 1)
+        if key is not None:
+            scores[eid][key] = points
+    schemes = await grading.schemes_for(db, {cid for cid, _, _ in info.values()})
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for eid, s in stats.items():
-        g = grades.get(eid)
-        hw, fin = (g.homework, g.final) if g else (None, None)
-        total = grade_total(s["score"], hw, fin)
+        cid, legacy_total, version = info[eid]
+        res = grading.result(schemes[cid], s["present"], s["held"], scores[eid])
+        legacy = legacy_total is not None and not scores[eid]
         out[eid] = {
             **s,
-            "homework": hw,
-            "final": fin,
-            "total": total,
-            "passed": passed(total),
-            "grade_version": g.version if g else 1,
+            **res,
+            "scores": scores[eid],
+            "grade_version": version,
+            "legacy": legacy,
+            "score": round(legacy_total) if legacy else res["total"],
         }
     return out
 

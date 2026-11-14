@@ -2,9 +2,6 @@
 // The numbers themselves (percent, score, total) come from the API; this file only formats them
 // and answers display questions.
 
-export const GRADE_MAX = 40;
-export const PASS_TOTAL = 70;
-
 /** «56 %» or «—» while no lesson has been held. */
 export function percentLabel(percent: number | null): string {
   return percent === null ? "—" : `${String(percent).replace(".", ",")} %`;
@@ -23,17 +20,6 @@ export function markState(marked: number, total: number): MarkState {
   if (marked === 0) return "none";
 
   return marked >= total ? "done" : "partial";
-}
-
-/** A grade input: «» clears, 0..40 whole numbers are valid, everything else is not. */
-export function parseGrade(text: string): { ok: true; value: number | null } | { ok: false } {
-  const t = text.trim();
-
-  if (t === "") return { ok: true, value: null };
-  if (!/^\d{1,2}$/.test(t)) return { ok: false };
-  const n = Number(t);
-
-  return n <= GRADE_MAX ? { ok: true, value: n } : { ok: false };
 }
 
 /** «3 урока». */

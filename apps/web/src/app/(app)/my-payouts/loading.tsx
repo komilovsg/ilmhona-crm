@@ -6,7 +6,7 @@ export default function Loading() {
     <Late>
       <HeaderSkeleton />
       <StatCardsSkeleton count={4} />
-      <Bone className="mb-4 h-10 w-56 rounded-xl" />
+      <Bone className="mb-4 h-12 w-56 rounded-xl" />
       <ListSkeleton cols={6} />
     </Late>
   );

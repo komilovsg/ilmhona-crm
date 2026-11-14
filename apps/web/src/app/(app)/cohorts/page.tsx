@@ -1,12 +1,12 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { SheetHandle } from "@/components/SheetHandle";
-import { Input } from "@heroui/input";
 
 
 import { ExportButton } from "@/components/ExportButton";
@@ -38,7 +38,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
 
   return (
     <>
-      <SelectField
+      <SelectField filter
         allLabel="Любой статус"
         className="md:w-44"
         label="Статус"
@@ -47,7 +47,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         onChange={(status) => set({ ...filters, status })}
       />
       {!me?.branch && (
-        <SelectField
+        <SelectField filter
           allLabel="Все филиалы"
           className="md:w-48"
           label="Филиал"
@@ -69,14 +69,14 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs font-medium text-brand-text">{c.code}</div>
-          <div className="truncate text-base font-semibold">{c.course_name}</div>
+          <div className="break-words text-base font-semibold">{c.course_name}</div>
         </div>
         <CohortStatus status={c.status} />
       </div>
       <dl className="grid gap-1.5 text-sm">
         <div className="flex items-center gap-2 text-default-600">
           <Icon name="instructors" size={14} />
-          <dd className="truncate">{c.instructor_name ?? "Инструктор не назначен"}</dd>
+          <dd className="min-w-0 break-words">{c.instructor_name ?? "Инструктор не назначен"}</dd>
         </div>
         <div className="flex items-center gap-2 text-default-600">
           <Icon name="calendar" size={14} />
@@ -92,14 +92,14 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
         </div>
         <div className="flex items-center gap-2 text-default-600">
           <Icon name="rooms" size={14} />
-          <dd className="truncate">
+          <dd className="min-w-0 break-words">
             {c.room_name} · {c.branch_name}
           </dd>
         </div>
         {c.payers !== undefined && (
           <div className="flex items-center gap-2 text-default-600">
             <Icon name="payments" size={14} />
-            <dd className="truncate tabular-nums">
+            <dd className="min-w-0 break-words tabular-nums">
               {c.payers === 0
                 ? "Оплат нет"
                 : `Оплатили ${c.payers} из ${c.fill.enrolled} · ${formatPrice(c.income ?? 0)}`}
@@ -183,7 +183,7 @@ export default function CohortsPage() {
       )}
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: код, курс, инструктор"
@@ -192,10 +192,10 @@ export default function CohortsPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(q) => set({ ...filters, q })}
         />
-        <div className="hidden gap-3 md:flex">
+        <div className="hidden flex-wrap gap-3 md:flex">
           <FilterFields filters={filters} set={set} />
         </div>
-        <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
+        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
       </div>

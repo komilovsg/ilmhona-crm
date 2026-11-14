@@ -296,16 +296,66 @@ class Attendance(Base):
 
 
 class Grade(Versioned, Base):
-    """Homework and final (0-40 each, empty = not graded yet). The attendance part (0-20) is
-    never stored: it is computed from the attendance cells (`app.metrics`)."""
+    """The per-enrollment row whose version guards score edits (#25): every score change touches
+    `updated_at`. The scores live in `grade_score`; the attendance part is never stored, it is
+    computed from the attendance cells (`app.metrics`)."""
 
     __tablename__ = "grade"
     enrollment_id: Mapped[UUID] = mapped_column(
         PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
     )
-    homework: Mapped[int | None] = mapped_column(SmallInteger)
-    final: Mapped[int | None] = mapped_column(SmallInteger)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class GradeScore(Base):
+    """Points of one manual category. Keyed by the category key, not the category row: a
+    category removed from a scheme keeps its scores (archived) and they count again if it
+    comes back."""
+
+    __tablename__ = "grade_score"
+    enrollment_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
+    )
+    category_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    points: Mapped[int] = mapped_column(SmallInteger)
+
+
+class GradingScheme(Versioned, Base):
+    """`cohort_id` NULL = the academy standard (one row); otherwise that cohort's own scheme."""
+
+    __tablename__ = "grading_scheme"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    cohort_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cohort.id", ondelete="CASCADE"), unique=True
+    )
+    pass_score: Mapped[int] = mapped_column(SmallInteger, server_default=text("70"))
+    target_retention: Mapped[int] = mapped_column(SmallInteger, server_default=text("85"))
+    target_attendance: Mapped[int] = mapped_column(SmallInteger, server_default=text("80"))
+    target_pass_rate: Mapped[int] = mapped_column(SmallInteger, server_default=text("70"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+
+
+class GradingCategory(Base):
+    __tablename__ = "grading_category"
+    scheme_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("grading_scheme.id", ondelete="CASCADE"), primary_key=True
+    )
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
+    weight: Mapped[int] = mapped_column(SmallInteger)
+    kind: Mapped[str] = mapped_column(Text)  # attendance | manual
+    position: Mapped[int] = mapped_column(SmallInteger)
+
+
+class GradingKey(Base):
+    """The last name of every category key ever used: archived scores still read with a name."""
+
+    __tablename__ = "grading_key"
+    key: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text)
 
 
 class Payment(Versioned, Legacy, Base):

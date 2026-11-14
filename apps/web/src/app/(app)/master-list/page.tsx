@@ -1,8 +1,8 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Input } from "@heroui/input";
 
 import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
@@ -51,11 +51,11 @@ export default function MasterListPage() {
       <PageHeader actions={<ExportButton params={paramsOf(f)} path="/api/v1/master-list/export" />} title="Мастер-лист" />
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {!me?.branch && (
-          <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
+          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
         )}
-        <SelectField allLabel="Любой статус" label="Статус" options={COHORT_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => set({ ...f, status })} />
-        <Input placeholder=" " label="Старт с" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
-        <Input placeholder=" " label="Старт по" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
+        <SelectField filter allLabel="Любой статус" label="Статус" options={COHORT_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => set({ ...f, status })} />
+        <DateField filter label="Старт с" value={f.from} onValueChange={(from) => set({ ...f, from })} />
+        <DateField filter label="Старт по" value={f.to} onValueChange={(to) => set({ ...f, to })} />
       </div>
       <p className="mb-3 text-xs text-default-500">{LEADS_NOTE}</p>
       <QueryState

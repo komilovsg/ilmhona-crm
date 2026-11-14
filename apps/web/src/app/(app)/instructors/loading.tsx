@@ -5,7 +5,7 @@ export default function Loading() {
     <Late>
       <HeaderSkeleton />
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Bone className="h-10 flex-1 rounded-xl md:max-w-xs md:flex-none md:basis-80" />
+        <Bone className="h-12 flex-1 rounded-xl md:max-w-xs md:flex-none md:basis-80" />
       </div>
       <CardGridSkeleton cards={6} />
     </Late>

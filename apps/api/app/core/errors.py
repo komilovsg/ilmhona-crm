@@ -104,7 +104,10 @@ def _problem(
 
 async def _domain(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, DomainError)
-    return _problem(request, exc.error, exc.params, exc.errs)
+    # field problems: `errs` from DomainError.for_field, or `errors` in params (grading)
+    params = dict(exc.params)
+    param_errs = params.pop("errors", None)
+    return _problem(request, exc.error, params, exc.errs or param_errs)
 
 
 async def _http(request: Request, exc: Exception) -> Response:

@@ -56,7 +56,7 @@ export function ActivateUserButton({
     <>
       {!active && (
         <div className={className}>
-          <Button aria-label={`Активировать: ${name}`} size="sm" variant="flat" onPress={() => setConfirm(true)}>
+          <Button aria-label={`Активировать: ${name}`} color="primary" size="sm" variant="flat" onPress={() => setConfirm(true)}>
             Активировать
           </Button>
         </div>

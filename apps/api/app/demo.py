@@ -27,6 +27,7 @@ from app.models import (
     Course,
     Enrollment,
     Grade,
+    GradeScore,
     InstructorPayout,
     Lead,
     Payment,
@@ -289,15 +290,15 @@ async def seed_demo(db: AsyncSession, on: date | None = None) -> tuple[str, int]
                             marked_by=instructors[ci % 2].id,
                         )
                     )
-                grade = Grade(
-                    enrollment_id=e.id,
-                    homework=rng.randint(22, 40),
-                    final=rng.randint(15, 40) if kind == "done" else None,
-                )
-                add(grade)
+                homework = rng.randint(22, 40)
+                final = rng.randint(15, 40) if kind == "done" else None
+                add(Grade(enrollment_id=e.id))
+                add(GradeScore(enrollment_id=e.id, category_key="homework", points=homework))
+                if final is not None:
+                    add(GradeScore(enrollment_id=e.id, category_key="final", points=final))
                 if kind == "done":
-                    total = (grade.homework or 0) + (grade.final or 0)
-                    e.status = "выпускник" if total >= 56 else "завершил"
+                    # a preset outcome of the fake history (not a total: no attendance part)
+                    e.status = "выпускник" if homework + (final or 0) >= 56 else "завершил"
 
             periods = [p for p in cohort_periods(start, end) if p <= now_day]
             for e in enrollments:
@@ -370,6 +371,7 @@ async def seed_demo(db: AsyncSession, on: date | None = None) -> tuple[str, int]
 # Children before parents: the order foreign keys need.
 _WIPE = (
     ("attendance", "enrollment_id"),
+    ("grade_score", "enrollment_id"),
     ("grade", "enrollment_id"),
     ("payment", "id"),
     ("instructor_payout", "id"),

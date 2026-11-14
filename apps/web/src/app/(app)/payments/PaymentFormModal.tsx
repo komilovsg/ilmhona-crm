@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "@/components/DateField";
 import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
@@ -427,13 +428,11 @@ export function PaymentFormModal({
                   setMethod(m ?? "наличные");
                 }}
               />
-              <Input
+              <DateField
                 isRequired
                 label="Дата оплаты"
                 max={MAX_DATE}
                 min={MIN_DATE}
-                placeholder=" "
-                type="date"
                 value={paidAt}
                 {...fe.field("paid_at", setPaidAt)}
               />

@@ -213,6 +213,20 @@ async def test_convert_enrolls_into_a_cohort_once(admin: httpx.AsyncClient) -> N
     assert (await sql("SELECT count(*) FROM enrollment"))[0][0] == 2
 
 
+async def test_convert_into_a_full_cohort_reports_over_capacity(
+    admin: httpx.AsyncClient,
+) -> None:
+    cohort = await _cohort(admin)
+    await sql("UPDATE cohort SET capacity = 1")
+    first = await make_lead(admin, "Анна", phone="901112233")
+    second = await make_lead(admin, "Борис", phone="902223344")
+    r1 = (await admin.post(f"{L}/{first['id']}/convert", json={"cohort_id": cohort["id"]})).json()
+    assert r1["enrollment"]["over_capacity"] is None
+    r2 = await admin.post(f"{L}/{second['id']}/convert", json={"cohort_id": cohort["id"]})
+    assert r2.status_code == 200
+    assert r2.json()["enrollment"]["over_capacity"] == {"enrolled": 2, "capacity": 1}
+
+
 async def test_convert_cohort_rules(admin: httpx.AsyncClient, login_as: SignedIn) -> None:
     lead = await make_lead(admin, "Анна", phone="901112233")
     url = f"{L}/{lead['id']}/convert"

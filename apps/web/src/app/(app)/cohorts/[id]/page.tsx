@@ -66,7 +66,7 @@ function Info({ icon, label, children }: { icon: string; label: string; children
       </span>
       <div className="min-w-0">
         <div className="text-xs text-default-500">{label}</div>
-        <div className="truncate text-sm font-medium">{children}</div>
+        <div className="break-words text-sm font-medium">{children}</div>
       </div>
     </div>
   );

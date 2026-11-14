@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -7,7 +8,6 @@ import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import { SheetHandle } from "@/components/SheetHandle";
-import { Input } from "@heroui/input";
 import clsx from "clsx";
 
 
@@ -55,7 +55,7 @@ function FilterFields({ filters, set, debtors }: { filters: Filters; set: (f: Fi
     <>
       {!debtors && (
         <>
-          <SelectField
+          <SelectField filter
             allLabel="Любой статус"
             className="md:w-44"
             label="Статус"
@@ -63,7 +63,7 @@ function FilterFields({ filters, set, debtors }: { filters: Filters; set: (f: Fi
             value={filters.status}
             onChange={(status) => set({ ...filters, status })}
           />
-          <SelectField
+          <SelectField filter
             allLabel="Любой способ"
             className="md:w-44"
             label="Способ"
@@ -71,7 +71,7 @@ function FilterFields({ filters, set, debtors }: { filters: Filters; set: (f: Fi
             value={filters.method}
             onChange={(method) => set({ ...filters, method })}
           />
-          <SelectField
+          <SelectField filter
             allLabel="Любой месяц"
             className="md:w-48"
             label="Месяц оплаты"
@@ -82,7 +82,7 @@ function FilterFields({ filters, set, debtors }: { filters: Filters; set: (f: Fi
         </>
       )}
       {!me?.branch && (
-        <SelectField
+        <SelectField filter
           allLabel="Все филиалы"
           className="md:w-48"
           label="Филиал"
@@ -156,7 +156,7 @@ function RowActions({ p, canPay, a }: { p: PaymentRow; canPay: boolean; a: Actio
 function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean; a: Actions }) {
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -271,7 +271,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
 
   return (
     <>
-      <div className="hidden overflow-hidden rounded-2xl bg-content1 md:block">
+      <div className="hidden overflow-x-auto rounded-2xl bg-content1 md:block">
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
@@ -506,7 +506,7 @@ export default function PaymentsPage() {
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input
+        <FilterInput
           className="flex-1 md:max-w-xs md:flex-none"
           isClearable
           placeholder="Поиск: студент, телефон, поток"
@@ -515,10 +515,10 @@ export default function PaymentsPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(q) => set({ ...filters, q })}
         />
-        <div className="hidden gap-3 md:flex">
+        <div className="hidden flex-wrap gap-3 md:flex">
           <FilterFields debtors={debtors} filters={filters} set={set} />
         </div>
-        <Button className="md:hidden" startContent={<Icon name="filter" size={18} />} variant="flat" onPress={() => setFiltersOpen(true)}>
+        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
           Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
         </Button>
       </div>
