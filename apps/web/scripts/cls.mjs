@@ -72,7 +72,7 @@ for (const vp of VIEWPORTS) {
     "/graduates",
     "/employment",
     "/settings/grading",
-    ...(cohort ? [`/cohorts/${cohort.id}`] : []),
+    ...(cohort ? [`/cohorts/${cohort.id}`, `/cohorts/${cohort.id}?tab=analytics`] : []),
     "/students",
     ...(student ? [`/students/${student.id}`] : []),
   ];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -196,7 +196,7 @@ function Unmarked({ n }: { n: number }) {
   );
 }
 
-export function AttendanceTab({ cohortId, canMark }: { cohortId: string; canMark: boolean }) {
+export function AttendanceTab({ cohortId, canMark, focusEnrollment }: { cohortId: string; canMark: boolean; focusEnrollment?: string | null }) {
   const grid = useQuery({
     queryKey: ["grid", cohortId],
     queryFn: () => api<AttendanceGrid>(`/api/v1/cohorts/${cohortId}/attendance`),
@@ -220,7 +220,7 @@ export function AttendanceTab({ cohortId, canMark }: { cohortId: string; canMark
         query={grid}
         skeleton={<ListSkeleton cols={8} rows={6} />}
       >
-        {(data) => <Grid canMark={canMark} cohortId={cohortId} grid={data} today={today} onImport={onImport} />}
+        {(data) => <Grid canMark={canMark} cohortId={cohortId} focusEnrollment={focusEnrollment} grid={data} today={today} onImport={onImport} />}
       </QueryState>
       {importing && <ImportJournal cohortId={cohortId} onClose={() => setImporting(false)} />}
     </>
@@ -233,14 +233,21 @@ function Grid({
   canMark,
   today,
   onImport,
+  focusEnrollment,
 }: {
   grid: AttendanceGrid;
   cohortId: string;
   canMark: boolean;
   today: string;
   onImport?: () => void;
+  focusEnrollment?: string | null;
 }) {
   const queryClient = useQueryClient();
+  // a link from the analytics tab: bring that student's row into view once
+  useEffect(() => {
+    if (!focusEnrollment) return;
+    document.querySelector<HTMLElement>(`[data-enrollment="${CSS.escape(focusEnrollment)}"]`)?.scrollIntoView({ block: "center" });
+  }, [focusEnrollment]);
   const refresh = useRefreshAttendance();
   const [storedView, setView] = useViewMode();
   const [picked, setPicked] = useState<string | null>(null);
@@ -424,7 +431,11 @@ function Grid({
           </thead>
           <tbody>
             {students.map((s, row) => (
-              <tr key={s.enrollment_id} className="group">
+              <tr
+                key={s.enrollment_id}
+                className={clsx("group", s.enrollment_id === focusEnrollment && "outline outline-2 -outline-offset-2 outline-primary")}
+                data-enrollment={s.enrollment_id}
+              >
                 <th
                   className="sticky left-0 z-10 border-b border-divider bg-content1 px-4 py-2 font-medium group-hover:bg-default-50"
                   scope="row"
