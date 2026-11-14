@@ -50,12 +50,15 @@ export type CohortAnalytics = {
   cohort_id: string;
   cohort_code: string;
   period: Period;
+  window: { from: string | null; to: string; offset: number };
+  nav: { prev: boolean; next: boolean };
   scheme: { source: "standard" | "cohort"; pass_score: number; target_retention: number; target_attendance: number; target_pass_rate: number };
   thresholds: { top_attendance: number; top_projected: number };
   retention: {
     started: number;
     now: number;
     left: { expelled: number; stopped: number };
+    late_joined: number;
     percent: number | null;
     target: number;
     status: Status;
@@ -93,11 +96,25 @@ export const PERIODS: { key: Period; label: string }[] = [
   { key: "course", label: "Весь курс" },
 ];
 
-export const PERIOD_HINT: Record<Period, string> = {
-  week: "текущая неделя (пн–вс)",
-  month: "последние 4 недели",
-  course: "весь курс",
+const MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+const MONTHS_OF = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+const parts = (iso: string) => {
+  const [y, m, d] = iso.split("-").map(Number);
+
+  return { y, m: m - 1, d };
 };
+
+/** «10–16 ноября» / «30 ноября – 6 декабря» for a week, «Ноябрь 2026» for a month, «Весь курс». */
+export function periodLabel(period: Period, from: string | null, to: string): string {
+  if (period === "course" || !from) return "Весь курс";
+  const a = parts(from);
+  const b = parts(to);
+
+  if (period === "month") return `${MONTHS[a.m][0].toUpperCase()}${MONTHS[a.m].slice(1)} ${a.y}`;
+
+  return a.m === b.m ? `${a.d}–${b.d} ${MONTHS_OF[b.m]}` : `${a.d} ${MONTHS_OF[a.m]} – ${b.d} ${MONTHS_OF[b.m]}`;
+}
 
 /** The text that always goes with a status colour. */
 export function statusLabel(status: Status): string {
@@ -126,7 +143,9 @@ export function pct(n: number | null): string {
 
 /** «Начали 20 → сейчас 17 · 85 %». */
 export function retentionLine(r: CohortAnalytics["retention"]): string {
-  return `Начали ${r.started} → сейчас ${r.now} · ${pct(r.percent)}`;
+  const late = r.late_joined > 0 ? ` · присоединились позже: ${r.late_joined}` : "";
+
+  return `Начали ${r.started} → сейчас ${r.now} · ${pct(r.percent)}${late}`;
 }
 
 /** «ушли: отчислено 2, перестали ходить 1» or null when nobody left. */

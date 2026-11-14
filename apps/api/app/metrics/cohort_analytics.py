@@ -4,11 +4,12 @@ No money anywhere in here. Targets and the pass score are the cohort's EFFECTIVE
 (its own, else the academy standard), never constants.
 
 - Weeks are ISO weeks (Mon–Sun) of the lesson's Asia/Dushanbe date. Period filters only the
-  attendance numbers: week = the current ISO week, month = the last 4 ISO weeks (current one
-  included), course = every held lesson.
+  attendance numbers: week = an ISO week, month = a calendar month (the current one, or `offset`
+  periods back / forward), course = every held lesson.
 - Retention: started = enrollments (any status) enrolled on or before the date of the cohort's
   first held lesson (the start date while nothing was held). Left = expelled + «перестал ходить»
-  (a red risk) among them; now = started − left; retention = now / started.
+  (a red risk) among them; late joiners are only counted (`late_joined`), not in the %;
+  now = started − left; retention = now / started.
 - Attendance of a week / period = present ÷ marked marks of the not expelled students over held
   lessons (unmarked is not an absence); a student's own attendance % is the metrics one
   (present ÷ held since enrollment).
@@ -39,7 +40,6 @@ from app.metrics.attendance import EXPELLED, enrollment_results
 from app.models import Attendance, Cohort, Enrollment, Lesson, Student
 
 PERIODS = ("week", "month", "course")
-MONTH_WEEKS = 4
 STOPPED_RUN = 3
 MISSED_RUN = 2
 WINDOW_DAYS = 28
@@ -58,12 +58,17 @@ def week_start(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def window_start(period: str, today: date) -> date | None:
-    """First day of the period's window (None = the whole course)."""
+def window_bounds(period: str, today: date, offset: int = 0) -> tuple[date, date] | None:
+    """First and last day of the period's window, `offset` periods from the current one
+    (None = the whole course): week = ISO week Mon–Sun, month = calendar month."""
     if period == "week":
-        return week_start(today)
+        start = week_start(today) + timedelta(weeks=offset)
+        return start, start + timedelta(days=6)
     if period == "month":
-        return week_start(today) - timedelta(weeks=MONTH_WEEKS - 1)
+        n = today.year * 12 + today.month - 1 + offset
+        start = date(n // 12, n % 12 + 1, 1)
+        n += 1
+        return start, date(n // 12, n % 12 + 1, 1) - timedelta(days=1)
     return None
 
 
@@ -159,6 +164,7 @@ async def cohort_analytics(
     period: str,
     *,
     with_phone: bool,
+    offset: int = 0,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     now = now or clock.now()
@@ -252,14 +258,21 @@ async def cohort_analytics(
         "started": len(started),
         "now": now_count,
         "left": {"expelled": len(expelled), "stopped": len(stopped)},
+        "late_joined": len(students) - len(started),
         "percent": percent(now_count, len(started)),
         "target": scheme.target_retention,
         "status": status_of(now_count, len(started), scheme.target_retention),
     }
 
     # ---- attendance ------------------------------------------------------------------------
-    start = window_start(period, today)
-    in_period = [le for le in held if start is None or le.lesson_date >= start]
+    bounds = window_bounds(period, today, offset)
+    start, end = bounds if bounds else (None, None)
+    in_period = [le for le in held if bounds is None or (start <= le.lesson_date <= end)]
+    all_days = [le.lesson_date for le in lessons]
+    nav = {
+        "prev": bool(bounds and all_days and start > min(all_days)),
+        "next": bool(bounds and all_days and end < max(all_days)),
+    }
     by_week: dict[date, dict[str, Any]] = {}
     week_of = {le.id: week_start(le.lesson_date) for le in in_period}
     for le in in_period:
@@ -275,7 +288,7 @@ async def cohort_analytics(
     weeks: list[dict[str, Any]] = []
     if first_week is not None:
         w0 = first_week
-        while w0 <= week_start(today):
+        while w0 <= week_start(end if end else today):
             w = by_week.get(w0, {"lessons": 0, "present": 0, "marked": 0})
             weeks.append(
                 {
@@ -375,7 +388,8 @@ async def cohort_analytics(
         "cohort_id": cohort.id,
         "cohort_code": cohort.code,
         "period": period,
-        "window": {"from": start, "to": today},
+        "window": {"from": start, "to": end or today, "offset": offset if bounds else 0},
+        "nav": nav,
         "scheme": {
             "source": scheme.source,
             "pass_score": scheme.pass_score,

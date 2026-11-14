@@ -9,6 +9,7 @@ import { BarList } from "@/components/charts/BarList";
 import { WeekBars } from "@/components/charts/WeekBars";
 import { ContactButtons } from "@/components/ContactButtons";
 import { EmptyState, QueryState } from "@/components/QueryState";
+import { Icon } from "@/components/Icon";
 import { ExportButton } from "@/components/ExportButton";
 import { Segmented } from "@/components/Segmented";
 import { AnalyticsSkeleton } from "@/components/Skeletons";
@@ -16,7 +17,7 @@ import { api } from "@/lib/api";
 import {
   leftLine,
   pct,
-  PERIOD_HINT,
+  periodLabel,
   PERIODS,
   retentionLine,
   statusLabel,
@@ -254,9 +255,10 @@ function Final({ data, cohortId }: { data: CohortAnalytics; cohortId: string }) 
 
 export function AnalyticsTab({ cohortId }: { cohortId: string }) {
   const [period, setPeriod] = useState<Period>("course");
+  const [offset, setOffset] = useState(0);
   const query = useQuery({
-    queryKey: ["analytics", cohortId, period],
-    queryFn: () => api<CohortAnalytics>(`/api/v1/cohorts/${cohortId}/analytics?period=${period}`),
+    queryKey: ["analytics", cohortId, period, offset],
+    queryFn: () => api<CohortAnalytics>(`/api/v1/cohorts/${cohortId}/analytics?period=${period}&offset=${offset}`),
     placeholderData: keepPreviousData,
   });
 
@@ -264,10 +266,45 @@ export function AnalyticsTab({ cohortId }: { cohortId: string }) {
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Segmented label="Период аналитики" options={PERIODS} value={period} onChange={setPeriod} />
-          <p className="mt-1 text-xs text-default-500">Период: {PERIOD_HINT[period]}. Влияет на посещаемость.</p>
+          <Segmented
+            label="Период аналитики"
+            options={PERIODS}
+            value={period}
+            onChange={(p) => {
+              setPeriod(p);
+              setOffset(0);
+            }}
+          />
+          <div className="mt-2 flex h-9 items-center gap-1 text-sm">
+            {period !== "course" && (
+              <>
+                <button
+                  aria-label="Предыдущий период"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-content2 disabled:opacity-40"
+                  disabled={!query.data?.nav.prev}
+                  type="button"
+                  onClick={() => setOffset(offset - 1)}
+                >
+                  <Icon name="chevron-left" size={16} />
+                </button>
+                <span aria-live="polite" className="min-w-36 text-center font-medium">
+                  {query.data ? periodLabel(period, query.data.window.from, query.data.window.to) : ""}
+                </span>
+                <button
+                  aria-label="Следующий период"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-content2 disabled:opacity-40"
+                  disabled={!query.data?.nav.next}
+                  type="button"
+                  onClick={() => setOffset(offset + 1)}
+                >
+                  <Icon name="chevron-right" size={16} />
+                </button>
+              </>
+            )}
+            <span className="ml-2 text-xs text-default-500">Влияет на посещаемость</span>
+          </div>
         </div>
-        <ExportButton params={{ period }} path={`/api/v1/cohorts/${cohortId}/analytics/export`} />
+        <ExportButton params={{ period, offset: String(offset) }} path={`/api/v1/cohorts/${cohortId}/analytics/export`} />
       </div>
       <QueryState
         empty={<EmptyState hint="Добавьте студентов во вкладке «Студенты»." title="В потоке пока нет студентов" />}

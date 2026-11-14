@@ -161,6 +161,7 @@ async def test_retention_counts_started_expelled_and_stopped(admin: httpx.AsyncC
         "started": 6,
         "now": 4,
         "left": {"expelled": 1, "stopped": 1},
+        "late_joined": 1,  # F joined 4 days ago: not in the %, still listed in risk
         "percent": 66.7,
         "target": 85,
         "status": "below",
@@ -226,39 +227,95 @@ async def test_weekly_attendance_equals_sql(admin: httpx.AsyncClient) -> None:
     assert (d["attendance"]["present"], d["attendance"]["marked"]) == (present, marked)
 
 
+def month_bounds(day: date, offset: int = 0) -> tuple[date, date]:
+    n = day.year * 12 + day.month - 1 + offset
+    first = date(n // 12, n % 12 + 1, 1)
+    nxt = date((n + 1) // 12, (n + 1) % 12 + 1, 1)
+    return first, nxt - timedelta(days=1)
+
+
+async def sql_attendance(
+    cohort: dict[str, Any], lo: date | None, hi: date | None
+) -> tuple[int, int]:
+    rows = await sql(
+        "SELECT count(*) FILTER (WHERE a.present), count(*) FROM attendance a "
+        "JOIN lesson l ON l.id = a.lesson_id JOIN enrollment e ON e.id = a.enrollment_id "
+        "WHERE l.cohort_id = :c AND NOT l.cancelled AND e.status <> 'отчислен' "
+        "AND (CAST(:lo AS date) IS NULL OR l.lesson_date >= :lo) "
+        "AND (CAST(:hi AS date) IS NULL OR l.lesson_date <= :hi)",
+        c=cohort["id"],
+        lo=lo,
+        hi=hi,
+    )
+    return tuple(rows[0])  # type: ignore[return-value]
+
+
 async def test_period_window_filters_attendance_only(admin: httpx.AsyncClient) -> None:
     cohort, _ = await seed(admin)
     monday = today() - timedelta(days=today().weekday())
-    for period, since in (
-        ("week", monday),
-        ("month", monday - timedelta(weeks=3)),
-        ("course", None),
-    ):
-        d = await data(admin, cohort, period)
-        rows = await sql(
-            "SELECT count(*) FILTER (WHERE a.present), count(*) FROM attendance a "
-            "JOIN lesson l ON l.id = a.lesson_id JOIN enrollment e ON e.id = a.enrollment_id "
-            "WHERE l.cohort_id = :c AND NOT l.cancelled AND e.status <> 'отчислен' "
-            "AND (CAST(:s AS date) IS NULL OR l.lesson_date >= :s)",
-            c=cohort["id"],
-            s=since,
+    first, last = month_bounds(today())
+    cases = (
+        ("week", 0, monday, monday + timedelta(days=6)),
+        ("week", -1, monday - timedelta(days=7), monday - timedelta(days=1)),
+        ("month", 0, first, last),
+        ("month", -1, *month_bounds(today(), -1)),
+        ("course", 0, None, None),
+    )
+    for period, offset, lo, hi in cases:
+        r = await admin.get(
+            f"{C}/{cohort['id']}/analytics", params={"period": period, "offset": offset}
         )
-        assert (d["attendance"]["present"], d["attendance"]["marked"]) == tuple(rows[0]), period
+        d = r.json()
+        got = (d["attendance"]["present"], d["attendance"]["marked"])
+        assert got == await sql_attendance(cohort, lo, hi), (period, offset)
+        assert d["window"]["from"] == (lo.isoformat() if lo else None)
         # retention and risk are always «now»
         assert d["retention"]["now"] == 4 and len(d["risk"]) == 4
     week = await data(admin, cohort, "week")
     assert [w["week_start"] for w in week["attendance"]["weeks"]] == [monday.isoformat()]
     month = await data(admin, cohort, "month")
-    assert len(month["attendance"]["weeks"]) == 4
+    mondays = [w["week_start"] for w in month["attendance"]["weeks"]]
+    assert mondays[0] == (first - timedelta(days=first.weekday())).isoformat()
+    assert mondays[-1] == (last - timedelta(days=last.weekday())).isoformat()
 
 
-def test_week_boundaries_are_monday_to_sunday() -> None:
+async def test_period_navigation_stops_at_the_first_and_last_lesson(
+    admin: httpx.AsyncClient,
+) -> None:
+    cohort, _ = await seed(admin)
+    lessons = await sql(
+        "SELECT min(lesson_date), max(lesson_date) FROM lesson WHERE cohort_id = :c",
+        c=cohort["id"],
+    )
+    lo, hi = lessons[0]
+    monday = today() - timedelta(days=today().weekday())
+    for offset in range(-3, 3):
+        d = (
+            await admin.get(
+                f"{C}/{cohort['id']}/analytics", params={"period": "week", "offset": offset}
+            )
+        ).json()
+        start = monday + timedelta(weeks=offset)
+        assert d["nav"] == {"prev": start > lo, "next": start + timedelta(days=6) < hi}, offset
+    d = await data(admin, cohort, "course")
+    assert d["nav"] == {"prev": False, "next": False}
+
+
+def test_week_and_month_windows() -> None:
     sunday, monday = date(2026, 11, 15), date(2026, 11, 16)
     assert ca.week_start(sunday) == date(2026, 11, 9)
     assert ca.week_start(monday) == monday
-    assert ca.window_start("week", sunday) == date(2026, 11, 9)
-    assert ca.window_start("month", monday) == date(2026, 10, 26)
-    assert ca.window_start("course", monday) is None
+    assert ca.window_bounds("week", sunday) == (date(2026, 11, 9), sunday)
+    assert ca.window_bounds("week", monday, -1) == (date(2026, 11, 9), sunday)
+    assert ca.window_bounds("month", monday) == (date(2026, 11, 1), date(2026, 11, 30))
+    assert ca.window_bounds("month", monday, -1) == (date(2026, 10, 1), date(2026, 10, 31))
+    assert ca.window_bounds("month", date(2026, 1, 20), -1) == (
+        date(2025, 12, 1),
+        date(2025, 12, 31),
+    )
+    assert ca.window_bounds("month", date(2026, 12, 5), 1) == (date(2027, 1, 1), date(2027, 1, 31))
+    assert ca.window_bounds("month", date(2028, 2, 5)) == (date(2028, 2, 1), date(2028, 2, 29))
+    assert ca.window_bounds("course", monday) is None
 
 
 async def test_sunday_and_monday_lessons_fall_in_different_iso_weeks(

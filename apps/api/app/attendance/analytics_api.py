@@ -28,6 +28,7 @@ router = APIRouter(
 
 View = Annotated[Principal, require("attendance", "view")]
 PERIOD_NAMES = {"week": "неделя", "month": "месяц", "course": "весь курс"}
+Offset = Annotated[int, Query(ge=-240, le=240)]
 Period = Annotated[Literal["week", "month", "course"], Query()]
 
 
@@ -45,10 +46,10 @@ def _phones(p: Principal) -> bool:
 
 @router.get("/cohorts/{cohort_id}/analytics")
 async def analytics(
-    cohort_id: uuid.UUID, p: View, db: DB, period: Period = "course"
+    cohort_id: uuid.UUID, p: View, db: DB, period: Period = "course", offset: Offset = 0
 ) -> dict[str, Any]:
     cohort = await _cohort(db, p, cohort_id)
-    return await cohort_analytics(db, cohort, period, with_phone=_phones(p))
+    return await cohort_analytics(db, cohort, period, with_phone=_phones(p), offset=offset)
 
 
 def _reasons(r: dict[str, Any]) -> str:
@@ -57,12 +58,12 @@ def _reasons(r: dict[str, Any]) -> str:
 
 @router.get("/cohorts/{cohort_id}/analytics/export")
 async def export_analytics(
-    cohort_id: uuid.UUID, p: View, db: DB, period: Period = "course"
+    cohort_id: uuid.UUID, p: View, db: DB, period: Period = "course", offset: Offset = 0
 ) -> Response:
     """Sheets: end-of-course table (when available), «В зоне риска», «Отличники» — the rows of
     the screen."""
     cohort = await _cohort(db, p, cohort_id)
-    data = await cohort_analytics(db, cohort, period, with_phone=_phones(p))
+    data = await cohort_analytics(db, cohort, period, with_phone=_phones(p), offset=offset)
     sheets: list[Sheet[Any]] = []
     final = data["final"]
     if final["available"]:
