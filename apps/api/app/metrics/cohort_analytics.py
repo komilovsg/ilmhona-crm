@@ -119,11 +119,11 @@ def risk_reasons(
         window_held >= WINDOW_MIN_HELD
         and status_of(window_present, window_held, scheme.target_attendance) == BELOW
     ):
-        shown = percent(window_present, window_held)
+        shown = f"{percent(window_present, window_held):g}".replace(".", ",")
         reasons.append(
             {
                 "code": "low_attendance",
-                "text": f"посещаемость за 4 недели {shown:g} % (цель {scheme.target_attendance} %)",
+                "text": f"посещаемость за 4 недели {shown} % (цель {scheme.target_attendance} %)",
             }
         )
     if (

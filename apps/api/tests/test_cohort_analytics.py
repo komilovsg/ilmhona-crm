@@ -148,7 +148,7 @@ async def test_risk_is_sorted_red_first_and_texts_are_russian(admin: httpx.Async
     assert levels[0] == "red"
     a = next(r for r in risk if r["student_name"] == "A")
     assert a["reasons"][0]["text"] == "перестал ходить: 3 урока(ов) подряд"
-    assert "посещаемость за 4 недели 62.5 % (цель 80 %)" in [x["text"] for x in a["reasons"]]
+    assert "посещаемость за 4 недели 62,5 % (цель 80 %)" in [x["text"] for x in a["reasons"]]
     b = next(r for r in risk if r["student_name"] == "B")
     assert b["reasons"][0] == {"code": "missed_2", "text": "пропустил 2 урока подряд"}
 

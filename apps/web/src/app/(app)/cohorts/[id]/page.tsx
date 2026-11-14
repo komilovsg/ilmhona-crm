@@ -86,6 +86,15 @@ export default function CohortPage() {
   // a link from elsewhere (`?tab=attendance&student=<enrollment>`) opens that tab
   const [tab, setTab] = useState<Tab>(TABS.find((t) => t === wanted) ?? "students");
   const focusStudent = params.get("student");
+  const [seenTab, setSeenTab] = useState(wanted);
+
+  // the address changed under the page (a link from the analytics tab): follow it
+  if (wanted !== seenTab) {
+    setSeenTab(wanted);
+    const next = TABS.find((t) => t === wanted);
+
+    if (next) setTab(next);
+  }
   const [editing, setEditing] = useState(false);
   const [action, setAction] = useState<Action | null>(null);
 
