@@ -365,6 +365,22 @@ async def test_bug_24_instructor_marks_own_cohort_but_not_another_and_writes_not
     assert r.status_code == 403
 
 
+async def test_instructor_enrolls_over_capacity_into_own_cohort(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    mine, _ = await past_cohort(admin, name="A", instructor_id=me)
+    await sql("UPDATE cohort SET capacity = 1")
+    first = await ins.post(f"{C}/{mine['id']}/enrollments", json=NEW)
+    assert first.status_code == 201 and first.json()["over_capacity"] is None
+    r = await ins.post(
+        f"{C}/{mine['id']}/enrollments", json={"new_student": {"full_name": "Второй Нур"}}
+    )
+    assert r.status_code == 201
+    assert r.json()["over_capacity"] == {"enrolled": 2, "capacity": 1}
+
+
 NEW = {"new_student": {"full_name": "Новиков Нур", "phone": "+992 90 123 45 67"}}
 
 

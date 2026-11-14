@@ -416,7 +416,9 @@ def sentence(
         return f"{who}: выполнен перенос из старой системы{tail}"
     if a == "enrollment.create":
         student, cohort = _pair(e.diff.get("student"))[1], _pair(e.diff.get("cohort"))[1]
-        return f"{who}: зачислен студент {student} в поток {cohort}"
+        over = _pair(e.diff.get("over_capacity"))[1]
+        tail = f" — сверх плана: {over['enrolled']} из {over['capacity']}" if over else ""
+        return f"{who}: зачислен студент {student} в поток {cohort}{tail}"
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
         lost = []

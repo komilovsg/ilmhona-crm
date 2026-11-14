@@ -32,7 +32,7 @@ export function Segmented<T extends string>({
   return (
     <div
       aria-label={label}
-      className={clsx("inline-flex max-w-full gap-1 overflow-x-auto rounded-xl bg-content2 p-1", className)}
+      className={clsx("inline-flex h-12 max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-content2 p-1", className)}
       role="tablist"
     >
       {options.map((o) => (
@@ -40,7 +40,7 @@ export function Segmented<T extends string>({
           key={o.key}
           aria-selected={o.key === value}
           className={clsx(
-            "relative shrink-0 whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+            "relative h-10 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-medium transition-colors",
             o.key === value ? "text-foreground" : "text-default-500 hover:text-foreground",
           )}
           role="tab"

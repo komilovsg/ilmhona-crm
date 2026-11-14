@@ -158,7 +158,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
           <LoadingButton
             isLoading={run.isPending}
             startContent={<Icon name="upload" size={18} />}
-            variant="flat"
+            color="primary" variant="flat"
             onPress={() => input.current?.click()}
           >
             {file ? "Другой файл" : "Выбрать файл CSV"}

@@ -1,9 +1,10 @@
 "use client";
 
+import { FilterInput } from "@/components/FilterInput";
+import { DateField } from "@/components/DateField";
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
-import { Input } from "@heroui/input";
 
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -77,12 +78,12 @@ export default function EmploymentPage() {
       </Link>
       <PageHeader actions={<ExportButton params={paramsOf(f)} path="/api/v1/employment/export" />} title="Трудоустройство" />
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Input isClearable placeholder="Студент или организация" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
+        <FilterInput isClearable placeholder="Студент или организация" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         {!me?.branch && (
-          <SelectField allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
+          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
         )}
-        <Input placeholder=" " label="С" type="date" value={f.from} onValueChange={(from) => set({ ...f, from })} />
-        <Input placeholder=" " label="По" type="date" value={f.to} onValueChange={(to) => set({ ...f, to })} />
+        <DateField filter label="С" value={f.from} onValueChange={(from) => set({ ...f, from })} />
+        <DateField filter label="По" value={f.to} onValueChange={(to) => set({ ...f, to })} />
       </div>
       <QueryState
         empty={

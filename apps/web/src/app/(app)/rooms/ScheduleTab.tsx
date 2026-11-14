@@ -138,12 +138,12 @@ export function ScheduleTab() {
         <Button isIconOnly aria-label="Вперёд" variant="flat" onPress={() => setDay(addDays(day, step))}>
           <Icon name="chevron-right" />
         </Button>
-        <Button variant="flat" onPress={() => setDay(today)}>
+        <Button color="primary" variant="flat" onPress={() => setDay(today)}>
           Сегодня
         </Button>
         <ExportButton params={{ date_from: monday, branch_id: branch }} path="/api/v1/rooms/schedule/export" />
         {!me?.branch && (
-          <SelectField
+          <SelectField filter
             allLabel="Все филиалы"
             className="w-full md:ml-auto md:w-48"
             label="Филиал"

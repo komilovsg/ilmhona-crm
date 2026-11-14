@@ -25,7 +25,6 @@ INSTRUCTOR_BUSY = errors.define(
     "instructor_busy", 409, "Instructor has another lesson at that time"
 )
 ALREADY_ENROLLED = errors.define("already_enrolled", 409, "Student is already in the cohort (#4)")
-COHORT_FULL = errors.define("cohort_full", 409, "Cohort is full")
 COHORT_CLOSED = errors.define("cohort_closed", 409, "Cohort is finished or cancelled")
 LESSON_CANCELLED = errors.define("lesson_cancelled", 409, "Lesson is cancelled")
 LESSON_NOT_HELD = errors.define("lesson_not_held", 409, "Lesson is on a later day")
