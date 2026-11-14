@@ -69,6 +69,7 @@ export const apiErrors: Record<string, string> = {
   campaign_branch_mismatch: "Кампания из другого филиала, чем лид.",
   campaign_in_use: "У кампании есть лиды. Удалить нельзя.",
   campaign_dates_invalid: "Дата окончания раньше даты старта.",
+  goal_dates_invalid: "Срок должен быть позже даты начала.",
   import_too_large: "Файл слишком большой (больше 2 МБ).",
   import_too_many_rows: "В файле больше {limit} строк. Разделите его на части.",
   import_unreadable: "Не удалось прочитать файл. Нужен Excel (.xlsx) или CSV.",
@@ -113,6 +114,9 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "string_too_long") return `Не длиннее ${num("max_length")} символов`;
   if (code === "string_too_short" || code === "too_short")
     return Number(ctx?.min_length) > 1 ? `Не короче ${num("min_length")} символов` : "Заполните поле";
+  if (code === "deadline_before_start") return "Срок должен быть позже начала";
+  if (code === "percent_over_100") return "От 1 до 100";
+  if (code === "target_not_above_baseline") return "План должен быть больше стартового значения";
   if (code === "invalid_phone") return "Неверный номер. Пример: +992 90 123 45 67";
   if (code === "decimal_max_digits" || code === "decimal_whole_digits") return "Слишком большое число";
   if (code === "decimal_max_places") return "Слишком много знаков после запятой";

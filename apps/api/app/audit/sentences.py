@@ -33,7 +33,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
     "master_list": ("master_list",),
-    "dashboard": ("dashboard_month",),
+    "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -96,6 +96,14 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "employment.create": ("добавлено", "трудоустройство"),
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
+    "goal.create": ("создана", "цель"),
+    "goal.update": ("изменена", "цель"),
+    "goal.archive": ("архивирована", "цель"),
+    "goal.unarchive": ("возвращена из архива", "цель"),
+    # the text of a note is private: its audit entries carry no diff
+    "note.create": ("добавлена", "заметка"),
+    "note.update": ("изменена", "заметка"),
+    "note.delete": ("удалена", "заметка"),
 }
 # grading schemes: «Курбон: изменена шкала оценок потока G-012 — баллы: Посещаемость 20, … → …»
 GRADING = {
@@ -134,6 +142,9 @@ TABLES: dict[str, str] = {
     "today": "сегодня и не заполнено",
     "student_card": "карточка студента",
     "reset_request": "запросы пароля",
+    "academy_goal": "цель академии",
+    "goal": "цели",
+    "note": "заметки",
 }
 FILTERS = {
     "q": "поиск",
@@ -217,6 +228,12 @@ FIELDS: dict[str, str] = {
     "position": "должность",
     "employed_at": "дата трудоустройства",
     "reason": "причина",
+    "title": "название",
+    "metric": "показатель",
+    "target": "план",
+    "deadline": "срок",
+    "archived": "в архиве",
+    "baseline": "старт",
     "categories": "баллы",
     "pass_score": "проходной балл",
     "target_retention": "цель по удержанию, %",
@@ -232,6 +249,12 @@ VALUES = {
     "online": "онлайн",
     "view": "просмотр",
     "change": "изменение",
+    "graduates_total": "выпускники",
+    "active_students": "активные студенты",
+    "collection_rate_month": "сбор оплат за месяц",
+    "income": "доход",
+    "new_enrollments": "новые зачисления",
+    "courses_launched": "запуски курсов",
 }
 NONE = "—"
 _PRESENCE: dict[Any, str] = {None: "не отмечено", True: "присутствует", False: "отсутствует"}
@@ -385,6 +408,11 @@ def sentence(
         return f"{who} — смена пароля"
     if a == "profile.update":
         return _with_changes(f"{who}: изменены данные своего профиля", e.diff, names, sections)
+    if a == "academy_goal.update":
+        _, text = _pair(e.diff.get("text"))
+        return (
+            f"{who}: Цель академии изменена: «{text}»" if text else f"{who}: Цель академии очищена"
+        )
     if a == "export":
         table = TABLES.get(e.entity, e.entity)
         _, rows = _pair(e.diff.get("rows"))
