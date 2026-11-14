@@ -57,8 +57,12 @@ STOCK_METRICS = frozenset({"active_students"})
 REACHED, ON_TRACK, BEHIND, OVERDUE = "достигнута", "по графику", "отстаём", "срок прошёл"
 
 
-async def _collection_rate(db: AsyncSession, cohort_where: list[ColumnElement[bool]]) -> float:
-    on = today()
+async def collection_month(
+    db: AsyncSession, cohort_where: list[ColumnElement[bool]], on: date | None = None
+) -> tuple[Decimal, Decimal]:
+    """(collected, expected) of the month of `on` (today): expected = the month's price for every
+    enrollment that owes it, collected = the confirmed part of it, capped at the price."""
+    on = on or today()
     rows = (
         await db.execute(
             select(
@@ -83,6 +87,11 @@ async def _collection_rate(db: AsyncSession, cohort_where: list[ColumnElement[bo
             continue
         expected += price
         collected += min(info["confirmed"], price)
+    return collected, expected
+
+
+async def _collection_rate(db: AsyncSession, cohort_where: list[ColumnElement[bool]]) -> float:
+    collected, expected = await collection_month(db, cohort_where)
     return pct(collected, expected) if expected else 0.0
 
 

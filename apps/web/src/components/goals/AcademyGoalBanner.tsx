@@ -84,7 +84,7 @@ function EditModal({ goal, onClose }: { goal: AcademyGoal; onClose: () => void }
  * The academy's north star: one line on top of the dashboard and «Сегодня» for every role. Hidden when
  * empty (the superadmin gets a «Задать цель академии» button instead).
  */
-export function AcademyGoalBanner() {
+export function AcademyGoalBanner({ className = "mb-4" }: { className?: string }) {
   const query = useAcademyGoal();
   const isSuperadmin = useIsSuperadmin();
   const [editing, setEditing] = useState(false);
@@ -92,7 +92,7 @@ export function AcademyGoalBanner() {
   if (query.isPending)
     return (
       <Late>
-        <Bone className="mb-4 h-14 w-full rounded-2xl" />
+        <Bone className={`${className} h-14 w-full rounded-2xl`} />
       </Late>
     );
   if (!query.data) return null;
@@ -102,7 +102,7 @@ export function AcademyGoalBanner() {
   if (!text && !isSuperadmin) return null;
 
   return (
-    <section aria-label="Цель академии" className="mb-4 flex min-h-14 items-center gap-3 rounded-2xl bg-primary/10 px-4 py-2.5">
+    <section aria-label="Цель академии" className={`${className} flex min-h-14 items-center gap-3 rounded-2xl bg-primary/10 px-4 py-2.5`}>
       <Icon className="shrink-0 text-brand-text" name="graduates" size={22} />
       <p className="min-w-0 flex-1 text-sm leading-snug">
         {text ? (

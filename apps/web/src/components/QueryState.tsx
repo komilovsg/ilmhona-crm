@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import clsx from "clsx";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { LoadingButton } from "./LoadingButton";
 import { Late } from "./Skeletons";
@@ -8,9 +9,9 @@ import { Late } from "./Skeletons";
 import { isApiError } from "@/lib/api";
 
 /** Nothing to show yet: «Нет студентов» + the way to add one, when the user may. */
-export function EmptyState({ title, hint, action }: { title: string; hint?: string; action?: ReactNode }) {
+export function EmptyState({ title, hint, action, bare }: { title: string; hint?: string; action?: ReactNode; bare?: boolean }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl bg-content1 p-8 text-center">
+    <div className={clsx("flex flex-col items-center gap-3 text-center", bare ? "p-4" : "rounded-2xl bg-content1 p-8")}>
       <p className="font-medium">{title}</p>
       {hint && <p className="text-sm text-default-500">{hint}</p>}
       {action}
@@ -23,13 +24,16 @@ export function ErrorState({
   onRetry,
   text = "Не удалось загрузить",
   retrying = false,
+  bare,
 }: {
   onRetry: () => void;
   text?: string;
   retrying?: boolean;
+  /** Inside a card that already has a background. */
+  bare?: boolean;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-2xl bg-content1 p-8 text-center" role="alert">
+    <div className={clsx("flex flex-col items-center gap-3 text-center", bare ? "p-4" : "rounded-2xl bg-content1 p-8")} role="alert">
       <p className="font-medium">{text}</p>
       <p className="text-sm text-default-500">Проверьте связь с сервером и попробуйте ещё раз.</p>
       <LoadingButton color="primary" isLoading={retrying} variant="flat" onPress={onRetry}>
@@ -53,6 +57,7 @@ export function QueryState<T>({
   empty,
   notFound,
   errorText,
+  bare,
   children,
 }: {
   query: UseQueryResult<T>;
@@ -61,6 +66,8 @@ export function QueryState<T>({
   empty?: ReactNode;
   notFound?: ReactNode;
   errorText?: string;
+  /** Inside a card: the error state has no background of its own. */
+  bare?: boolean;
   children: ReactNode | ((data: T) => ReactNode);
 }) {
   const { data, isPending, isError, error, isFetching, refetch } = query;
@@ -76,7 +83,7 @@ export function QueryState<T>({
   if (data === undefined) {
     if (notFound && isApiError(error) && error.status === 404) return <>{notFound}</>;
 
-    return <ErrorState retrying={isFetching} text={errorText} onRetry={() => void refetch()} />;
+    return <ErrorState bare={bare} retrying={isFetching} text={errorText} onRetry={() => void refetch()} />;
   }
 
   if (isEmpty?.(data) && empty) return (

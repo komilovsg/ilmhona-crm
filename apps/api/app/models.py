@@ -508,3 +508,18 @@ class Note(Versioned, Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class UserPref(Versioned, Base):
+    """UI preferences of one user (today: the dashboard layout): own row only."""
+
+    __tablename__ = "user_pref"
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE"), primary_key=True
+    )
+    dashboard: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default=text("'{}'::jsonb"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+    @property
+    def id(self) -> UUID:  # the audit trail and the version check address a row by `id`
+        return self.user_id

@@ -27,6 +27,16 @@ ENDPOINTS: dict[str, tuple[Callable[[dict[str, str]], str], int]] = {
     "attendance grid": (lambda w: f"/api/v1/cohorts/{w['cohort']}/attendance", 7),
     "me/today": (lambda w: "/api/v1/me/today", 6),
     "master-list": (lambda w: "/api/v1/master-list", 9),
+    "card month": (lambda w: "/api/v1/dashboard/cards/month", 22),
+    "card timeline": (lambda w: "/api/v1/dashboard/cards/timeline", 4),
+    "card attention": (lambda w: "/api/v1/dashboard/cards/attention", 12),
+    "card demand": (lambda w: "/api/v1/dashboard/cards/demand", 4),
+    "card branches": (lambda w: "/api/v1/dashboard/cards/branches", 4),
+    "card queues": (lambda w: "/api/v1/dashboard/cards/queues", 12),
+    "card call-queue": (lambda w: "/api/v1/dashboard/cards/call-queue", 4),
+    "card seats": (lambda w: "/api/v1/dashboard/cards/seats", 4),
+    "card week": (lambda w: "/api/v1/dashboard/cards/week", 14),
+    "me/preferences/dashboard": (lambda w: "/api/v1/me/preferences/dashboard", 3),
 }
 
 
