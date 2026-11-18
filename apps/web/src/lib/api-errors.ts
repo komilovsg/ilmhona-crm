@@ -84,7 +84,7 @@ export const apiErrors: Record<string, string> = {
   grading_scores_archived: "У удаляемых категорий есть оценки: они сохранятся в архиве. Подтвердите удаление.",
   cert_field_unknown: "В шаблоне неизвестное поле «{field}».",
   cert_layout_invalid: "Макет шаблона заполнен неверно.",
-  cert_asset_invalid: "Изображение не подходит: нужен PNG, JPEG или SVG до 5 МБ.",
+  cert_asset_invalid: "Изображение не подходит: нужен PNG или JPEG до 8 МБ с заметной подписью или печатью.",
   cert_asset_missing: "Изображение шаблона не найдено.",
   cert_gender_missing: "У студента не указан пол: шаблон требует его.",
   cert_text_overflow: "Текст не помещается в блок шаблона.",

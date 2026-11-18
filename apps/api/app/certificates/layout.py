@@ -121,12 +121,16 @@ class AssetSource(Strict):
 
 
 class SignatureSource(Strict):
-    signature: Literal["instructor"]
+    signature: Literal["instructor", "director"]
+
+
+class CompanySource(Strict):
+    company: Literal["seal"]
 
 
 class ImageLayer(Box):
     type: Literal["image"]
-    source: AssetSource | SignatureSource
+    source: AssetSource | SignatureSource | CompanySource
     fit: Literal["contain"] = "contain"
 
 
@@ -142,7 +146,16 @@ class LineLayer(Box):
     dash: bool = False
 
 
-Layer = Annotated[TextLayer | ImageLayer | QrLayer | LineLayer, Field(discriminator="type")]
+class RectLayer(Box):
+    """A solid rectangle: covers content baked into the background."""
+
+    type: Literal["rect"]
+    fill: Color
+
+
+Layer = Annotated[
+    TextLayer | ImageLayer | QrLayer | LineLayer | RectLayer, Field(discriminator="type")
+]
 
 
 class Layout(Strict):

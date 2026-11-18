@@ -32,7 +32,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "leads": ("lead",),
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
-    "cert_templates": ("cert_template",),
+    "cert_templates": ("cert_template", "cert_settings"),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -95,6 +95,11 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "campaign.update": ("изменена", "кампания"),
     "campaign.delete": ("удалена", "кампания"),
     "cert_template.publish": ("опубликован", "шаблон сертификата"),
+    "cert_settings.update": ("изменены", "настройки сертификатов"),
+    "cert_settings.signature_upload": ("загружена", "подпись директора"),
+    "cert_settings.signature_delete": ("удалена", "подпись директора"),
+    "cert_settings.seal_upload": ("загружена", "печать"),
+    "cert_settings.seal_delete": ("удалена", "печать"),
     "employment.create": ("добавлено", "трудоустройство"),
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
@@ -108,6 +113,12 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "note.delete": ("удалена", "заметка"),
     "dashboard_pref.update": ("изменены", "настройки дашборда"),
     "dashboard_pref.reset": ("сброшены", "настройки дашборда"),
+}
+CERT_IMAGE_SENTENCES = {
+    "cert_settings.signature_upload": "загружена подпись директора",
+    "cert_settings.signature_delete": "удалена подпись директора",
+    "cert_settings.seal_upload": "загружена печать для сертификатов",
+    "cert_settings.seal_delete": "удалена печать для сертификатов",
 }
 # grading schemes: «Курбон: изменена шкала оценок потока G-012 — баллы: Посещаемость 20, … → …»
 GRADING = {
@@ -419,6 +430,15 @@ def sentence(
         return (
             f"{who}: Цель академии изменена: «{text}»" if text else f"{who}: Цель академии очищена"
         )
+    if a == "cert_settings.update":
+        parts = []
+        for key, word in (("director_name", "директор"), ("director_title", "должность")):
+            old, new = _pair(e.diff.get(key))
+            if key in e.diff:
+                parts.append(f"{word} {old or '—'} → {new or '—'}")
+        return f"{who}: изменены настройки сертификатов: {'; '.join(parts)}"
+    if a in CERT_IMAGE_SENTENCES:
+        return f"{who}: {CERT_IMAGE_SENTENCES[a]}"
     if a == "export":
         table = TABLES.get(e.entity, e.entity)
         _, rows = _pair(e.diff.get("rows"))

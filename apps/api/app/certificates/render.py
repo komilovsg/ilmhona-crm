@@ -39,6 +39,8 @@ from app.certificates.layout import (
     Layout,
     LineLayer,
     QrLayer,
+    RectLayer,
+    SignatureSource,
     TextLayer,
     TextRun,
 )
@@ -164,7 +166,7 @@ def _n(value: float) -> str:
     return f"{value:.3f}".rstrip("0").rstrip(".") or "0"
 
 
-def _box(layer: TextLayer | ImageLayer | QrLayer | LineLayer) -> str:
+def _box(layer: TextLayer | ImageLayer | QrLayer | LineLayer | RectLayer) -> str:
     css = (
         f"position:absolute;left:{_n(layer.x_mm)}mm;top:{_n(layer.y_mm)}mm;"
         f"width:{_n(layer.w_mm)}mm;height:{_n(layer.h_mm)}mm;"
@@ -235,11 +237,25 @@ def build_html(
             if isinstance(layer.source, AssetSource):
                 src = html.escape(asset(layer.source.asset))
                 body.append(f'<img src="{src}" style="{_box(layer)}object-fit:contain">')
-            # `signature: instructor`: instructors have no stored signature yet, nothing is drawn
+            elif isinstance(layer.source, SignatureSource):
+                # instructors have no stored signature yet: nothing is drawn for them
+                ref = ctx.signature_ref if layer.source.signature == "director" else None
+                if ref and ref in assets:
+                    body.append(
+                        f'<img src="{html.escape(asset(ref))}" '
+                        f'style="{_box(layer)}object-fit:contain">'
+                    )
+            elif ctx.seal_ref and ctx.seal_ref in assets:
+                body.append(
+                    f'<img src="{html.escape(asset(ctx.seal_ref))}" '
+                    f'style="{_box(layer)}object-fit:contain">'
+                )
         elif isinstance(layer, QrLayer):
             key = f"qr:{i}"
             resources[key] = ("image/svg+xml", _qr_svg(_qr_url(ctx), layer.color))
             body.append(f'<img src="{key}" style="{_box(layer)}object-fit:contain">')
+        elif isinstance(layer, RectLayer):
+            body.append(f'<div style="{_box(layer)}background:{layer.fill}"></div>')
         elif isinstance(layer, LineLayer):
             style = "dashed" if layer.dash else "solid"
             body.append(

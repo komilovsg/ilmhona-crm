@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.clock import TZ
 from app.core.errors import NOT_FOUND, DomainError
 from app.metrics.attendance import enrollment_results
-from app.models import AppUser, Branch, Cohort, Course, Enrollment, Student
+from app.models import AppUser, Branch, CertSettings, Cohort, Course, Enrollment, Student
 
 # key -> Russian label (for the editor of stage C4)
 FIELDS: dict[str, str] = {
@@ -33,6 +33,8 @@ FIELDS: dict[str, str] = {
     "certificate.number": "Номер сертификата",
     "certificate.issued_date": "Дата выдачи",
     "grade.total": "Итоговый балл",
+    "company.director_name": "Директор: имя",
+    "company.director_title": "Директор: должность",
 }
 DATE_FORMATS = ("dd.mm.yyyy", "d month yyyy", "month d, yyyy")
 DEFAULT_DATE_FORMAT = DATE_FORMATS[0]
@@ -66,6 +68,21 @@ class Context:
     values: dict[str, str | date] = field(default_factory=dict)
     gender: str | None = None  # 'male' | 'female' | None
     verify_code: str = ""  # goes into the QR link
+    signature_ref: str | None = None  # asset id of the director's signature
+    seal_ref: str | None = None  # asset id of the company seal
+
+
+async def load_settings(db: AsyncSession) -> CertSettings:
+    return (await db.execute(select(CertSettings).where(CertSettings.id == 1))).scalar_one()
+
+
+def apply_settings(ctx: Context, row: CertSettings) -> Context:
+    """Put the director of the settings row into a context."""
+    ctx.values["company.director_name"] = row.director_name
+    ctx.values["company.director_title"] = row.director_title
+    ctx.signature_ref = str(row.director_signature_asset_id or "") or None
+    ctx.seal_ref = str(row.seal_asset_id or "") or None
+    return ctx
 
 
 def sample_context(kind: str) -> Context:
@@ -91,6 +108,8 @@ def sample_context(kind: str) -> Context:
             "certificate.number": "CERT-2026-0001",
             "certificate.issued_date": date(2026, 11, 18),
             "grade.total": "95",
+            "company.director_name": "Директор Образцов",
+            "company.director_title": "Директор ОО Илмхона",
         },
         gender=gender,
         verify_code="SAMPLE",
@@ -139,4 +158,5 @@ async def enrollment_context(
     if issued is not None:
         values["certificate.issued_date"] = issued.astimezone(TZ).date()
     ctx = Context(values, student.gender, enrollment.certificate_no or "")
+    apply_settings(ctx, await load_settings(db))
     return ctx, cohort, course, instructor, enrollment

@@ -174,7 +174,8 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"assets created: {counts.assets_created}; templates created: "
             f"{counts.templates_created}, updated: {counts.templates_updated}; "
-            f"versions published: {counts.versions_published}"
+            f"versions published: {counts.versions_published}; "
+            f"settings changed: {counts.settings_changed}"
         )
         return 0
     if args.command == "daily":

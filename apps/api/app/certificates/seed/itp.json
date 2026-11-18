@@ -9,6 +9,101 @@
   },
   "layers": [
     {
+      "id": "dir_cover",
+      "type": "rect",
+      "x_mm": 224,
+      "y_mm": 125.5,
+      "w_mm": 53,
+      "h_mm": 44,
+      "rotation": 0,
+      "locked": false,
+      "fill": "#ffffff"
+    },
+    {
+      "id": "dir_seal",
+      "type": "image",
+      "x_mm": 230,
+      "y_mm": 133.1,
+      "w_mm": 28.4,
+      "h_mm": 28.5,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 227.59,
+      "y_mm": 133.58,
+      "w_mm": 34.08,
+      "h_mm": 25.84,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 227.85,
+      "y_mm": 157.1,
+      "w_mm": 49,
+      "h_mm": 5.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.1,
+        "min_size_pt": 9.1,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 227.85,
+      "y_mm": 162.3,
+      "w_mm": 49,
+      "h_mm": 5.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.1,
+        "min_size_pt": 9.1,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
       "id": "student_id",
       "type": "text",
       "x_mm": 29.1,
@@ -109,7 +204,7 @@
       "type": "text",
       "x_mm": 130.0,
       "y_mm": 185.0,
-      "w_mm": 27.7,
+      "w_mm": 60.0,
       "h_mm": 7.2,
       "rotation": 0,
       "locked": false,

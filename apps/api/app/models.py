@@ -544,6 +544,25 @@ class CertAsset(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
+class CertSettings(Versioned, Base):
+    """The one row (id = 1) with the company director every certificate shows."""
+
+    __tablename__ = "cert_settings"
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    director_name: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    director_title: Mapped[str] = mapped_column(Text)
+    director_signature_asset_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
+    )
+    seal_asset_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
+    )
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
 class CertTemplate(Versioned, Base):
     __tablename__ = "cert_template"
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)

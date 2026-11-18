@@ -88,6 +88,8 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM cert_template_rule",
             "DELETE FROM cert_template",
             "DELETE FROM cert_asset",
+            "UPDATE cert_settings SET director_name = 'Озодамо Фаромуз',"
+            " director_title = 'Директор ОО Илмхона', updated_by = NULL",
             "DELETE FROM note",
             "DELETE FROM goal",
             "UPDATE academy_goal SET text = '', updated_by = NULL",
@@ -172,6 +174,10 @@ class Browser(httpx.AsyncClient):
         if parts[-1] == "rate":  # /salaries/cohorts/<id>/rate edits the cohort row
             rows = await sql("SELECT version FROM cohort WHERE id = :i", i=parts[-2])
             kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
+            return
+        if parts[-1] == "cert-settings":
+            rows = await sql("SELECT version FROM cert_settings")
+            kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0])}
             return
         if parts[-1] == "me":
             version = (await self.get(url)).json()["version"]

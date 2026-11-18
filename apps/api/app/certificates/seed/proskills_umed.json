@@ -9,6 +9,101 @@
   },
   "layers": [
     {
+      "id": "dir_cover",
+      "type": "rect",
+      "x_mm": 12.8,
+      "y_mm": 149.5,
+      "w_mm": 64.2,
+      "h_mm": 47,
+      "rotation": 0,
+      "locked": false,
+      "fill": "#ffffff"
+    },
+    {
+      "id": "dir_seal",
+      "type": "image",
+      "x_mm": 27.4,
+      "y_mm": 157.9,
+      "w_mm": 33.5,
+      "h_mm": 31.9,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 25.49,
+      "y_mm": 158.38,
+      "w_mm": 38.28,
+      "h_mm": 29.03,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 15.9,
+      "y_mm": 181.95,
+      "w_mm": 60,
+      "h_mm": 6.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.0,
+        "min_size_pt": 11.0,
+        "color": "#3d3d3c",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 15.95,
+      "y_mm": 187.9,
+      "w_mm": 60,
+      "h_mm": 6.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 14.5,
+        "min_size_pt": 11.5,
+        "color": "#3d3d3c",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
       "id": "number_date",
       "type": "text",
       "x_mm": 147.7,

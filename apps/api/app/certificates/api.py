@@ -7,24 +7,43 @@ renders; no editor yet.
 
 import re
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Query, Response
+import anyio
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
+from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.audit.log import record
+from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
-from app.certificates.assets import load_assets
-from app.certificates.errors import CERT_NO_TEMPLATE, CERT_NOT_ISSUED
-from app.certificates.fields import SAMPLE_KINDS, enrollment_context, sample_context
+from app.certificates.assets import load_assets, store_asset
+from app.certificates.errors import CERT_ASSET_INVALID, CERT_NO_TEMPLATE, CERT_NOT_ISSUED
+from app.certificates.fields import (
+    SAMPLE_KINDS,
+    apply_settings,
+    enrollment_context,
+    load_settings,
+    sample_context,
+)
 from app.certificates.layout import Layout, parse_layout
 from app.certificates.render import render_pdf
+from app.certificates.signature import INKS, MAX_INPUT_BYTES
+from app.certificates.signature import clean as clean_image
+from app.core import clock
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
+from app.core.versioning import Version, check_version
 from app.importer.parse import _CYR
 from app.leads.scope import reader
-from app.models import CertTemplate, CertTemplateRule, CertTemplateVersion
+from app.models import (
+    AppUser,
+    CertAsset,
+    CertSettings,
+    CertTemplate,
+    CertTemplateRule,
+    CertTemplateVersion,
+)
 
 router = APIRouter(
     prefix="/api/v1", tags=["certificates"], dependencies=[Depends(require_csrf_header)]
@@ -32,7 +51,12 @@ router = APIRouter(
 
 GraduatesView = Annotated[Principal, reader("graduates")]
 TemplatesView = Annotated[Principal, require("cert_templates", "view")]
+TemplatesChange = Annotated[Principal, require("cert_templates", "change")]
 DEFAULT_KEY = "general_ru"
+
+
+def _director_refs(ctx: Any) -> list[str]:
+    return [r for r in (ctx.signature_ref, ctx.seal_ref) if r]
 
 
 async def latest_layout(db: AsyncSession, template: CertTemplate) -> Layout:
@@ -96,7 +120,7 @@ async def certificate_pdf(
     else:
         template = await pick_template(db, course.id, instructor.id if instructor else None)
     layout = await latest_layout(db, template)
-    assets = await load_assets(db, layout.asset_refs())
+    assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
     await record(
         db,
@@ -162,10 +186,169 @@ async def preview(
     if template is None:
         raise DomainError(NOT_FOUND)
     layout = await latest_layout(db, template)
-    assets = await load_assets(db, layout.asset_refs())
-    pdf = await render_pdf(layout, sample_context(sample), assets)
+    ctx = apply_settings(sample_context(sample), await load_settings(db))
+    assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
+    pdf = await render_pdf(layout, ctx, assets)
     return Response(
         pdf,
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{template.key}_{sample}.pdf"'},
+    )
+
+
+# ---- settings: the company director ---------------------------------------------------------
+
+Text120 = Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)]
+Title120 = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+IMAGES = {"signature": "director_signature_asset_id", "seal": "seal_asset_id"}
+IMAGE_SENTENCE = {"signature": "подпись директора", "seal": "печать"}
+
+
+class SettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    director_name: Text120 | None = None
+    director_title: Title120 | None = None
+
+
+async def _settings_out(db: AsyncSession, row: CertSettings) -> dict[str, Any]:
+    by = (
+        await db.execute(select(AppUser.full_name).where(AppUser.id == row.updated_by))
+    ).scalar_one_or_none()
+    return {
+        "director_name": row.director_name,
+        "director_title": row.director_title,
+        "signature_asset_id": row.director_signature_asset_id,
+        "seal_asset_id": row.seal_asset_id,
+        "version": row.version,
+        "updated_at": row.updated_at,
+        "updated_by": by,
+    }
+
+
+@router.get("/cert-settings")
+async def get_settings(p: TemplatesView, db: DB) -> dict[str, Any]:
+    return await _settings_out(db, await load_settings(db))
+
+
+@router.patch("/cert-settings")
+async def update_settings(
+    body: SettingsUpdate, p: TemplatesChange, version: Version, db: DB
+) -> dict[str, Any]:
+    row = await load_settings(db)
+    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+
+    async def current() -> dict[str, Any]:
+        return await _settings_out(db, row)
+
+    await check_version(db, row, version, "cert_settings", current, changes=changes)
+    before = {k: getattr(row, k) for k in changes}
+    for key, value in changes.items():
+        setattr(row, key, value)
+    diff = diff_of(before, changes)
+    if diff:
+        row.updated_by, row.updated_at = p.id, clock.now()
+        await db.flush()
+        await record(
+            db, p.id, "cert_settings.update", "cert_settings", str(row.id), diff,
+            label="настройки сертификатов",
+        )  # fmt: skip
+    return await _settings_out(db, row)
+
+
+async def _read_image(file: UploadFile) -> bytes:
+    data = await file.read(MAX_INPUT_BYTES + 1)
+    if len(data) > MAX_INPUT_BYTES:
+        raise DomainError(CERT_ASSET_INVALID, reason="too_large")
+    return data
+
+
+async def _cleaned(file: UploadFile, ink: str) -> bytes:
+    data = await _read_image(file)
+    return await anyio.to_thread.run_sync(clean_image, data, ink)
+
+
+async def _store_image(
+    kind: str, file: UploadFile, ink: str, p: Principal, db: AsyncSession
+) -> dict[str, Any]:
+    png = await _cleaned(file, ink)
+    asset, _ = await store_asset(db, png, kind, p.id)
+    row = await load_settings(db)
+    column = IMAGES[kind]
+    old = getattr(row, column)
+    setattr(row, column, asset.id)
+    row.updated_by, row.updated_at = p.id, clock.now()
+    await db.flush()
+    await record(
+        db, p.id, f"cert_settings.{kind}_upload", "cert_settings", str(row.id),
+        {kind: [old, asset.id]}, label="настройки сертификатов",
+    )  # fmt: skip
+    return await _settings_out(db, row)
+
+
+async def _delete_image(kind: str, p: Principal, db: AsyncSession) -> dict[str, Any]:
+    row = await load_settings(db)
+    column = IMAGES[kind]
+    old = getattr(row, column)
+    if old is not None:
+        setattr(row, column, None)
+        row.updated_by, row.updated_at = p.id, clock.now()
+        await db.flush()
+        await record(
+            db, p.id, f"cert_settings.{kind}_delete", "cert_settings", str(row.id),
+            {kind: [old, None]}, label="настройки сертификатов",
+        )  # fmt: skip
+    return await _settings_out(db, row)
+
+
+InkQuery = Annotated[str, Query(pattern="^(" + "|".join(INKS) + ")$")]
+
+
+@router.post("/cert-settings/signature")
+async def upload_signature(
+    p: TemplatesChange, db: DB, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
+) -> dict[str, Any]:
+    return await _store_image("signature", file, ink, p, db)
+
+
+@router.post("/cert-settings/seal")
+async def upload_seal(
+    p: TemplatesChange, db: DB, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
+) -> dict[str, Any]:
+    return await _store_image("seal", file, ink, p, db)
+
+
+@router.post("/cert-settings/signature/preview")
+async def preview_signature(
+    p: TemplatesChange, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
+) -> Response:
+    """The cleaned image, nothing saved."""
+    return Response(await _cleaned(file, ink), media_type="image/png")
+
+
+@router.post("/cert-settings/seal/preview")
+async def preview_seal(
+    p: TemplatesChange, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
+) -> Response:
+    return Response(await _cleaned(file, ink), media_type="image/png")
+
+
+@router.delete("/cert-settings/signature")
+async def delete_signature(p: TemplatesChange, db: DB) -> dict[str, Any]:
+    return await _delete_image("signature", p, db)
+
+
+@router.delete("/cert-settings/seal")
+async def delete_seal(p: TemplatesChange, db: DB) -> dict[str, Any]:
+    return await _delete_image("seal", p, db)
+
+
+@router.get("/cert-settings/{kind}")
+async def get_image(kind: Literal["signature", "seal"], p: TemplatesView, db: DB) -> Response:
+    """The stored signature or seal (PNG), for the settings screen."""
+    asset_id = getattr(await load_settings(db), IMAGES[kind])
+    asset = await db.get(CertAsset, asset_id) if asset_id else None
+    if asset is None:
+        raise DomainError(NOT_FOUND)
+    return Response(
+        asset.data, media_type=asset.mime, headers={"Cache-Control": "private, no-cache"}
     )
