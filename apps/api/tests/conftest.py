@@ -140,6 +140,7 @@ TABLES = {
     "leads": "lead",
     "campaigns": "campaign",
     "employment": "employment",
+    "cert-templates": "cert_template",
 }
 
 

@@ -3,7 +3,7 @@ from app.core.errors import errors
 CERT_FIELD_UNKNOWN = errors.define("cert_field_unknown", 422, "Unknown field in the template")
 CERT_LAYOUT_INVALID = errors.define("cert_layout_invalid", 422, "The template layout is invalid")
 CERT_ASSET_INVALID = errors.define("cert_asset_invalid", 422, "The image is not acceptable")
-CERT_ASSET_MISSING = errors.define("cert_asset_missing", 409, "An image of the template is gone")
+CERT_ASSET_MISSING = errors.define("cert_asset_missing", 422, "An image of the template is gone")
 CERT_GENDER_MISSING = errors.define(
     "cert_gender_missing", 409, "The student's gender is needed by the template"
 )
@@ -12,3 +12,17 @@ CERT_RENDER_TIMEOUT = errors.define("cert_render_timeout", 503, "Rendering took 
 CERT_PDF_TOO_LARGE = errors.define("cert_pdf_too_large", 409, "The certificate file is too big")
 CERT_NOT_ISSUED = errors.define("cert_not_issued", 409, "The certificate number is not issued yet")
 CERT_NO_TEMPLATE = errors.define("cert_no_template", 409, "No published certificate template")
+CERT_TEMPLATE_NAME_TAKEN = errors.define(
+    "cert_template_name_taken", 409, "A template with this name exists"
+)
+CERT_NOTHING_TO_PUBLISH = errors.define(
+    "cert_nothing_to_publish", 409, "The draft equals the published version"
+)
+CERT_RULE_DUPLICATE = errors.define(
+    "cert_rule_duplicate", 409, "Two rules name the same course and instructor"
+)
+CERT_RULE_INVALID = errors.define(
+    "cert_rule_invalid", 422, "A rule names a missing or archived item"
+)
+errors.on_constraint("cert_template_name_key", CERT_TEMPLATE_NAME_TAKEN)
+errors.on_constraint("cert_template_rule_target_key", CERT_RULE_DUPLICATE)

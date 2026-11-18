@@ -231,10 +231,10 @@ def test_uppercase_and_a_long_name_that_overflows() -> None:
     assert codes(exc) == (409, "cert_text_overflow")
 
 
-def test_a_missing_asset_is_409() -> None:
+def test_a_missing_asset_is_422() -> None:
     with pytest.raises(DomainError) as exc:
         draw(seed_like(), assets={})
-    assert codes(exc) == (409, "cert_asset_missing")
+    assert codes(exc) == (422, "cert_asset_missing")
 
 
 def test_the_fetcher_refuses_everything_but_internal_schemes() -> None:
@@ -262,7 +262,7 @@ def test_a_layout_cannot_make_the_renderer_fetch_a_url() -> None:
     lay = layout("http://127.0.0.1:9/evil.png")
     with pytest.raises(DomainError) as exc:
         draw(lay)
-    assert codes(exc) == (409, "cert_asset_missing")
+    assert codes(exc) == (422, "cert_asset_missing")
 
 
 async def test_render_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -456,7 +456,7 @@ async def test_templates_list_and_preview(admin: httpx.AsyncClient, login_as: Si
     r = await admin.get("/api/v1/cert-templates")
     assert r.status_code == 200
     (item,) = r.json()["items"]
-    assert (item["key"], item["version_no"], item["status"]) == (GENERAL, 1, "active")
+    assert (item["key"], item["latest_version_no"], item["status"]) == (GENERAL, 1, "active")
     for sample, name in (
         ("short", "Каримов Али"),
         ("long", "Абдурахмонзода"),
@@ -557,6 +557,39 @@ async def test_import_with_separate_image_dir_and_a_shared_image(tmp_path: Path)
     assert (await counts())[0] == 1
 
 
+async def test_import_nested_asset_paths_keep_svg_styles(tmp_path: Path) -> None:
+    d = write_seed(tmp_path)
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><defs><style>.a{fill:#1a9eda}'
+        '</style></defs><rect class="a" width="10" height="10"/></svg>'
+    )
+    for name in ("one", "two"):
+        (d / "parts" / name).mkdir(parents=True)
+        (d / "parts" / name / "p.svg").write_text(svg)
+    lay = layout("bg.png")
+    for n, name in enumerate(("one", "two")):
+        lay["layers"].append(
+            {
+                "id": f"part{n}", "type": "image", "x_mm": 1, "y_mm": 1, "w_mm": 10, "h_mm": 10,
+                "rotation": 0, "locked": False, "fit": "contain",
+                "source": {"asset": f"parts/{name}/p.svg"},
+            }
+        )  # fmt: skip
+    (d / "general_ru.json").write_text(json.dumps(lay))
+    c = await run_import(d)
+    assert c.assets_created == 2  # the background and one shared svg
+    (row,) = await sql(
+        "SELECT mime, convert_from(data, 'UTF8') FROM cert_asset WHERE mime LIKE '%svg%'"
+    )
+    assert row[0] == "image/svg+xml" and ".a{fill:#1a9eda}" in row[1].replace(" ", "").replace(
+        "\n", ""
+    )
+    lay["layers"][-1]["source"]["asset"] = "parts/../../escape.svg"
+    (d / "general_ru.json").write_text(json.dumps(lay))
+    with pytest.raises(ImportProblem, match="image not found"):
+        await run_import(d)
+
+
 async def test_import_refuses_missing_images_bad_layouts_and_paths(tmp_path: Path) -> None:
     d = write_seed(tmp_path)
     (d / "bg.png").unlink()
@@ -611,10 +644,14 @@ def test_there_are_ten_seed_layouts_and_the_manifest_names_them() -> None:
 @pytest.mark.parametrize("sample", ["short", "long", "female"])
 def test_every_seed_layout_renders_with_sample_data(path: Path, sample: str) -> None:
     lay = parse_layout(json.loads(path.read_text()))
-    ref = lay.background.asset if lay.background else "bg"
     pw, ph = lay.page.width_mm, lay.page.height_mm
     blank = png(size=(max(1, round(pw)), max(1, round(ph))))
-    pdf = render.render_sync(lay, sample_context(sample), {ref: ("image/png", blank)})
+    svg = f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {pw:g} {ph:g}"/>'.encode()
+    assets = {
+        ref: ("image/svg+xml", svg) if ref.endswith(".svg") else ("image/png", blank)
+        for ref in lay.asset_refs()
+    }
+    pdf = render.render_sync(lay, sample_context(sample), assets)
     box = PdfReader(io.BytesIO(pdf)).pages[0].mediabox
     assert float(box.width) == pytest.approx(pw * MM, abs=0.5)
     assert float(box.height) == pytest.approx(ph * MM, abs=0.5)

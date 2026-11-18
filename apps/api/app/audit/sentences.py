@@ -32,7 +32,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "leads": ("lead",),
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
-    "cert_templates": ("cert_template", "cert_settings"),
+    "cert_templates": ("cert_template", "cert_settings", "cert_asset", "cert_template_rule"),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -95,6 +95,13 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "campaign.update": ("изменена", "кампания"),
     "campaign.delete": ("удалена", "кампания"),
     "cert_template.publish": ("опубликован", "шаблон сертификата"),
+    "cert_template.create": ("создан", "шаблон сертификата"),
+    "cert_template.update": ("изменён", "шаблон сертификата"),
+    "cert_template.draft_update": ("изменён", "черновик шаблона"),
+    "cert_template.publish_version": ("опубликована", "версия шаблона"),
+    "cert_template.restore": ("восстановлен", "черновик шаблона"),
+    "cert_asset.upload": ("загружено", "изображение для сертификатов"),
+    "cert_template_rule.replace": ("изменены", "правила выбора шаблона сертификата"),
     "cert_settings.update": ("изменены", "настройки сертификатов"),
     "cert_settings.signature_upload": ("загружена", "подпись директора"),
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
@@ -201,6 +208,7 @@ FIELDS: dict[str, str] = {
     "role_id": "роль",
     "is_active": "активен",
     "name": "название",
+    "lang": "язык",
     "capacity": "вместимость",
     "direction": "направление",
     "default_price_month": "цена в месяц",
@@ -437,6 +445,12 @@ def sentence(
             if key in e.diff:
                 parts.append(f"{word} {old or '—'} → {new or '—'}")
         return f"{who}: изменены настройки сертификатов: {'; '.join(parts)}"
+    if a == "cert_template.publish_version":
+        _, number = _pair(e.diff.get("version_no"))
+        return f"{who}: опубликована версия {number} шаблона {lab}"
+    if a == "cert_template.restore":
+        _, number = _pair(e.diff.get("restored_from"))
+        return f"{who}: черновик шаблона {lab} восстановлен из версии {number}"
     if a in CERT_IMAGE_SENTENCES:
         return f"{who}: {CERT_IMAGE_SENTENCES[a]}"
     if a == "export":

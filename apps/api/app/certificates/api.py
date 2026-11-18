@@ -2,7 +2,7 @@
 
 Rights: the PDF needs `graduates` view and the branch scope (like the graduates list);
 templates and the preview need `cert_templates` view. A template's published version is what
-renders; no editor yet.
+renders; the template editor API is in `editor.py`.
 """
 
 import re
@@ -12,7 +12,7 @@ from typing import Annotated, Any, Literal
 import anyio
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
@@ -137,40 +137,6 @@ async def certificate_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
-
-
-@router.get("/cert-templates")
-async def list_templates(p: TemplatesView, db: DB) -> dict[str, Any]:
-    latest = (
-        select(
-            CertTemplateVersion.template_id,
-            func.max(CertTemplateVersion.version_no).label("n"),
-            func.max(CertTemplateVersion.published_at).label("at"),
-        )
-        .group_by(CertTemplateVersion.template_id)
-        .subquery()
-    )
-    rows = (
-        await db.execute(
-            select(CertTemplate, latest.c.n, latest.c.at)
-            .outerjoin(latest, latest.c.template_id == CertTemplate.id)
-            .order_by(CertTemplate.name)
-        )
-    ).all()
-    return {
-        "items": [
-            {
-                "id": t.id,
-                "key": t.key,
-                "name": t.name,
-                "status": t.status,
-                "lang": t.lang,
-                "version_no": n,
-                "published_at": at,
-            }
-            for t, n, at in rows
-        ]
-    }
 
 
 @router.post("/cert-templates/{template_id}/preview")

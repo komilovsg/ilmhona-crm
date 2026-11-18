@@ -19,6 +19,7 @@ import { ListSkeleton } from "@/components/Skeletons";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useCanChangeGraduates, useRefreshReports } from "@/hooks/reports";
+import { getFile, saveBlob } from "@/hooks/certs";
 import { api } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import { dushanbeDay } from "@/lib/format";
@@ -90,11 +91,19 @@ export default function GraduatesPage() {
       notifyError(e);
     },
   });
+  const download = useMutation({
+    mutationFn: async (g: GraduateRow) => {
+      const { blob, name } = await getFile(`/api/v1/graduates/${g.enrollment_id}/certificate/pdf`);
+
+      saveBlob(blob, name ?? `${g.certificate_no ?? "certificate"}.pdf`);
+    },
+    onError: notifyError,
+  });
   const actions = (g: GraduateRow) => [
-    ...(g.certificate_no ? [] : [{ key: "cert", label: "Выдать сертификат", icon: "graduates" }]),
-    { key: "job", label: "Добавить трудоустройство", icon: "plus" },
+    ...(g.certificate_no ? [{ key: "pdf", label: "Скачать PDF", icon: "download" }] : canChange ? [{ key: "cert", label: "Выдать сертификат", icon: "graduates" }] : []),
+    ...(canChange ? [{ key: "job", label: "Добавить трудоустройство", icon: "plus" }] : []),
   ];
-  const onAction = (g: GraduateRow, key: string) => (key === "cert" ? setIssuing(g) : setJob(g));
+  const onAction = (g: GraduateRow, key: string) => (key === "cert" ? setIssuing(g) : key === "pdf" ? download.mutate(g) : setJob(g));
 
   return (
     <>
@@ -179,7 +188,7 @@ export default function GraduatesPage() {
                         <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{orDash(g.paid, formatPrice)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{g.certificate_no ?? "—"}</td>
                         <td className="px-4 py-3">{g.employed ? g.organization : "—"}</td>
-                        <td className="px-2 py-3">{canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
+                        <td className="px-2 py-3">{actions(g).length > 0 && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -200,7 +209,7 @@ export default function GraduatesPage() {
                         <Chip color="success" size="sm" variant="flat">
                           {g.score} б.{g.score_legacy && " (старая система)"}
                         </Chip>
-                        {canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}
+                        {actions(g).length > 0 && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}
                       </div>
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">

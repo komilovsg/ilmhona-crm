@@ -4,10 +4,218 @@
     "width_mm": 297,
     "height_mm": 210.3
   },
-  "background": {
-    "asset": "general_en.svg"
-  },
+  "background": null,
   "layers": [
+    {
+      "id": "frame",
+      "type": "image",
+      "x_mm": 11.049,
+      "y_mm": 11.089,
+      "w_mm": 273.481,
+      "h_mm": 188.4,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/frame.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "panel",
+      "type": "image",
+      "x_mm": 0.121,
+      "y_mm": 0.779,
+      "w_mm": 132.778,
+      "h_mm": 147.311,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/panel.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "panel_line",
+      "type": "image",
+      "x_mm": 11.049,
+      "y_mm": 11.089,
+      "w_mm": 122.376,
+      "h_mm": 137.53,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/panel_line.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dots",
+      "type": "image",
+      "x_mm": 218.359,
+      "y_mm": 0.0,
+      "w_mm": 39.001,
+      "h_mm": 23.69,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/dots.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo",
+      "type": "image",
+      "x_mm": 38.755,
+      "y_mm": 35.523,
+      "w_mm": 53.924,
+      "h_mm": 58.968,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/logo.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "title",
+      "type": "image",
+      "x_mm": 141.088,
+      "y_mm": 33.209,
+      "w_mm": 112.947,
+      "h_mm": 12.552,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/title.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "hashtag",
+      "type": "image",
+      "x_mm": 35.937,
+      "y_mm": 105.139,
+      "w_mm": 63.318,
+      "h_mm": 5.394,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/hashtag.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "website",
+      "type": "image",
+      "x_mm": 48.787,
+      "y_mm": 134.061,
+      "w_mm": 33.757,
+      "h_mm": 5.409,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/website.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "instructor_caption",
+      "type": "image",
+      "x_mm": 86.173,
+      "y_mm": 188.256,
+      "w_mm": 42.337,
+      "h_mm": 3.515,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_en/instructor_caption.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 19.612,
+      "y_mm": 179.949,
+      "w_mm": 66.0,
+      "h_mm": 6.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 15.7,
+        "min_size_pt": 10.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 19.777,
+      "y_mm": 187.058,
+      "w_mm": 66.0,
+      "h_mm": 6.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 14.0,
+        "min_size_pt": 10.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 22.682,
+      "y_mm": 155.201,
+      "w_mm": 42.316,
+      "h_mm": 31.733,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "seal",
+      "type": "image",
+      "x_mm": 28.034,
+      "y_mm": 156.165,
+      "w_mm": 32.118,
+      "h_mm": 32.438,
+      "rotation": -7.42,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
     {
       "id": "number",
       "type": "text",
@@ -132,7 +340,7 @@
       "type": "text",
       "x_mm": 141.3,
       "y_mm": 70.8,
-      "w_mm": 198.3,
+      "w_mm": 155.7,
       "h_mm": 10.7,
       "rotation": 0,
       "locked": false,
