@@ -32,6 +32,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "leads": ("lead",),
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
+    "cert_templates": ("cert_template",),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -93,6 +94,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "campaign.create": ("создана", "кампания"),
     "campaign.update": ("изменена", "кампания"),
     "campaign.delete": ("удалена", "кампания"),
+    "cert_template.publish": ("опубликован", "шаблон сертификата"),
     "employment.create": ("добавлено", "трудоустройство"),
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
@@ -463,6 +465,10 @@ def sentence(
             lost.append(f"сертификат {cert}")
         tail = f"; потеряно: {', '.join(lost)}" if lost else ""
         return f"{who}: студент {student} убран из потока {cohort}{tail}"
+    if a == "enrollment.certificate_pdf":
+        student, cohort = _pieces(lab)
+        _, number = _pair(e.diff.get("certificate_no"))
+        return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
     if a == "enrollment.certificate":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))

@@ -13,6 +13,7 @@ from app.auth.reset import router as reset_router
 from app.auth.sessions import router as sessions_router
 from app.branches.api import router as branches_router
 from app.campaigns.api import router as campaigns_router
+from app.certificates.api import router as certificates_router
 from app.cohorts.api import router as cohorts_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
@@ -89,6 +90,7 @@ for router in (
     campaigns_router,
     reports_router,
     graduates_router,
+    certificates_router,
     employment_router,
     academy_goal_router,
     goals_router,

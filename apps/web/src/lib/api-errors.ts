@@ -82,6 +82,16 @@ export const apiErrors: Record<string, string> = {
   employment_enrollment_mismatch: "Это зачисление другого студента.",
   grading_scheme_invalid: "Шкала оценок не сходится: {problems}.",
   grading_scores_archived: "У удаляемых категорий есть оценки: они сохранятся в архиве. Подтвердите удаление.",
+  cert_field_unknown: "В шаблоне неизвестное поле «{field}».",
+  cert_layout_invalid: "Макет шаблона заполнен неверно.",
+  cert_asset_invalid: "Изображение не подходит: нужен PNG, JPEG или SVG до 5 МБ.",
+  cert_asset_missing: "Изображение шаблона не найдено.",
+  cert_gender_missing: "У студента не указан пол: шаблон требует его.",
+  cert_text_overflow: "Текст не помещается в блок шаблона.",
+  cert_render_timeout: "Сертификат формируется слишком долго. Повторите позже.",
+  cert_pdf_too_large: "Файл сертификата слишком большой.",
+  cert_not_issued: "Номер сертификата ещё не выдан.",
+  cert_no_template: "Нет опубликованного шаблона сертификата.",
   cohort_not_completed: "Поток ещё не завершён: статусы выпускников определятся при завершении.",
 };
 

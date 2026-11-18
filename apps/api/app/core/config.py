@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # Shared secret the web proxy sends in X-Proxy-Secret (app/core/proxy.py). Comma-separated:
     # two values are accepted while it is rotated. Empty = no check (local development).
     proxy_shared_secret: str = ""
+    # Base of the link in a certificate's QR code: `<base>/v/<code>`.
+    cert_verify_base_url: str = "http://localhost:3200"
 
     @property
     def proxy_secrets(self) -> tuple[bytes, ...]:

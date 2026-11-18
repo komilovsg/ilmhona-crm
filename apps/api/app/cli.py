@@ -8,16 +8,22 @@ Safe to run any number of times.
 
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
+
+`python -m app.cli import-cert-templates [DIR] [--layouts DIR] [--images DIR]` — certificate
+templates from layout JSON files (+ `templates.json`) and their images into the database
+(app/certificates/importer.py). Safe to run again.
 """
 
 import argparse
 import asyncio
 import sys
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
 from sqlalchemy import select, text
 
 from app.audit.log import record
+from app.certificates.importer import Counts, ImportProblem, import_templates
 from app.cohorts.status import STATUSES, sync_status
 from app.core.config import settings
 from app.core.db import engine, sessionmaker
@@ -127,6 +133,19 @@ async def wipe_command() -> int:
     return rows
 
 
+SEED_DIR = Path(__file__).parent / "certificates" / "seed"
+
+
+async def import_certs_command(layouts: Path, images: Path) -> Counts:
+    try:
+        async with sessionmaker() as db:
+            counts = await import_templates(db, layouts, images)
+            await db.commit()
+    finally:
+        await engine.dispose()
+    return counts
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -136,7 +155,28 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("daily", help="update cohort statuses, finished enrollments; purge old logins")
     sub.add_parser("seed-demo", help="load a fake dataset (all names invented)")
     sub.add_parser("wipe-demo", help="delete the rows seed-demo created, and only those")
+    certs = sub.add_parser("import-cert-templates", help="load certificate templates from disk")
+    certs.add_argument("dir", nargs="?", type=Path, help="layouts and images in one directory")
+    certs.add_argument(
+        "--layouts", type=Path, help=f"layouts + templates.json (default {SEED_DIR})"
+    )
+    certs.add_argument(
+        "--images", type=Path, help="images the layouts name (default: the layouts dir)"
+    )
     args = parser.parse_args(argv)
+    if args.command == "import-cert-templates":
+        layouts = args.layouts or args.dir or SEED_DIR
+        try:
+            counts = asyncio.run(import_certs_command(layouts, args.images or args.dir or layouts))
+        except ImportProblem as exc:
+            print(f"import failed: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"assets created: {counts.assets_created}; templates created: "
+            f"{counts.templates_created}, updated: {counts.templates_updated}; "
+            f"versions published: {counts.versions_published}"
+        )
+        return 0
     if args.command == "daily":
         count, purged = asyncio.run(_daily_and_close())
         print(f"cohort statuses changed: {count}; login attempts purged: {purged}")

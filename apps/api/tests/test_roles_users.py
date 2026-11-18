@@ -8,12 +8,12 @@ U = "/api/v1/users"
 
 async def test_seeded_roles_and_matrix(admin: httpx.AsyncClient) -> None:
     roles = {r["code"]: r for r in (await admin.get(R)).json()}
-    assert roles["superadmin"]["locked"] and len(roles["superadmin"]["permissions"]) == 13
+    assert roles["superadmin"]["locked"] and len(roles["superadmin"]["permissions"]) == 14
     assert roles["manager"]["permissions"]["leads"] == "change"
     assert roles["instructor"]["permissions"]["attendance"] == "change"
     assert "users" not in roles["manager"]["permissions"]
     sections = (await admin.get(f"{R}/sections")).json()
-    assert len(sections) == 13 and sections[0] == {"key": "dashboard", "label": "Дашборд"}
+    assert len(sections) == 14 and sections[0] == {"key": "dashboard", "label": "Дашборд"}
     names = {b[0] for b in await sql("SELECT name FROM branch")}
     assert names == {"Душанбе", "Истаравшан"}
 
@@ -24,7 +24,7 @@ async def test_superadmin_role_cannot_be_edited_or_deleted(admin: httpx.AsyncCli
     assert (r.status_code, r.json()["code"]) == (403, "role_locked")
     r = await admin.delete(f"{R}/{rid}")
     assert (r.status_code, r.json()["code"]) == (403, "role_locked")
-    assert len((await admin.get(f"{R}/{rid}")).json()["permissions"]) == 13
+    assert len((await admin.get(f"{R}/{rid}")).json()["permissions"]) == 14
 
 
 async def test_system_roles_are_editable_but_not_deletable(admin: httpx.AsyncClient) -> None:

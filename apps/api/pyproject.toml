@@ -6,22 +6,28 @@ dependencies = [
     "alembic>=1.16",
     "argon2-cffi>=25.1",
     "asyncpg>=0.30",
+    "defusedxml>=0.7.1",
     "fastapi>=0.120",
+    "fonttools>=4.68.0",
     "openpyxl>=3.1.5",
     "pydantic-settings>=2.10",
     "pyjwt>=2.10",
+    "segno>=1.6.6",
     "sentry-sdk[fastapi]>=2.72.0",
     "sqlalchemy[asyncio]>=2.0.40",
     "uvicorn[standard]>=0.35",
+    "weasyprint>=70.0",
 ]
 
 [dependency-groups]
 dev = [
     "httpx>=0.28",
     "mypy>=1.17",
+    "pypdf>=7.1.1",
     "pytest>=8.4",
     "pytest-asyncio>=1.1",
     "ruff>=0.12",
+    "types-defusedxml>=0.7.0.20260504",
     "types-openpyxl>=3.1.5.20261017",
 ]
 
@@ -43,3 +49,7 @@ select = ["E", "F", "I", "B", "UP", "ASYNC"]
 [tool.mypy]
 strict = true
 plugins = []
+
+[[tool.mypy.overrides]]
+module = ["fontTools.*", "weasyprint", "weasyprint.*", "segno"]
+ignore_missing_imports = true

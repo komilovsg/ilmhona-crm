@@ -12,7 +12,12 @@ COPY app ./app
 RUN /app/.venv/bin/python -m compileall -q app
 
 FROM python:3.14-slim-bookworm
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+# WeasyPrint (certificate PDFs) draws with pango/harfbuzz; the fonts are bundled in the app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b \
+       libfontconfig1 libharfbuzz-subset0 shared-mime-info \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 XDG_CACHE_HOME=/tmp
 WORKDIR /app
 COPY --from=build /app /app
 RUN useradd --system --uid 10001 ilm

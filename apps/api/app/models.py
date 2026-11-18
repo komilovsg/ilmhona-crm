@@ -523,3 +523,68 @@ class UserPref(Versioned, Base):
     @property
     def id(self) -> UUID:  # the audit trail and the version check address a row by `id`
         return self.user_id
+
+
+class CertAsset(Base):
+    """An image used by certificate templates (background, signature, seal ...), kept in the
+    database: one backup, no file storage to run. Deduplicated by `sha256`."""
+
+    __tablename__ = "cert_asset"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    kind: Mapped[str] = mapped_column(Text)
+    mime: Mapped[str] = mapped_column(Text)
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    sha256: Mapped[str] = mapped_column(Text, unique=True)
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    width_px: Mapped[int | None] = mapped_column(Integer)
+    height_px: Mapped[int | None] = mapped_column(Integer)
+    uploaded_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class CertTemplate(Versioned, Base):
+    __tablename__ = "cert_template"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    key: Mapped[str] = mapped_column(Text, unique=True)
+    name: Mapped[str] = mapped_column(Text, unique=True)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'active'"))
+    lang: Mapped[str] = mapped_column(Text, server_default=text("'ru'"))
+    # the working copy (layout schema v1, asset refs are cert_asset ids)
+    draft: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+
+
+class CertTemplateVersion(Base):
+    """A published layout. Never updated (a trigger refuses it): a change is a new row."""
+
+    __tablename__ = "cert_template_version"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    template_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("cert_template.id", ondelete="CASCADE")
+    )
+    version_no: Mapped[int] = mapped_column(Integer)
+    layout: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    published_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class CertTemplateRule(Base):
+    """Which template a course (optionally with a given instructor) uses by default."""
+
+    __tablename__ = "cert_template_rule"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id", ondelete="CASCADE"))
+    instructor_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="CASCADE")
+    )
+    template_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("cert_template.id", ondelete="CASCADE")
+    )

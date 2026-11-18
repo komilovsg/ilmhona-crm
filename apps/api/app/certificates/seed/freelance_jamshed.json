@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "page": {
+    "width_mm": 297,
+    "height_mm": 210.1
+  },
+  "background": {
+    "asset": "jamshed.png"
+  },
+  "layers": [
+    {
+      "id": "number_date",
+      "type": "text",
+      "x_mm": 88.5,
+      "y_mm": 71.9,
+      "w_mm": 120.0,
+      "h_mm": 4.8,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 11.2,
+        "min_size_pt": 11.2,
+        "color": "#000000",
+        "align": "center",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "№ "
+        },
+        {
+          "field": "certificate.number"
+        },
+        {
+          "text": " от "
+        },
+        {
+          "field": "certificate.issued_date",
+          "format": "dd.mm.yyyy"
+        }
+      ]
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "x_mm": 48.5,
+      "y_mm": 88.1,
+      "w_mm": 200.0,
+      "h_mm": 16.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 39.4,
+        "min_size_pt": 23.5,
+        "color": "#000000",
+        "align": "center",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.first_name"
+        },
+        {
+          "text": " "
+        },
+        {
+          "field": "student.last_name"
+        }
+      ]
+    },
+    {
+      "id": "finished",
+      "type": "text",
+      "x_mm": 88.5,
+      "y_mm": 110.8,
+      "w_mm": 120.0,
+      "h_mm": 5.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 12.4,
+        "min_size_pt": 12.4,
+        "color": "#000000",
+        "align": "center",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "gender": {
+            "male": "окончил курс",
+            "female": "окончила курс"
+          }
+        }
+      ]
+    }
+  ]
+}

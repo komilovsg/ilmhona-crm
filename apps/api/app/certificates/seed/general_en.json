@@ -1,0 +1,243 @@
+{
+  "schema": 1,
+  "page": {
+    "width_mm": 297,
+    "height_mm": 210.3
+  },
+  "background": {
+    "asset": "general_en.svg"
+  },
+  "layers": [
+    {
+      "id": "number",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 47.1,
+      "w_mm": 51.5,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "№ "
+        },
+        {
+          "field": "certificate.number"
+        }
+      ]
+    },
+    {
+      "id": "date",
+      "type": "text",
+      "x_mm": 193.6,
+      "y_mm": 47.1,
+      "w_mm": 32.1,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "on "
+        },
+        {
+          "field": "certificate.issued_date",
+          "format": "dd.mm.yyyy"
+        }
+      ]
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "x_mm": 140.6,
+      "y_mm": 81.7,
+      "w_mm": 144.4,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 33.7,
+        "min_size_pt": 20.0,
+        "color": "#1a9eda",
+        "align": "left",
+        "valign": "top",
+        "line_height": 0.9,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.first_name"
+        }
+      ]
+    },
+    {
+      "id": "surname",
+      "type": "text",
+      "x_mm": 140.6,
+      "y_mm": 92.4,
+      "w_mm": 144.4,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 33.7,
+        "min_size_pt": 20.0,
+        "color": "#1a9eda",
+        "align": "left",
+        "valign": "top",
+        "line_height": 0.9,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.last_name"
+        }
+      ]
+    },
+    {
+      "id": "finished",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 70.8,
+      "w_mm": 198.3,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 15.2,
+        "min_size_pt": 15.2,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 2.0,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "is awarded to"
+        }
+      ]
+    },
+    {
+      "id": "course_label",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 130.0,
+      "w_mm": 119.0,
+      "h_mm": 7.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 18.0,
+        "min_size_pt": 18.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "for successful completion"
+        }
+      ]
+    },
+    {
+      "id": "course",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 137.8,
+      "w_mm": 143.7,
+      "h_mm": 10.5,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 24.7,
+        "min_size_pt": 15.0,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "course.name"
+        }
+      ]
+    },
+    {
+      "id": "instructor",
+      "type": "text",
+      "x_mm": 85.8,
+      "y_mm": 179.8,
+      "w_mm": 119.0,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "instructor.full_name"
+        }
+      ]
+    }
+  ]
+}
