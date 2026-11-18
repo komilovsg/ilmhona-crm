@@ -49,9 +49,13 @@ export type SampleKind = "short" | "long" | "female";
 
 export type CertField = { key: string; label: string; group: string; type: "text" | "date" };
 export type CertFont = { family: string; weights: number[]; italic_weights: number[] };
+export type DirectorByLang = Record<"ru" | "en" | "tg", { name: string; title: string }>;
+
 export type CertCatalog = {
   fields: CertField[];
   samples: Record<SampleKind, Record<string, string>>;
+  /** the real director per template language (empty variants are not filled in: use `directorFor`) */
+  director_by_lang?: DirectorByLang;
   fonts: CertFont[];
   date_formats: string[];
   date_format_examples: Record<string, string>;
@@ -98,6 +102,10 @@ export type TemplateDetail = {
 export type CertSettings = {
   director_name: string;
   director_title: string;
+  director_name_en: string;
+  director_title_en: string;
+  director_name_tg: string;
+  director_title_tg: string;
   signature_asset_id: string | null;
   seal_asset_id: string | null;
   version: number;

@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useMemo, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 
+import { withDirector } from "@/lib/cert-editor/director";
 import { fitSteps, pickFit } from "@/lib/cert-editor/fit";
 import { PT_MM } from "@/lib/cert-editor/geometry";
 import { CHIP_CLASS, chipHtml, domToRuns, hasField, resolveRuns, runsToHtml } from "@/lib/cert-editor/runs";
@@ -33,7 +34,7 @@ function TextView({ layer, view, editing, apiRef, onCommit, onExit }: { layer: T
   const inner = useRef<HTMLDivElement>(null);
   const tick = useFontsTick();
   const s = layer.style;
-  const values = view.catalog?.samples[view.sample];
+  const values = useMemo(() => withDirector(view.catalog?.samples[view.sample], view.catalog?.director_by_lang, view.lang), [view.catalog, view.sample, view.lang]);
   const gender = values?.gender === "female" ? "female" : "male";
   const dateFields = useMemo(() => new Set((view.catalog?.fields ?? []).filter((f) => f.type === "date").map((f) => f.key)), [view.catalog]);
   const sampleMode = view.showSample && !!values && !editing;

@@ -37,28 +37,56 @@ export function DirectorTab() {
   );
 }
 
-type Values = { director_name: string; director_title: string };
+type Lang = "ru" | "en" | "tg";
+const LANG_OPTIONS: { key: Lang; label: string }[] = [
+  { key: "ru", label: "Русский" },
+  { key: "en", label: "English" },
+  { key: "tg", label: "Тоҷикӣ" },
+];
+const SUFFIX: Record<Lang, string> = { ru: "", en: "_en", tg: "_tg" };
+const KEYS = ["director_name", "director_title", "director_name_en", "director_title_en", "director_name_tg", "director_title_tg"] as const;
+type Values = Pick<CertSettings, (typeof KEYS)[number]>;
+
+const pick = (r: CertSettings): Values => ({
+  director_name: r.director_name,
+  director_title: r.director_title,
+  director_name_en: r.director_name_en,
+  director_title_en: r.director_title_en,
+  director_name_tg: r.director_name_tg,
+  director_title_tg: r.director_title_tg,
+});
 
 function DirectorForm({ settings }: { settings: CertSettings }) {
   const qc = useQueryClient();
   const canChange = useCanChangeCerts();
-  const [v, setV] = useState<Values>({ director_name: settings.director_name, director_title: settings.director_title });
+  const [lang, setLang] = useState<Lang>("ru");
+  const [v, setV] = useState<Values>(pick(settings));
   const save = useVersionedSave<CertSettings, Values>({
     record: settings,
     values: v,
-    toValues: (r) => ({ director_name: r.director_name, director_title: r.director_title }),
+    toValues: pick,
     apply: setV,
     request: (changed, version) => api<CertSettings>("/api/v1/cert-settings", { method: "PATCH", body: changed, version }),
-    labels: { director_name: "Имя директора", director_title: "Должность" },
+    labels: {
+      director_name: "Имя директора",
+      director_title: "Должность",
+      director_name_en: "Имя директора (EN)",
+      director_title_en: "Должность (EN)",
+      director_name_tg: "Имя директора (TJ)",
+      director_title_tg: "Должность (TJ)",
+    },
     onSaved: (r) => {
       if (r) {
         qc.setQueryData(CERT_SETTINGS_KEY, r);
+        void qc.invalidateQueries({ queryKey: ["cert-fields"] });
         notify("Данные директора сохранены");
       }
     },
   });
-  const fe = useFieldErrors(save.failure, ["director_name", "director_title"]);
-  const dirty = v.director_name !== settings.director_name || v.director_title !== settings.director_title;
+  const fe = useFieldErrors(save.failure, [...KEYS]);
+  const dirty = KEYS.some((k) => v[k] !== settings[k]);
+  const nameKey = `director_name${SUFFIX[lang]}` as (typeof KEYS)[number];
+  const titleKey = `director_title${SUFFIX[lang]}` as (typeof KEYS)[number];
 
   return (
     <section className="space-y-4 rounded-2xl bg-content1 p-4 md:p-5">
@@ -66,10 +94,12 @@ function DirectorForm({ settings }: { settings: CertSettings }) {
         <h2 className="text-lg font-semibold">Директор</h2>
         <p className="text-sm text-default-500">Имя и должность подставляются в сертификат через поля «Директор: имя» и «Директор: должность».</p>
       </div>
+      <Segmented label="Язык" options={LANG_OPTIONS} value={lang} onChange={setLang} />
       <div className="grid gap-3 md:grid-cols-2">
-        <Input isDisabled={!canChange} label="Имя директора" maxLength={120} value={v.director_name} {...fe.field("director_name", (x) => setV({ ...v, director_name: x }))} />
-        <Input isDisabled={!canChange} label="Должность" maxLength={120} value={v.director_title} {...fe.field("director_title", (x) => setV({ ...v, director_title: x }))} />
+        <Input key={nameKey} isDisabled={!canChange} label="Имя директора" maxLength={120} value={v[nameKey]} {...fe.field(nameKey, (x) => setV({ ...v, [nameKey]: x }))} />
+        <Input key={titleKey} isDisabled={!canChange} label="Должность" maxLength={120} value={v[titleKey]} {...fe.field(titleKey, (x) => setV({ ...v, [titleKey]: x }))} />
       </div>
+      <p className="text-sm text-default-500">Используется в шаблонах на этом языке. Пусто — подставится русский вариант.</p>
       {fe.message && (
         <p className="text-sm text-danger" role="alert">
           {fe.message}

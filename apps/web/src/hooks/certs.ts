@@ -124,3 +124,10 @@ export function saveBlob(blob: Blob, name: string) {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+export type GraduateCertTemplates = {
+  default_template_id: string | null;
+  templates: { id: string; name: string; lang: string }[];
+};
+
+export const graduateTemplatesPath = (enrollmentId: string) => `/api/v1/graduates/${enrollmentId}/certificate/templates`;

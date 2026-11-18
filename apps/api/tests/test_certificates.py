@@ -655,3 +655,49 @@ def test_every_seed_layout_renders_with_sample_data(path: Path, sample: str) -> 
     box = PdfReader(io.BytesIO(pdf)).pages[0].mediabox
     assert float(box.width) == pytest.approx(pw * MM, abs=0.5)
     assert float(box.height) == pytest.approx(ph * MM, abs=0.5)
+
+
+async def test_pdf_uses_the_director_of_the_template_language(admin: httpx.AsyncClient) -> None:
+    lay = with_layers(
+        text_layer("n", {"field": "company.director_name"}),
+        text_layer("t", {"field": "company.director_title"}),
+    )
+    await make_template(lay=lay)
+    en = await make_template("english_en", lay, lang="en")
+    _, eid = await graduate(admin)
+    await certify(admin, eid)
+    ru_text = pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
+    assert "Озодамо Фаромуз" in ru_text
+    en_text = pdf_text(
+        (await admin.get(f"{G}/{eid}/certificate/pdf", params={"template_id": en})).content
+    )
+    assert "Ozodamo Faromuz" in en_text and "CEO Ilmhona" in en_text
+
+
+async def test_certificate_templates_list(admin: httpx.AsyncClient, login_as: SignedIn) -> None:
+    ru = await make_template()
+    en = await make_template("english_en", lang="en")
+    await make_template("draft_only_ru")
+    await sql(
+        "DELETE FROM cert_template_version "
+        "WHERE template_id = (SELECT id FROM cert_template WHERE key = 'draft_only_ru')"
+    )
+    _, eid = await graduate(admin)
+    url = f"{G}/{eid}/certificate/templates"
+    r = await admin.get(url)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["default_template_id"] == ru
+    assert {(t["id"], t["lang"]) for t in body["templates"]} == {(ru, "ru"), (en, "en")}
+    gone = f"{G}/00000000-0000-0000-0000-000000000001/certificate/templates"
+    assert (await admin.get(gone)).status_code == 404
+    nobody = await login_as("nobody", await make_role("Без выпускников", {"dashboard": "view"}))
+    assert (await nobody.get(url)).status_code == 403
+    tpl_only = await login_as("tpl", await make_role("Шаблоны", {"cert_templates": "view"}))
+    assert (await tpl_only.get(url)).status_code == 403
+    other = await login_as(
+        "ist", await make_role("Ист", {"graduates": "view"}), branch="Истаравшан"
+    )
+    assert (await other.get(url)).status_code == 404
+    own = await login_as("dsh", await make_role("Душ", {"graduates": "view"}), branch="Душанбе")
+    assert (await own.get(url)).status_code == 200

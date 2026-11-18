@@ -33,6 +33,7 @@ from app.certificates.fields import (
     FIELDS,
     SAMPLE_KINDS,
     apply_settings,
+    director_for,
     format_date,
     load_settings,
     sample_context,
@@ -393,7 +394,7 @@ async def draft_preview(
     assert sample in SAMPLE_KINDS
     template = await get_template(db, template_id)
     layout = await check_layout(db, body.layout)
-    ctx = apply_settings(sample_context(sample), await load_settings(db))
+    ctx = apply_settings(sample_context(sample), await load_settings(db), template.lang)
     refs = [*layout.asset_refs(), *[r for r in (ctx.signature_ref, ctx.seal_ref) if r]]
     pdf = await render_pdf(layout, ctx, await load_assets(db, refs))
     return Response(
@@ -470,8 +471,9 @@ def _sample_values(kind: str) -> dict[str, str]:
 
 
 @router.get("/cert-fields")
-async def cert_fields(p: View) -> dict[str, Any]:
+async def cert_fields(p: View, db: DB) -> dict[str, Any]:
     samples = {kind: _sample_values(kind) for kind in SAMPLE_KINDS}
+    director = await load_settings(db)
     return {
         "fields": [
             {
@@ -484,6 +486,10 @@ async def cert_fields(p: View) -> dict[str, Any]:
             for key, label in FIELDS.items()
         ],
         "samples": samples,
+        "director_by_lang": {
+            lang: dict(zip(("name", "title"), director_for(director, lang), strict=True))
+            for lang in ("ru", "en", "tg")
+        },
         "fonts": [
             {
                 "family": family,

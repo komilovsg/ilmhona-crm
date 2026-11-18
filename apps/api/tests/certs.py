@@ -101,7 +101,9 @@ def changed(base: dict[str, Any], **over: Any) -> dict[str, Any]:
     return out
 
 
-async def make_template(key: str = GENERAL, lay: dict[str, Any] | None = None) -> str:
+async def make_template(
+    key: str = GENERAL, lay: dict[str, Any] | None = None, lang: str = "ru"
+) -> str:
     """A template with one published version (asset refs in `lay` are made real here)."""
     lay = deepcopy(lay if lay is not None else layout())
     async with sessionmaker() as db:
@@ -113,7 +115,7 @@ async def make_template(key: str = GENERAL, lay: dict[str, Any] | None = None) -
             db.add(asset)
             await db.flush()
             lay["background"]["asset"] = str(asset.id)
-        t = CertTemplate(key=key, name=f"Template {key}", draft=lay)
+        t = CertTemplate(key=key, name=f"Template {key}", lang=lang, draft=lay)
         db.add(t)
         await db.flush()
         db.add(CertTemplateVersion(template_id=t.id, version_no=1, layout=lay))

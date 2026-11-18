@@ -136,7 +136,7 @@ export function Constructor({ initial, onReplace }: { initial: TemplateDetail; o
   const fitMode = zoom === null;
   const scale = fitMode ? fitScale(state.layout.page, Math.max(300, avail - 64)) : (zoom / 100) * PX_PER_MM;
 
-  const view: View = useMemo(() => ({ scale, catalog, sample, showSample, label: labelOf, settings }), [scale, catalog, sample, showSample, labelOf, settings]);
+  const view: View = useMemo(() => ({ scale, catalog, sample, lang, showSample, label: labelOf, settings }), [scale, catalog, sample, lang, showSample, labelOf, settings]);
 
   // ---- leaving
   useEffect(() => {

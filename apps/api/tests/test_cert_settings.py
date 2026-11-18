@@ -378,3 +378,70 @@ def test_covered_seed_layouts_draw_the_director_over_a_cover() -> None:
     assert set(covered) == {"proskills", "proskills_islom", "proskills_umed", "itp", "kids_scratch"}
     for ids in covered.values():
         assert ids[:5] == ["dir_cover", "dir_seal", "dir_signature", "dir_name", "dir_title"]
+
+
+# ---- director per template language ----------------------------------------------------------
+
+
+def director_layout_text() -> dict[str, Any]:
+    return layout(
+        None,
+        text_layer("dname", {"field": "company.director_name"}, size_pt=12),
+        text_layer("dtitle", {"field": "company.director_title"}, size_pt=12),
+    )
+
+
+async def test_director_language_variant_and_russian_fallback() -> None:
+    async with sessionmaker() as db:
+        row = await load_settings(db)
+        assert (row.director_name_en, row.director_title_en) == ("Ozodamo Faromuz", "CEO Ilmhona")
+        assert (row.director_name_tg, row.director_title_tg) == ("", "")
+        en = apply_settings(sample_context("short"), row, "en")
+        assert en.values["company.director_name"] == "Ozodamo Faromuz"
+        assert en.values["company.director_title"] == "CEO Ilmhona"
+        tg = apply_settings(sample_context("short"), row, "tg")  # empty: Russian
+        assert tg.values["company.director_name"] == "Озодамо Фаромуз"
+        ru = apply_settings(sample_context("short"), row)
+        assert ru.values["company.director_title"] == "Директор ОО Илмхона"
+        row.director_name_en = ""  # empty English: Russian
+        empty = apply_settings(sample_context("short"), row, "en")
+        assert empty.values["company.director_name"] == "Озодамо Фаромуз"
+        assert empty.values["company.director_title"] == "CEO Ilmhona"
+        await db.rollback()
+
+
+async def test_patch_new_language_fields_and_audit(admin: httpx.AsyncClient) -> None:
+    r = await admin.patch(
+        URL, json={"director_name_tg": "  Озодамо ", "director_title_en": "Director"}
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert (body["director_name_tg"], body["director_title_en"]) == ("Озодамо", "Director")
+    assert body["director_name_en"] == "Ozodamo Faromuz"
+    row = (
+        await sql(
+            "SELECT action, entity, diff, label FROM audit_log WHERE entity = 'cert_settings'"
+        )
+    )[0]
+    assert set(row[2]) == {"director_name_tg", "director_title_en"}
+    text = sentence(Entry("Админ", row[0], row[1], row[3], row[2]))
+    assert "директор (TJ)" in text and "должность (EN) CEO Ilmhona → Director" in text
+    assert (await admin.patch(URL, json={"director_name_en": "x" * 121})).status_code == 422
+    fields = (await admin.get("/api/v1/cert-fields")).json()["director_by_lang"]
+    assert fields["en"]["title"] == "Director" and fields["tg"]["name"] == "Озодамо"
+    assert fields["tg"]["title"] == "Директор ОО Илмхона"
+
+
+async def test_draft_preview_of_an_english_template_uses_the_english_director(
+    admin: httpx.AsyncClient,
+) -> None:
+    r = await admin.post("/api/v1/cert-templates", json={"name": "English", "lang": "en"})
+    assert r.status_code == 201, r.text
+    url = f"/api/v1/cert-templates/{r.json()['id']}"
+    out = await admin.post(f"{url}/draft-preview", json={"layout": director_layout_text()})
+    assert out.status_code == 200
+    text = pdf_text(out.content)
+    assert "Ozodamo Faromuz" in text and "CEO Ilmhona" in text
+    await sql("UPDATE cert_settings SET director_name_en = ''")
+    out = await admin.post(f"{url}/draft-preview", json={"layout": director_layout_text()})
+    assert "Озодамо Фаромуз" in pdf_text(out.content)

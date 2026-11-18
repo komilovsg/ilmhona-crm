@@ -43,6 +43,9 @@ from app.models import (
     CertTemplate,
     CertTemplateRule,
     CertTemplateVersion,
+    Cohort,
+    Course,
+    Enrollment,
 )
 
 router = APIRouter(
@@ -105,6 +108,52 @@ def file_name(number: str, student: str) -> str:
     return f"{re.sub(r'[^A-Za-z0-9-]', '', number)}_{slug}.pdf"
 
 
+@router.get("/graduates/{enrollment_id}/certificate/templates")
+async def certificate_templates(
+    enrollment_id: uuid.UUID, p: GraduatesView, db: DB
+) -> dict[str, Any]:
+    """Templates a graduate's PDF can be rendered with: active ones that have a published
+    version. `default_template_id` is the one the PDF uses when no template is chosen."""
+    row = (
+        await db.execute(
+            select(Cohort, Course)
+            .join(Enrollment, Enrollment.cohort_id == Cohort.id)
+            .join(Course, Course.id == Cohort.course_id)
+            .where(Enrollment.id == enrollment_id)
+        )
+    ).first()
+    if row is None:
+        raise DomainError(NOT_FOUND)
+    cohort, course = row
+    p.check_scope(cohort.branch_id)
+    templates = (
+        (
+            await db.execute(
+                select(CertTemplate)
+                .where(
+                    CertTemplate.status == "active",
+                    select(CertTemplateVersion.id)
+                    .where(CertTemplateVersion.template_id == CertTemplate.id)
+                    .exists(),
+                )
+                .order_by(CertTemplate.lang, CertTemplate.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    try:
+        default: uuid.UUID | None = (await pick_template(db, course.id, cohort.instructor_id)).id
+    except DomainError:
+        default = None
+    if default not in {t.id for t in templates}:
+        default = templates[0].id if templates else None
+    return {
+        "default_template_id": default,
+        "templates": [{"id": t.id, "name": t.name, "lang": t.lang} for t in templates],
+    }
+
+
 @router.get("/graduates/{enrollment_id}/certificate/pdf")
 async def certificate_pdf(
     enrollment_id: uuid.UUID, p: GraduatesView, db: DB, template_id: uuid.UUID | None = None
@@ -119,6 +168,7 @@ async def certificate_pdf(
             raise DomainError(NOT_FOUND)
     else:
         template = await pick_template(db, course.id, instructor.id if instructor else None)
+    apply_settings(ctx, await load_settings(db), template.lang)
     layout = await latest_layout(db, template)
     assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
@@ -152,7 +202,7 @@ async def preview(
     if template is None:
         raise DomainError(NOT_FOUND)
     layout = await latest_layout(db, template)
-    ctx = apply_settings(sample_context(sample), await load_settings(db))
+    ctx = apply_settings(sample_context(sample), await load_settings(db), template.lang)
     assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
     return Response(
@@ -174,6 +224,10 @@ class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     director_name: Text120 | None = None
     director_title: Title120 | None = None
+    director_name_en: Text120 | None = None
+    director_title_en: Text120 | None = None
+    director_name_tg: Text120 | None = None
+    director_title_tg: Text120 | None = None
 
 
 async def _settings_out(db: AsyncSession, row: CertSettings) -> dict[str, Any]:
@@ -183,6 +237,10 @@ async def _settings_out(db: AsyncSession, row: CertSettings) -> dict[str, Any]:
     return {
         "director_name": row.director_name,
         "director_title": row.director_title,
+        "director_name_en": row.director_name_en,
+        "director_title_en": row.director_title_en,
+        "director_name_tg": row.director_name_tg,
+        "director_title_tg": row.director_title_tg,
         "signature_asset_id": row.director_signature_asset_id,
         "seal_asset_id": row.seal_asset_id,
         "version": row.version,

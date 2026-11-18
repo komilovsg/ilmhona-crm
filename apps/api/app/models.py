@@ -551,6 +551,10 @@ class CertSettings(Versioned, Base):
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
     director_name: Mapped[str] = mapped_column(Text, server_default=text("''"))
     director_title: Mapped[str] = mapped_column(Text)
+    director_name_en: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    director_title_en: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    director_name_tg: Mapped[str] = mapped_column(Text, server_default=text("''"))
+    director_title_tg: Mapped[str] = mapped_column(Text, server_default=text("''"))
     director_signature_asset_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
     )

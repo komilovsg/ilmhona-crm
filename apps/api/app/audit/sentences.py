@@ -440,7 +440,14 @@ def sentence(
         )
     if a == "cert_settings.update":
         parts = []
-        for key, word in (("director_name", "директор"), ("director_title", "должность")):
+        for key, word in (
+            ("director_name", "директор"),
+            ("director_title", "должность"),
+            ("director_name_en", "директор (EN)"),
+            ("director_title_en", "должность (EN)"),
+            ("director_name_tg", "директор (TJ)"),
+            ("director_title_tg", "должность (TJ)"),
+        ):
             old, new = _pair(e.diff.get(key))
             if key in e.diff:
                 parts.append(f"{word} {old or '—'} → {new or '—'}")

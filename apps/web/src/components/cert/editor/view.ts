@@ -5,6 +5,8 @@ export type View = {
   scale: number;
   catalog: CertCatalog | undefined;
   sample: SampleKind;
+  /** language of the template: the director sample follows it */
+  lang: string;
   showSample: boolean;
   label: (field: string) => string;
   settings: CertSettings | undefined;

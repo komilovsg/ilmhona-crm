@@ -76,10 +76,20 @@ async def load_settings(db: AsyncSession) -> CertSettings:
     return (await db.execute(select(CertSettings).where(CertSettings.id == 1))).scalar_one()
 
 
-def apply_settings(ctx: Context, row: CertSettings) -> Context:
-    """Put the director of the settings row into a context."""
-    ctx.values["company.director_name"] = row.director_name
-    ctx.values["company.director_title"] = row.director_title
+def director_for(row: CertSettings, lang: str) -> tuple[str, str]:
+    """(name, title) of the director in a template language; an empty variant is the Russian one."""
+    name, title = row.director_name, row.director_title
+    if lang in ("en", "tg"):
+        name = getattr(row, f"director_name_{lang}") or name
+        title = getattr(row, f"director_title_{lang}") or title
+    return name, title
+
+
+def apply_settings(ctx: Context, row: CertSettings, lang: str = "ru") -> Context:
+    """Put the director of the settings row into a context, in the template's language."""
+    ctx.values["company.director_name"], ctx.values["company.director_title"] = director_for(
+        row, lang
+    )
     ctx.signature_ref = str(row.director_signature_asset_id or "") or None
     ctx.seal_ref = str(row.seal_asset_id or "") or None
     return ctx
@@ -120,7 +130,7 @@ SAMPLE_KINDS = ("short", "long", "female")
 
 
 async def enrollment_context(
-    db: AsyncSession, enrollment_id: Any
+    db: AsyncSession, enrollment_id: Any, lang: str = "ru"
 ) -> tuple[Context, Cohort, Course, AppUser | None, Enrollment]:
     """Everything a certificate shows, from one enrollment (enrollment -> student, cohort ->
     course, branch, instructor). The total comes from `app.metrics`, never recomputed."""
@@ -158,5 +168,5 @@ async def enrollment_context(
     if issued is not None:
         values["certificate.issued_date"] = issued.astimezone(TZ).date()
     ctx = Context(values, student.gender, enrollment.certificate_no or "")
-    apply_settings(ctx, await load_settings(db))
+    apply_settings(ctx, await load_settings(db), lang)
     return ctx, cohort, course, instructor, enrollment
