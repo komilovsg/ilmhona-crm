@@ -17,6 +17,8 @@ import { ReviewChip } from "@/components/ReviewChip";
 import { RowMenu } from "@/components/RowMenu";
 import { Bone, DetailSkeleton } from "@/components/Skeletons";
 import { CohortStatus, PersonStatus } from "@/components/StatusChip";
+import { EnrollmentCertificate } from "@/components/certs/EnrollmentCertificate";
+import { useSeesCertRegistry } from "@/hooks/certs";
 import { ExportButton } from "@/components/ExportButton";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { useCanPay, useSeesPayments } from "@/hooks/money";
@@ -60,6 +62,7 @@ export default function StudentPage() {
   const canChange = useCanChange("students");
   const seesPayments = useSeesPayments();
   const canPay = useCanPay();
+  const seesCerts = useSeesCertRegistry();
   const [paying, setPaying] = useState<{ enrollmentId: string | null; month: number | null } | null>(null);
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -185,6 +188,7 @@ export default function StudentPage() {
                   <th className="px-4 py-3 font-medium">Поток</th>
                   <th className="px-4 py-3 font-medium">Зачисление</th>
                   {seesPayments && <th className="px-4 py-3 font-medium">Месяцы</th>}
+                  {seesCerts && <th className="px-4 py-3 font-medium">Сертификат</th>}
                 </tr>
               </thead>
               <tbody>
@@ -217,6 +221,11 @@ export default function StudentPage() {
                           legend
                           onPay={canPay && e.status === "активный" ? (month) => setPaying({ enrollmentId: e.id, month }) : undefined}
                         />
+                      </td>
+                    )}
+                    {seesCerts && (
+                      <td className="px-4 py-3">
+                        <EnrollmentCertificate cohortId={e.cohort_id} enrollmentId={e.id} status={e.status} />
                       </td>
                     )}
                   </tr>
@@ -252,6 +261,12 @@ export default function StudentPage() {
                       legend
                       onPay={canPay && e.status === "активный" ? (month) => setPaying({ enrollmentId: e.id, month }) : undefined}
                     />
+                  </div>
+                )}
+                {seesCerts && (
+                  <div className="mt-2 text-sm">
+                    <span className="mr-2 text-xs text-default-500">Сертификат</span>
+                    <EnrollmentCertificate cohortId={e.cohort_id} enrollmentId={e.id} status={e.status} />
                   </div>
                 )}
                 {canPay && e.status === "активный" && (
