@@ -98,6 +98,7 @@ def me_out(p: Principal, branch_name: str | None) -> dict[str, Any]:
         "email": u.email,
         "branch": {"id": u.branch_id, "name": branch_name} if u.branch_id else None,
         "role": {"id": p.role.id, "name": p.role.name, "code": p.role.code},
+        "teaches": u.teaches,
         "must_change_password": u.must_change_password,
         "permissions": p.permissions,
     }

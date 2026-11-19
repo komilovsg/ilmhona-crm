@@ -68,6 +68,7 @@ class UserCreate(Strict):
     email: Text | None = None
     branch_id: uuid.UUID | None = None
     role_id: uuid.UUID
+    teaches: bool = False
 
 
 class UserUpdate(Strict):
@@ -80,6 +81,7 @@ class UserUpdate(Strict):
     email: Text | None = None
     branch_id: uuid.UUID | None = None
     role_id: uuid.UUID | None = None
+    teaches: bool | None = None
 
 
 def user_out(u: AppUser, role: Role, branch_name: str | None) -> dict[str, Any]:
@@ -94,6 +96,7 @@ def user_out(u: AppUser, role: Role, branch_name: str | None) -> dict[str, Any]:
         "branch_name": branch_name,
         "role_id": u.role_id,
         "role_name": role.name,
+        "teaches": u.teaches,
         "is_active": u.is_active,
         "must_change_password": u.must_change_password,
         "temp_password_expires_at": u.temp_password_expires_at,
@@ -109,6 +112,7 @@ def _snapshot(u: AppUser) -> dict[str, Any]:
         "email": u.email,
         "branch_id": u.branch_id,
         "role_id": u.role_id,
+        "teaches": u.teaches,
         "is_active": u.is_active,
     }
 
@@ -274,6 +278,7 @@ async def create_user(body: UserCreate, p: Change, db: DB) -> dict[str, Any]:
         email=body.email,
         branch_id=_branch_for_write(p, body.branch_id),
         role_id=role.id,
+        teaches=body.teaches,
         password_hash=hash_password(password),
         must_change_password=True,
         temp_password_expires_at=datetime.now(UTC) + timedelta(days=settings.temp_password_days),
@@ -394,6 +399,8 @@ async def update_user(
         u.email = body.email
     if "branch_id" in sent:
         u.branch_id = _branch_for_write(p, body.branch_id)
+    if "teaches" in sent and body.teaches is not None:
+        u.teaches = body.teaches
     if "role_id" in sent and body.role_id:
         if body.role_id != u.role_id:
             await _ensure_not_last_superadmin(db, u)
