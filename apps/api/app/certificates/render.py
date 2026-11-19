@@ -196,9 +196,8 @@ def _text_html(layer: TextLayer, ctx: Context) -> str:
 
 
 def _qr_url(ctx: Context) -> str:
-    # The code is the certificate number for now; the registry stage replaces it with a random
-    # verify code stored per certificate.
-    base = settings.cert_verify_base_url.rstrip("/")
+    # `verify_code` is the random code of the registry when a verify domain is set, else the number
+    base = (ctx.verify_base or settings.cert_verify_base_url).rstrip("/")
     return f"{base}/v/{ctx.verify_code}"
 
 
