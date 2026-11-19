@@ -10,9 +10,9 @@ Pattern copied from my-hrm, without RLS, RabbitMQ and an admin app.
 
 | Part | Where | Name / id |
 |---|---|---|
-| Database | Neon (Vercel marketplace), aws-eu-central-1, Postgres 18 | project `ilmhona-db` (`icy-waterfall-82517700`), db `neondb` |
-| API | Render free, Frankfurt, Docker; own workspace `ilmhona-crm` (leader.pro11@gmail.com) | `ilmhona-api` (`srv-dbd46dcipgvc73e2s51g`), `render.yaml` |
-| Web | Vercel, root `apps/web`, production branch `main` | `ilmhona-crm` (`prj_91vTa2EjLoxLAwU1v8sdnLk7Amqg`) |
+| Database | Neon (Vercel marketplace), aws-eu-central-1, Postgres 18 | project `ilmhona-db`, db `neondb` |
+| API | Render free, Frankfurt, Docker; own workspace `ilmhona-crm` | `ilmhona-api`, `render.yaml` |
+| Web | Vercel, root `apps/web`, production branch `main` | `ilmhona-crm` |
 | Backups | private repo `komilovsg/ilmhona-backups` | encrypted dumps |
 
 ## What runs when

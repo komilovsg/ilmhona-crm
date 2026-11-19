@@ -13,8 +13,6 @@ next-env.d.ts
 apps/web/AGENTS.md
 *.tsbuildinfo
 .playwright-mcp/
-.claude/worktrees/
-.claude/settings.local.json
 .vercel/
 apps/api/var/
 # old-system exports and anything with real people's data
