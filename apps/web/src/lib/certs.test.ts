@@ -5,7 +5,6 @@ import { PDFDocument } from "pdf-lib";
 import { unzipSync } from "fflate";
 
 import {
-  canIssueCohort,
   canIssueToNonGraduate,
   fetchAll,
   issueLabel,
@@ -110,9 +109,6 @@ test("zip holds each file under its name", async () => {
 });
 
 test("permission gating of the issue buttons", () => {
-  assert.equal(canIssueCohort({ certificates: "change" }, 2), true);
-  assert.equal(canIssueCohort({ certificates: "change" }, 0), false);
-  assert.equal(canIssueCohort({ certificates: "view" }, 2), false);
   assert.equal(canIssueToNonGraduate({ cert_templates: "change" }, true), true);
   assert.equal(canIssueToNonGraduate({ cert_templates: "change" }, false), false);
   assert.equal(canIssueToNonGraduate({ cert_templates: "view" }, true), false);

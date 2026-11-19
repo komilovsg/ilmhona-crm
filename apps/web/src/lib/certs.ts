@@ -75,11 +75,6 @@ export function canIssueToNonGraduate(permissions: Permissions | undefined, allo
   return allowNonGraduate && can(permissions, "cert_templates", "change");
 }
 
-/** The cohort button: needs the right to change certificates and at least one graduate. */
-export function canIssueCohort(permissions: Permissions | undefined, graduates: number): boolean {
-  return can(permissions, "certificates", "change") && graduates > 0;
-}
-
 /** A free file name inside one archive: `a.pdf`, `a (2).pdf`, ... */
 export function uniqueName(name: string, used: Set<string>): string {
   let out = name;

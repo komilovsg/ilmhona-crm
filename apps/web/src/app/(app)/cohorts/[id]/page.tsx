@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 
 
@@ -19,12 +20,13 @@ import { Segmented } from "@/components/Segmented";
 import { DetailSkeleton, ListSkeleton } from "@/components/Skeletons";
 import { CohortStatus } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
+import { useCanIssueCerts } from "@/hooks/certs";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { api } from "@/lib/api";
 import { daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
-import type { CohortRow } from "@/lib/types";
+import type { CohortRow, EnrollmentRow } from "@/lib/types";
 import { lazyModal } from "@/lib/lazy-modal";
 
 // Tabs other than the first load on demand; the skeleton keeps the height while the chunk arrives.
@@ -33,6 +35,7 @@ const LessonsTab = dynamic(() => import("./LessonsTab").then((m) => m.LessonsTab
 const AttendanceTab = dynamic(() => import("./AttendanceTab").then((m) => m.AttendanceTab), { loading: tabLoading });
 const AnalyticsTab = dynamic(() => import("./AnalyticsTab").then((m) => m.AnalyticsTab), { loading: tabLoading });
 const GradesTab = dynamic(() => import("./GradesTab").then((m) => m.GradesTab), { loading: tabLoading });
+const IssueCertificatesModal = lazyModal(() => import("@/components/certs/IssueCertificatesModal").then((m) => m.IssueCertificatesModal));
 const CohortFormModal = lazyModal(() => import("../CohortFormModal").then((m) => m.CohortFormModal));
 
 type Tab = "students" | "lessons" | "attendance" | "grades" | "analytics";
@@ -96,6 +99,14 @@ export default function CohortPage() {
     if (next) setTab(next);
   }
   const [editing, setEditing] = useState(false);
+  const [issuingCerts, setIssuingCerts] = useState(false);
+  const canIssue = useCanIssueCerts();
+  const enrollments = useQuery({
+    queryKey: ["enrollments", id],
+    queryFn: () => api<EnrollmentRow[]>(`/api/v1/cohorts/${id}/enrollments`),
+    enabled: canIssue,
+  });
+  const graduates = enrollments.data?.filter((e) => e.status === "выпускник").length ?? 0;
   const [action, setAction] = useState<Action | null>(null);
 
   const cohort = useQuery({ queryKey: ["cohort", id], queryFn: () => api<CohortRow>(`/api/v1/cohorts/${id}`) });
@@ -177,6 +188,19 @@ export default function CohortPage() {
           </div>
           <p className="text-default-600">{c.course_name}</p>
         </div>
+        {canIssue && (
+          <Button
+            className="shrink-0"
+            color="primary"
+            isDisabled={graduates === 0}
+            startContent={<Icon name="certificate" size={18} />}
+            title={graduates === 0 ? "В потоке нет выпускников" : undefined}
+            variant="flat"
+            onPress={() => setIssuingCerts(true)}
+          >
+            Выдать сертификаты
+          </Button>
+        )}
         {menu.length > 0 && (
           <RowMenu
             actions={menu}
@@ -236,6 +260,7 @@ export default function CohortPage() {
       {tab === "grades" && <GradesTab canMark={canMark} cohortId={c.id} />}
       {tab === "analytics" && seesAttendance && <AnalyticsTab cohortId={c.id} />}
 
+      {issuingCerts && <IssueCertificatesModal cohortId={c.id} onClose={() => setIssuingCerts(false)} />}
       {editing && <CohortFormModal cohort={c} onClose={() => setEditing(false)} />}
       {action && (
         <ConfirmModal

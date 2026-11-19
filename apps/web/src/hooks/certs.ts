@@ -2,6 +2,10 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
+import { isApiError } from "@/lib/api";
+import type { NotReadyItem } from "@/lib/certs";
+import { pushToast } from "@/lib/toast-store";
+
 import { api } from "@/lib/api";
 import type { CertCatalog, CertSettings, TemplateDetail, TemplateListItem, TemplateRule } from "@/lib/cert-editor/types";
 import { can } from "@/lib/permissions";
@@ -30,8 +34,8 @@ export function useCertCatalog() {
   return useQuery({ queryKey: ["cert-fields"], queryFn: () => api<CertCatalog>("/api/v1/cert-fields"), staleTime: Infinity });
 }
 
-export function useCertSettings() {
-  return useQuery({ queryKey: CERT_SETTINGS_KEY, queryFn: () => api<CertSettings>("/api/v1/cert-settings") });
+export function useCertSettings({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: CERT_SETTINGS_KEY, queryFn: () => api<CertSettings>("/api/v1/cert-settings"), enabled });
 }
 
 export function useCertRules() {
@@ -45,6 +49,60 @@ export function useCanChangeCerts(): boolean {
   const { data: me } = useMe();
 
   return !!me && can(me.permissions, "cert_templates", "change");
+}
+
+export function useSeesCertRegistry(): boolean {
+  const { data: me } = useMe();
+
+  return !!me && can(me.permissions, "certificates", "view");
+}
+
+export function useCanIssueCerts(): boolean {
+  const { data: me } = useMe();
+
+  return !!me && can(me.permissions, "certificates", "change");
+}
+
+const AFTER_ISSUE = ["certificates", "cert-check", "graduates", "graduate-courses", "enrollments", "student"];
+
+/** Issue, reissue and revoke change the registry, the graduates list and the student cards. */
+export function useRefreshIssued() {
+  const qc = useQueryClient();
+
+  return () => qc.invalidateQueries({ predicate: (q) => AFTER_ISSUE.includes(String(q.queryKey[0])) });
+}
+
+/** The problems of a 422 «cert_not_ready», one line per student; null for any other error. */
+export function notReadyItems(error: unknown): NotReadyItem[] | null {
+  if (!isApiError(error) || error.code !== "cert_not_ready") return null;
+  const items = error.params?.items;
+
+  return Array.isArray(items) ? (items as NotReadyItem[]) : null;
+}
+
+export function notReadyText(items: NotReadyItem[]): string {
+  return items.map((i) => `${i.student_name}: ${i.text}`).join(" ");
+}
+
+/** A single problem is shown as is (a toast); the batch dialog lists them itself. */
+export function toastNotReady(error: unknown): boolean {
+  const items = notReadyItems(error);
+
+  if (!items) return false;
+  pushToast("error", notReadyText(items));
+
+  return true;
+}
+
+/** One certificate PDF as bytes plus the file name the API chose (Content-Disposition). */
+export async function fetchCertPdf(id: string): Promise<{ data: Uint8Array; name: string | null }> {
+  const { blob, name } = await getFile(`/api/v1/certificates/${id}/pdf`);
+
+  return { data: new Uint8Array(await blob.arrayBuffer()), name };
+}
+
+export function saveBytes(data: Uint8Array, name: string, type: string) {
+  saveBlob(new Blob([data as BlobPart], { type }), name);
 }
 
 export function useRefreshCerts() {
