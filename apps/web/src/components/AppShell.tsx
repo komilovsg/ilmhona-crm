@@ -305,7 +305,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const items = visibleNav(me.permissions, me.role.code);
+  const items = visibleNav(me.permissions, me.role.code, me.teaches);
   const badges: Badges = { "/users": requests?.total ?? 0 };
   const { main, more } = splitNav(items, me.role.code);
 
@@ -328,7 +328,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto min-w-0 max-w-6xl pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
-        {canOpen(me.permissions, pathname, me.role.code) ? (
+        {canOpen(me.permissions, pathname, me.role.code, me.teaches) ? (
           <div key={pathname} className="page-in">
             {children}
           </div>

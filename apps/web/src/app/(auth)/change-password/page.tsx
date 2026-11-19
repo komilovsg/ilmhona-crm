@@ -37,7 +37,7 @@ export default function ChangePasswordPage() {
       });
 
       queryClient.setQueryData(ME_KEY, updated);
-      router.replace(homePath(updated.permissions));
+      router.replace(homePath(updated.permissions, updated.role.code, updated.teaches));
     } catch (e) {
       setError(messageOf(e));
       setBusy(false);

@@ -9,6 +9,8 @@ export type Me = {
   email: string | null;
   branch: { id: string; name: string } | null;
   role: { id: string; name: string; code: string | null };
+  /** «Ведёт занятия»: may be a cohort's instructor, whatever the role. */
+  teaches: boolean;
   must_change_password: boolean;
   permissions: Permissions;
 };
@@ -26,6 +28,7 @@ export type UserRow = {
   branch_name: string | null;
   role_id: string;
   role_name: string;
+  teaches: boolean;
   is_active: boolean;
   must_change_password: boolean;
   temp_password_expires_at: string | null;
