@@ -13,7 +13,7 @@ import { ErrorState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { Segmented } from "@/components/Segmented";
 import { Bone } from "@/components/Skeletons";
-import { notReadyItems, useRefreshIssued, useTemplates } from "@/hooks/certs";
+import { getFile, notReadyItems, toastNotReady, useRefreshIssued, useTemplates } from "@/hooks/certs";
 import { useMe } from "@/hooks/queries";
 import { api, isApiError } from "@/lib/api";
 import { issueLabel, selectable, type CertLang, type CheckResult, type IssuedCert, type NotReadyItem } from "@/lib/certs";
@@ -85,6 +85,22 @@ export function IssueCertificatesModal({ cohortId, onClose }: { cohortId: string
       else notifyError(e);
     },
   });
+
+  // the preview opens in a new tab; the tab is opened first so the browser does not block it
+  async function preview(enrollmentId: string) {
+    const tab = window.open("", "_blank");
+
+    try {
+      const { blob } = await getFile(
+        `/api/v1/cohorts/${cohortId}/enrollments/${enrollmentId}/certificate/preview?template_id=${data!.template_id}&lang=${data!.lang}`,
+      );
+
+      if (tab) tab.location.href = URL.createObjectURL(blob);
+    } catch (e) {
+      tab?.close();
+      if (!toastNotReady(e)) notifyError(e);
+    }
+  }
 
   const issuedIds = data?.items.filter((i) => i.certificate_id).map((i) => i.certificate_id as string) ?? [];
   const toggle = (id: string, on: boolean) => {
@@ -174,7 +190,9 @@ export function IssueCertificatesModal({ cohortId, onClose }: { cohortId: string
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-x-3">
-                      <span className="font-medium">{i.student_name}</span>
+                      <button className="text-left font-medium hover:text-brand-text" title="Предпросмотр сертификата" type="button" onClick={() => void preview(i.enrollment_id)}>
+                        {i.student_name}
+                      </button>
                       <span className="text-sm tabular-nums text-default-500">{i.score !== null ? `${i.score} б.` : ""}</span>
                     </div>
                     {i.status === "ready" && <span className="text-sm text-success">Готово</span>}

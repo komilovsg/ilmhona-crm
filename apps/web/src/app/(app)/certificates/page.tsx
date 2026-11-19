@@ -73,16 +73,6 @@ export default function CertificatesPage() {
   const [f, setF] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [pending, setPending] = useState<Pending | null>(null);
-  // the API returns the issuer's id; names come from the users list for those who may read it
-  const seesUsers = !!me && can(me.permissions, "users", "view");
-  const users = useQuery({
-    queryKey: ["users", "names"],
-    queryFn: () => api<Paged<{ id: string; full_name: string }>>("/api/v1/users", { params: { page_size: "100" } }),
-    enabled: seesUsers,
-    staleTime: 5 * 60_000,
-  });
-  const names = new Map(users.data?.items.map((u) => [u.id, u.full_name]));
-  const byName = (id: string | null) => (id && names.get(id)) || "—";
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
   const seesTemplates = !!me && can(me.permissions, "cert_templates", "view");
   const set = (next: Filters) => {
@@ -198,7 +188,7 @@ export default function CertificatesPage() {
                         <StatusBadge status={r.status} />
                         {r.revoke_reason && <div className="mt-1 max-w-48 text-xs text-default-500">{r.revoke_reason}</div>}
                       </td>
-                      <td className="px-4 py-3">{byName(r.issued_by)}</td>
+                      <td className="px-4 py-3">{r.issued_by_name ?? "—"}</td>
                       <td className="px-2 py-3">{menu(r)}</td>
                     </tr>
                   ))}
@@ -227,7 +217,7 @@ export default function CertificatesPage() {
                       ["Филиал", r.branch_name],
                       ["Инструктор", r.instructor_name ?? "—"],
                       ["Шаблон", r.template_name],
-                      ["Выдал", byName(r.issued_by)],
+                      ["Выдал", r.issued_by_name ?? "—"],
                       ...(r.revoke_reason ? [["Причина", r.revoke_reason]] : []),
                     ].map(([k, v]) => (
                       <div key={k}>

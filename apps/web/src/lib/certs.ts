@@ -52,6 +52,7 @@ export type CertRow = {
   revoke_reason: string | null;
   issued_at: string;
   issued_by: string | null;
+  issued_by_name: string | null;
 };
 
 export type NotReadyItem = { enrollment_id: string; student_name: string; reason: string; text: string };

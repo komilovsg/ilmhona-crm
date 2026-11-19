@@ -105,6 +105,8 @@ export type GraduateRow = {
   score_legacy: boolean;
   paid: string | null;
   certificate_no: string | null;
+  /** the valid certificate of the registry, null when there is none */
+  certificate_id: string | null;
   employed: boolean;
   organization: string | null;
 };
