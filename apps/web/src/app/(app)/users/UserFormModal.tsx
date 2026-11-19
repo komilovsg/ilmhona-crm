@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
+import { Checkbox } from "@heroui/checkbox";
 import { Input } from "@heroui/input";
 
 import { AppModal } from "@/components/AppModal";
@@ -40,6 +41,7 @@ export function UserFormModal({
   // A branch-bound manager works inside their own branch only.
   const [branchId, setBranchId] = useState<string | null>(user ? user.branch_id : (me?.branch?.id ?? null));
   const [roleId, setRoleId] = useState<string | null>(user?.role_id ?? null);
+  const [teaches, setTeaches] = useState(user?.teaches ?? false);
   const bound = !!me?.branch;
   const isSuper = me?.role.code === "superadmin";
 
@@ -50,6 +52,7 @@ export function UserFormModal({
     email: email.trim() || null,
     branch_id: branchId,
     role_id: roleId,
+    teaches,
   };
   const refreshLists = () => {
     void queryClient.invalidateQueries({ queryKey: ["users"] });
@@ -73,6 +76,7 @@ export function UserFormModal({
       email: u.email,
       branch_id: u.branch_id,
       role_id: u.role_id as string | null,
+      teaches: u.teaches,
     }),
     apply: (v) => {
       setLogin(v.login);
@@ -81,12 +85,14 @@ export function UserFormModal({
       setEmail(v.email ?? "");
       setBranchId(v.branch_id);
       setRoleId(v.role_id);
+      setTeaches(v.teaches);
     },
     request: (changed, version) => api<UserRow>(`/api/v1/users/${user?.id}`, { method: "PATCH", body: changed, version }),
-    labels: { login: "Логин", full_name: "ФИО", phone: "Телефон", email: "Email", branch_id: "Филиал", role_id: "Роль" },
+    labels: { login: "Логин", full_name: "ФИО", phone: "Телефон", email: "Email", branch_id: "Филиал", role_id: "Роль", teaches: "Ведёт занятия" },
     show: {
       branch_id: (id: string | null) => branches.find((b) => b.id === id)?.name ?? "Все филиалы",
       role_id: (id: string | null) => roles.find((r) => r.id === id)?.name ?? "—",
+      teaches: (v: boolean) => (v ? "да" : "нет"),
     },
     onSaved: () => {
       refreshLists();
@@ -154,9 +160,14 @@ export function UserFormModal({
           onChange={(v) => {
             fe.clear("role_id");
             setRoleId(v);
+            // a new user with the instructor role teaches by default; the box stays editable
+            if (!user && v && roles.find((r) => r.id === v)?.code === "instructor") setTeaches(true);
           }}
           {...fe.hint("role_id")}
         />
+        <Checkbox isSelected={teaches} onValueChange={setTeaches}>
+          Ведёт занятия
+        </Checkbox>
         {!user && (
           <p className="text-xs text-default-500">
             После создания вы увидите временный пароль на 7 дней. Сотрудник сменит его при первом входе.

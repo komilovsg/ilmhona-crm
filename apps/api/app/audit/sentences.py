@@ -186,6 +186,7 @@ FIELDS: dict[str, str] = {
     "gender": "пол",
     "branch_id": "филиал",
     "role_id": "роль",
+    "teaches": "Ведёт занятия",
     "is_active": "активен",
     "name": "название",
     "capacity": "вместимость",
