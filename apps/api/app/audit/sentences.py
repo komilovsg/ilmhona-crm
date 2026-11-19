@@ -33,6 +33,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
     "cert_templates": ("cert_template", "cert_settings", "cert_asset", "cert_template_rule"),
+    "certificates": ("certificate",),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -103,6 +104,10 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "cert_asset.upload": ("загружено", "изображение для сертификатов"),
     "cert_template_rule.replace": ("изменены", "правила выбора шаблона сертификата"),
     "cert_settings.update": ("изменены", "настройки сертификатов"),
+    "certificate.issue": ("выдан", "сертификат"),
+    "certificate.reissue": ("перевыпущен", "сертификат"),
+    "certificate.revoke": ("отозван", "сертификат"),
+    "certificate.pdf": ("скачан", "сертификат"),
     "cert_settings.signature_upload": ("загружена", "подпись директора"),
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
     "cert_settings.seal_upload": ("загружена", "печать"),
@@ -450,9 +455,13 @@ def sentence(
             ("director_title_en", "должность (EN)"),
             ("director_name_tg", "директор (TJ)"),
             ("director_title_tg", "должность (TJ)"),
+            ("verify_base_url", "адрес проверки"),
+            ("allow_non_graduate", "выдача не выпускникам"),
         ):
             old, new = _pair(e.diff.get(key))
             if key in e.diff:
+                if key == "allow_non_graduate":
+                    old, new = ("да" if old else "нет"), ("да" if new else "нет")
                 parts.append(f"{word} {old or '—'} → {new or '—'}")
         return f"{who}: изменены настройки сертификатов: {'; '.join(parts)}"
     if a == "cert_template.publish_version":
@@ -513,6 +522,23 @@ def sentence(
             lost.append(f"сертификат {cert}")
         tail = f"; потеряно: {', '.join(lost)}" if lost else ""
         return f"{who}: студент {student} убран из потока {cohort}{tail}"
+    if a in ("certificate.issue", "certificate.reissue", "certificate.revoke", "certificate.pdf"):
+        student, cohort = _pieces(lab)
+        number = _pair(e.diff.get("number"))[1]
+        if a == "certificate.pdf":
+            return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
+        if a == "certificate.revoke":
+            reason = _pair(e.diff.get("reason"))[1]
+            return (
+                f"{who}: отозван сертификат {number} студента {student} (поток {cohort}): {reason}"
+            )
+        verb = "выдан" if a == "certificate.issue" else "перевыпущен"
+        tail = ""
+        if a == "certificate.issue" and e.diff.get("non_graduate"):
+            tail = ", не выпускнику"
+        if comment := _pair(e.diff.get("comment"))[1]:
+            tail += f": {comment}"
+        return f"{who}: {verb} сертификат {number} студенту {student} (поток {cohort}){tail}"
     if a == "enrollment.certificate_pdf":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))
