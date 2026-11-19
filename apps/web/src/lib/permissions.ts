@@ -39,6 +39,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "payments", href: "/payments", label: "Оплаты", icon: "payments" },
   { section: "rooms", href: "/rooms", label: "Аудитории", icon: "rooms" },
   { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
+  { section: "certificates", href: "/certificates", label: "Сертификаты", icon: "certificate", audience: "staff" },
   { section: "master_list", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
   { section: "marketing", href: "/marketing", label: "Маркетинг", icon: "marketing" },
   // the instructor sees only their own money: one page instead of the instructors and salaries tables
