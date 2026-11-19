@@ -175,7 +175,9 @@ def main(argv: list[str] | None = None) -> int:
             f"assets created: {counts.assets_created}; templates created: "
             f"{counts.templates_created}, updated: {counts.templates_updated}; "
             f"versions published: {counts.versions_published}; "
-            f"settings changed: {counts.settings_changed}"
+            f"settings changed: {counts.settings_changed}; "
+            f"instructor signatures: {counts.signatures_assigned}, "
+            f"unmatched names: {counts.signatures_unmatched or 'none'}"
         )
         return 0
     if args.command == "daily":

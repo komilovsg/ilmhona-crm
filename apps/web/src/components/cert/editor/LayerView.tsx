@@ -50,10 +50,13 @@ function TextView({ layer, view, editing, apiRef, onCommit, onExit }: { layer: T
 
       return el.offsetHeight <= w.clientHeight + 1 && el.scrollWidth <= w.clientWidth + 1;
     };
-    // chips show field names, not values: the fit is only meaningful with sample data (or without fields)
+    // chips show field names, not values: they shrink too, but a miss is only clipped (the red outline needs real text)
     const measurable = sampleMode || !hasField(layer.content);
-    const { pt, overflow } = measurable ? pickFit(fitSteps(s.size_pt, s.min_size_pt), fits) : { pt: s.size_pt, overflow: false };
+    const picked = editing && !measurable ? { pt: s.size_pt, overflow: false } : pickFit(fitSteps(s.size_pt, s.min_size_pt), fits);
+    const pt = picked.pt;
+    const overflow = measurable && picked.overflow;
 
+    w.style.overflow = measurable || editing ? "" : "hidden";
     el.style.fontSize = `calc(${pt * PT_MM} * var(--mm))`;
     w.dataset.overflow = String(overflow);
     w.dataset.pt = String(pt);

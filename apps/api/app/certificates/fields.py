@@ -70,6 +70,7 @@ class Context:
     verify_code: str = ""  # goes into the QR link
     signature_ref: str | None = None  # asset id of the director's signature
     seal_ref: str | None = None  # asset id of the company seal
+    instructor_signature_ref: str | None = None  # asset id of the cohort instructor's signature
 
 
 async def load_settings(db: AsyncSession) -> CertSettings:
@@ -93,6 +94,13 @@ def apply_settings(ctx: Context, row: CertSettings, lang: str = "ru") -> Context
     ctx.signature_ref = str(row.director_signature_asset_id or "") or None
     ctx.seal_ref = str(row.seal_asset_id or "") or None
     return ctx
+
+
+def image_refs(ctx: Context) -> list[str]:
+    """Asset ids a render of this context may draw: the director's signature and seal, and the
+    instructor's signature."""
+    refs = (ctx.signature_ref, ctx.seal_ref, ctx.instructor_signature_ref)
+    return [r for r in refs if r]
 
 
 def sample_context(kind: str) -> Context:
@@ -168,5 +176,7 @@ async def enrollment_context(
     if issued is not None:
         values["certificate.issued_date"] = issued.astimezone(TZ).date()
     ctx = Context(values, student.gender, enrollment.certificate_no or "")
+    if instructor is not None and instructor.signature_asset_id is not None:
+        ctx.instructor_signature_ref = str(instructor.signature_asset_id)
     apply_settings(ctx, await load_settings(db), lang)
     return ctx, cohort, course, instructor, enrollment

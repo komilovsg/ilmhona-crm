@@ -91,6 +91,10 @@ class AppUser(Versioned, Legacy, Base):
     # starting rate per month of an instructor for a cohort (copied into the cohort's own rate)
     default_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
     temp_password_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # instructor's signature image for certificates (a transparent PNG in cert_asset)
+    signature_asset_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 

@@ -3,7 +3,7 @@
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 
 import type { RateRecord } from "./RateModal";
@@ -11,6 +11,7 @@ import type { RateRecord } from "./RateModal";
 import { ActivateUserButton } from "@/components/ActivateUserButton";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
+import { SignatureCard } from "@/components/cert/SignatureCard";
 import { PageHeader } from "@/components/PageHeader";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { CardGridSkeleton } from "@/components/Skeletons";
@@ -96,6 +97,7 @@ function Cohorts({ id, canEdit, edit }: { id: string; canEdit: boolean; edit: (e
 
 function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boolean; edit: (e: Editing) => void }) {
   const [open, setOpen] = useState(false);
+  const qc = useQueryClient();
 
   return (
     <section aria-label={c.full_name} className="flex flex-col gap-4 rounded-2xl bg-content1 p-4">
@@ -149,6 +151,20 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
           </Button>
         )}
       </div>
+      <SignatureCard
+        allowDraw
+        basePath={`/api/v1/instructors/${c.id}/signature`}
+        canChange={canEdit}
+        deletedText="Подпись удалена"
+        has={c.has_signature}
+        help="Подпись ставится на сертификаты выпускников этого инструктора."
+        imageKey={c.version}
+        savedText="Подпись сохранена"
+        testId={`instructor-signature-${c.id}`}
+        title="Подпись для сертификатов"
+        uploadLabel="Загрузить фото подписи"
+        onChanged={() => void qc.invalidateQueries({ queryKey: ["instructor-cards"] })}
+      />
       <div>
         <button
           aria-expanded={open}

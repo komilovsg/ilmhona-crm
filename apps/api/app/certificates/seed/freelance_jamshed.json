@@ -5,7 +5,7 @@
     "height_mm": 210.1
   },
   "background": {
-    "asset": "jamshed.png"
+    "asset": "clean/jamshed.png"
   },
   "layers": [
     {
@@ -108,6 +108,160 @@
             "male": "окончил курс",
             "female": "окончила курс"
           }
+        }
+      ]
+    },
+    {
+      "id": "seal",
+      "type": "image",
+      "x_mm": 74.6,
+      "y_mm": 152.1,
+      "w_mm": 33.1,
+      "h_mm": 32.3,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 71.0,
+      "y_mm": 152.8,
+      "w_mm": 31.7,
+      "h_mm": 24.1,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 57.1,
+      "y_mm": 179.1,
+      "w_mm": 75.0,
+      "h_mm": 8.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.8,
+        "min_size_pt": 9.0,
+        "color": "#000000",
+        "align": "center",
+        "valign": "middle",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 60.3,
+      "y_mm": 185.3,
+      "w_mm": 70.0,
+      "h_mm": 6.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.7,
+        "min_size_pt": 9.0,
+        "color": "#515251",
+        "align": "center",
+        "valign": "middle",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
+      "id": "instructor_signature",
+      "type": "image",
+      "x_mm": 162.6,
+      "y_mm": 161.1,
+      "w_mm": 39.9,
+      "h_mm": 19.8,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "signature": "instructor"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "instructor_name",
+      "type": "text",
+      "x_mm": 144.8,
+      "y_mm": 179.1,
+      "w_mm": 75.0,
+      "h_mm": 8.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.8,
+        "min_size_pt": 9.0,
+        "color": "#000000",
+        "align": "center",
+        "valign": "middle",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "instructor.full_name"
+        }
+      ]
+    },
+    {
+      "id": "instructor_caption",
+      "type": "text",
+      "x_mm": 154.7,
+      "y_mm": 185.3,
+      "w_mm": 60.0,
+      "h_mm": 6.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.7,
+        "min_size_pt": 9.0,
+        "color": "#515251",
+        "align": "center",
+        "valign": "middle",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "Инструктор"
         }
       ]
     }

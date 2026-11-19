@@ -8,7 +8,7 @@ stored once, an unchanged layout publishes nothing.
 
 import json
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -21,10 +21,11 @@ from app.certificates.fields import load_settings
 from app.certificates.layout import Layout, parse_layout
 from app.certificates.signature import clean as clean_image
 from app.core.errors import DomainError
-from app.models import CertTemplate, CertTemplateVersion
+from app.models import AppUser, CertTemplate, CertTemplateVersion
 
 MANIFEST = "templates.json"
 SETTINGS_FILE = "settings.json"
+INSTRUCTORS_FILE = "instructors.json"
 
 
 class ImportProblem(Exception):
@@ -38,6 +39,8 @@ class Counts:
     templates_updated: int = 0
     versions_published: int = 0
     settings_changed: int = 0
+    signatures_assigned: int = 0
+    signatures_unmatched: list[str] = field(default_factory=list)
 
 
 def _read_manifest(layouts: Path) -> list[dict[str, Any]]:
@@ -128,7 +131,55 @@ async def import_templates(db: AsyncSession, layouts: Path, images: Path) -> Cou
                 {"version": [None, number], "cli": [None, "import-cert-templates"]},
             )
     await import_settings(db, images, counts)
+    await import_instructor_signatures(db, images, counts)
     return counts
+
+
+def _name_key(name: str) -> tuple[str, ...]:
+    """A name as a set of lowercase words: «Бобоев Джамшед» and «Джамшед Бобоев» are one."""
+    return tuple(sorted(name.lower().replace("ё", "е").split()))
+
+
+async def import_instructor_signatures(db: AsyncSession, images: Path, counts: Counts) -> None:
+    """`instructors.json` of the images directory (optional): `[{"full_name": ..., "signature":
+    <image file>}]`. The signature goes to the user with that name (either word order); a name
+    that matches nobody (or several people) is reported, not an error. A user who already has a
+    signature keeps it, so a signature set in the CRM is never replaced."""
+    path = images / INSTRUCTORS_FILE
+    if not path.is_file():
+        return
+    items = json.loads(path.read_text())
+    if not isinstance(items, list) or not all(
+        isinstance(i, dict) and isinstance(i.get("full_name"), str) and i.get("signature")
+        for i in items
+    ):
+        raise ImportProblem(f"{INSTRUCTORS_FILE}: expected a list of {{full_name, signature}}")
+    users: dict[tuple[str, ...], list[AppUser]] = {}
+    for user in (await db.execute(select(AppUser))).scalars():
+        users.setdefault(_name_key(user.full_name), []).append(user)
+    for item in items:
+        found = users.get(_name_key(item["full_name"]), [])
+        if len(found) != 1:
+            counts.signatures_unmatched.append(item["full_name"])
+            continue
+        user = found[0]
+        if user.signature_asset_id is not None:
+            continue
+        try:
+            asset, created = await store_asset(
+                db, clean_image(_image_file(images, item["signature"]).read_bytes()), "signature"
+            )
+        except DomainError as exc:
+            raise ImportProblem(f"{item['signature']}: {exc.error.code} {exc.params}") from None
+        counts.assets_created += created
+        user.signature_asset_id = asset.id
+        await db.flush()
+        counts.signatures_assigned += 1
+        await record(
+            db, None, "instructor.signature_upload", "app_user", user.id,
+            {"signature": [None, asset.id], "cli": [None, "import-cert-templates"]},
+            branch_id=user.branch_id, label=user.full_name,
+        )  # fmt: skip
 
 
 async def import_settings(db: AsyncSession, images: Path, counts: Counts) -> None:

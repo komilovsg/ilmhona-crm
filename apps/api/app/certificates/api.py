@@ -23,6 +23,7 @@ from app.certificates.fields import (
     SAMPLE_KINDS,
     apply_settings,
     enrollment_context,
+    image_refs,
     load_settings,
     sample_context,
 )
@@ -56,10 +57,6 @@ GraduatesView = Annotated[Principal, reader("graduates")]
 TemplatesView = Annotated[Principal, require("cert_templates", "view")]
 TemplatesChange = Annotated[Principal, require("cert_templates", "change")]
 DEFAULT_KEY = "general_ru"
-
-
-def _director_refs(ctx: Any) -> list[str]:
-    return [r for r in (ctx.signature_ref, ctx.seal_ref) if r]
 
 
 async def latest_layout(db: AsyncSession, template: CertTemplate) -> Layout:
@@ -170,7 +167,7 @@ async def certificate_pdf(
         template = await pick_template(db, course.id, instructor.id if instructor else None)
     apply_settings(ctx, await load_settings(db), template.lang)
     layout = await latest_layout(db, template)
-    assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
+    assets = await load_assets(db, [*layout.asset_refs(), *image_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
     await record(
         db,
@@ -203,7 +200,7 @@ async def preview(
         raise DomainError(NOT_FOUND)
     layout = await latest_layout(db, template)
     ctx = apply_settings(sample_context(sample), await load_settings(db), template.lang)
-    assets = await load_assets(db, [*layout.asset_refs(), *_director_refs(ctx)])
+    assets = await load_assets(db, [*layout.asset_refs(), *image_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
     return Response(
         pdf,
@@ -279,22 +276,22 @@ async def update_settings(
     return await _settings_out(db, row)
 
 
-async def _read_image(file: UploadFile) -> bytes:
+async def read_upload(file: UploadFile) -> bytes:
     data = await file.read(MAX_INPUT_BYTES + 1)
     if len(data) > MAX_INPUT_BYTES:
         raise DomainError(CERT_ASSET_INVALID, reason="too_large")
     return data
 
 
-async def _cleaned(file: UploadFile, ink: str) -> bytes:
-    data = await _read_image(file)
+async def cleaned_upload(file: UploadFile, ink: str) -> bytes:
+    data = await read_upload(file)
     return await anyio.to_thread.run_sync(clean_image, data, ink)
 
 
 async def _store_image(
     kind: str, file: UploadFile, ink: str, p: Principal, db: AsyncSession
 ) -> dict[str, Any]:
-    png = await _cleaned(file, ink)
+    png = await cleaned_upload(file, ink)
     asset, _ = await store_asset(db, png, kind, p.id)
     row = await load_settings(db)
     column = IMAGES[kind]
@@ -346,14 +343,14 @@ async def preview_signature(
     p: TemplatesChange, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
 ) -> Response:
     """The cleaned image, nothing saved."""
-    return Response(await _cleaned(file, ink), media_type="image/png")
+    return Response(await cleaned_upload(file, ink), media_type="image/png")
 
 
 @router.post("/cert-settings/seal/preview")
 async def preview_seal(
     p: TemplatesChange, file: Annotated[UploadFile, File()], ink: InkQuery = "original"
 ) -> Response:
-    return Response(await _cleaned(file, ink), media_type="image/png")
+    return Response(await cleaned_upload(file, ink), media_type="image/png")
 
 
 @router.delete("/cert-settings/signature")

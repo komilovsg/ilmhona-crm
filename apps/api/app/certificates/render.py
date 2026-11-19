@@ -238,8 +238,12 @@ def build_html(
                 src = html.escape(asset(layer.source.asset))
                 body.append(f'<img src="{src}" style="{_box(layer)}object-fit:contain">')
             elif isinstance(layer.source, SignatureSource):
-                # instructors have no stored signature yet: nothing is drawn for them
-                ref = ctx.signature_ref if layer.source.signature == "director" else None
+                # samples carry no instructor, so nothing is drawn for it there
+                ref = (
+                    ctx.signature_ref
+                    if layer.source.signature == "director"
+                    else ctx.instructor_signature_ref
+                )
                 if ref and ref in assets:
                     body.append(
                         f'<img src="{html.escape(asset(ref))}" '

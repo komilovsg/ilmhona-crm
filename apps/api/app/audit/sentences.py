@@ -107,6 +107,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
     "cert_settings.seal_upload": ("загружена", "печать"),
     "cert_settings.seal_delete": ("удалена", "печать"),
+    "instructor.signature_upload": ("загружена", "подпись инструктора"),
+    "instructor.signature_delete": ("удалена", "подпись инструктора"),
     "employment.create": ("добавлено", "трудоустройство"),
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
@@ -460,6 +462,10 @@ def sentence(
         return f"{who}: черновик шаблона {lab} восстановлен из версии {number}"
     if a in CERT_IMAGE_SENTENCES:
         return f"{who}: {CERT_IMAGE_SENTENCES[a]}"
+    if a == "instructor.signature_upload":
+        return f"{who}: загружена подпись инструктора {lab} для сертификатов"
+    if a == "instructor.signature_delete":
+        return f"{who}: удалена подпись инструктора {lab} для сертификатов"
     if a == "export":
         table = TABLES.get(e.entity, e.entity)
         _, rows = _pair(e.diff.get("rows"))

@@ -10,13 +10,16 @@ import uuid
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
+from app.certificates.api import cleaned_upload
+from app.certificates.assets import store_asset
+from app.certificates.signature import INKS
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.search import search_clause
@@ -25,7 +28,7 @@ from app.education.scope import cohort_filters, is_instructor, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
 from app.metrics.money import cohort_income, instructor_stats
-from app.models import AppUser, Branch, Cohort, Course, Role
+from app.models import AppUser, Branch, CertAsset, Cohort, Course, Role
 from app.users.errors import BRANCH_FORBIDDEN
 
 router = APIRouter(
@@ -71,6 +74,7 @@ def _out(u: AppUser, branch: str | None, stats: dict[str, Any]) -> dict[str, Any
         "branch_name": branch,
         "is_active": u.is_active,
         "default_rate": u.default_rate,
+        "has_signature": u.signature_asset_id is not None,
         **stats,
     }
 
@@ -195,4 +199,77 @@ async def update_instructor(
         diff_of(before, {"default_rate": str(u.default_rate)}),
         branch_id=u.branch_id,
     )
+    return await _detail(db, p, u, branch)
+
+
+# ---- signature for certificates --------------------------------------------------------------
+
+InkQuery = Annotated[str, Query(pattern="^(" + "|".join(INKS) + ")$")]
+
+
+async def _writable(
+    db: AsyncSession, p: Principal, user_id: uuid.UUID
+) -> tuple[AppUser, str | None]:
+    u, branch = await _load(db, p, user_id)
+    if p.branch_id is not None and u.branch_id != p.branch_id:
+        raise DomainError(BRANCH_FORBIDDEN)  # an instructor of all branches signs for all of them
+    return u, branch
+
+
+@router.post("/{user_id}/signature")
+async def upload_signature(
+    user_id: uuid.UUID,
+    p: Change,
+    db: DB,
+    file: Annotated[UploadFile, File()],
+    ink: InkQuery = "original",
+) -> dict[str, Any]:
+    u, branch = await _writable(db, p, user_id)
+    png = await cleaned_upload(file, ink)
+    asset, _ = await store_asset(db, png, "signature", p.id)
+    old = u.signature_asset_id
+    u.signature_asset_id = asset.id
+    await db.flush()
+    await record(
+        db, p.id, "instructor.signature_upload", "app_user", u.id,
+        {"signature": [old, asset.id]}, branch_id=u.branch_id, label=u.full_name,
+    )  # fmt: skip
+    return await _detail(db, p, u, branch)
+
+
+@router.post("/{user_id}/signature/preview")
+async def preview_signature(
+    user_id: uuid.UUID,
+    p: Change,
+    db: DB,
+    file: Annotated[UploadFile, File()],
+    ink: InkQuery = "original",
+) -> Response:
+    """The cleaned image, nothing saved."""
+    await _writable(db, p, user_id)
+    return Response(await cleaned_upload(file, ink), media_type="image/png")
+
+
+@router.get("/{user_id}/signature")
+async def get_signature(user_id: uuid.UUID, p: View, db: DB) -> Response:
+    u, _ = await _load(db, p, user_id)
+    asset = await db.get(CertAsset, u.signature_asset_id) if u.signature_asset_id else None
+    if asset is None:
+        raise DomainError(NOT_FOUND)
+    return Response(
+        asset.data, media_type=asset.mime, headers={"Cache-Control": "private, no-cache"}
+    )
+
+
+@router.delete("/{user_id}/signature")
+async def delete_signature(user_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]:
+    u, branch = await _writable(db, p, user_id)
+    old = u.signature_asset_id
+    if old is not None:
+        u.signature_asset_id = None
+        await db.flush()
+        await record(
+            db, p.id, "instructor.signature_delete", "app_user", u.id,
+            {"signature": [old, None]}, branch_id=u.branch_id, label=u.full_name,
+        )  # fmt: skip
     return await _detail(db, p, u, branch)
