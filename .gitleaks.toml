@@ -9,3 +9,7 @@ paths = [
   # Throwaway secret of the test suite (never used outside pytest).
   '''^apps/api/tests/conftest\.py$''',
 ]
+commits = [
+  # fonts.ts doc comment "API font route: `Montserrat-700Italic.ttf`" reads as a generic key.
+  "970c32c2ffa8c6c2326be19c2674e6abb433401c",
+]
