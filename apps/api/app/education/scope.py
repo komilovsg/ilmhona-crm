@@ -26,6 +26,23 @@ def is_instructor(p: Principal) -> bool:
     return p.role.code == INSTRUCTOR_CODE
 
 
+def own_only(p: Principal, section: str) -> bool:
+    """Reads limited to the user's own rows: the instructor role always; a user who teaches but
+    has no `view` on `section` (their own card, schedule and payouts only)."""
+    return is_instructor(p) or not allows(p.level(section), "view")
+
+
+def view_or_own(section: str) -> object:
+    """`view` on `section`, or a user who teaches (then `own_only` narrows the rows)."""
+
+    async def dependency(p: CurrentUser) -> Principal:
+        if not (allows(p.level(section), "view") or p.user.teaches):
+            raise DomainError(FORBIDDEN, section=section, level="view")
+        return p
+
+    return Depends(dependency)
+
+
 def require_any(*sections: str) -> object:
     """Read access to reference data (rooms, courses): view on any of `sections`."""
 
