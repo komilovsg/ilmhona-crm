@@ -541,3 +541,72 @@ async def test_migration_0025_up_and_down() -> None:
         async with server.connect() as conn:
             await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
         await server.dispose()
+
+
+# ---- preview, issuer name, graduates link ----------------------------------------------------
+
+
+async def count_rows() -> tuple[int, int, int]:
+    row = (
+        await sql(
+            "SELECT (SELECT count(*) FROM certificate), "
+            "(SELECT count(*) FROM enrollment WHERE certificate_no IS NOT NULL), "
+            "(SELECT count(*) FROM audit_log)"
+        )
+    )[0]
+    return (row[0], row[1], row[2])
+
+
+async def test_preview_renders_without_writing(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    tid = await make_template()
+    c1, ids1 = await graduates(admin, 2, name="A")
+    c2, ids2 = await graduates(admin, 1, name="B", branch="Истаравшан")
+    eid = ids1["Студент00 Имя"]
+    before = await count_rows()
+    path = f"/api/v1/cohorts/{c1['id']}/enrollments/{eid}/certificate/preview"
+    r = await admin.get(path, params={"template_id": tid})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert "Студент00" in pdf_text(r.content)
+    assert (await admin.get(path)).status_code == 200  # the rule's default template
+    assert await count_rows() == before  # no number, no row, no audit entry
+    # an enrollment of another cohort is 404
+    other = next(iter(ids2.values()))
+    assert (await admin.get(path.replace(eid, other))).status_code == 404
+    # right and branch scope
+    dsh = await login_as(
+        "dsh", await make_role("Выдача", {"certificates": "change"}), branch="Душанбе"
+    )
+    assert (await dsh.get(path)).status_code == 200
+    assert (
+        await dsh.get(f"/api/v1/cohorts/{c2['id']}/enrollments/{other}/certificate/preview")
+    ).status_code == 404
+    view = await login_as("view", await make_role("Вид", {"certificates": "view"}))
+    assert (await view.get(path)).status_code == 403
+
+
+async def test_registry_names_the_issuer_and_graduates_link_the_certificate(
+    admin: httpx.AsyncClient,
+) -> None:
+    tid = await make_template()
+    cohort, ids = await graduates(admin, 2)
+    one, two = ids["Студент00 Имя"], ids["Студент01 Имя"]
+    cert = (await issue(admin, cohort, tid, [one])).json()["items"][0]
+    row = (await admin.get(REG)).json()["items"][0]
+    assert row["issued_by_name"] and row["issued_by"]
+    assert (await admin.get(f"{REG}/{cert['id']}")).json()["issued_by_name"] == row[
+        "issued_by_name"
+    ]
+    grads = {
+        g["enrollment_id"]: g
+        for g in (await admin.get("/api/v1/graduates/students")).json()["items"]
+    }
+    assert grads[one]["certificate_id"] == cert["id"]
+    assert grads[two]["certificate_id"] is None
+    await admin.post(f"{REG}/{cert['id']}/revoke", json={"reason": "ошибка"})
+    grads = {
+        g["enrollment_id"]: g
+        for g in (await admin.get("/api/v1/graduates/students")).json()["items"]
+    }
+    assert grads[one]["certificate_id"] is None  # only a valid certificate is linked

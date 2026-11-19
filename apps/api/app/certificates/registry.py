@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import ColumnElement, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.audit.log import record
 from app.auth.deps import Principal, require, require_csrf_header
@@ -27,6 +28,7 @@ from app.certificates.errors import (
 from app.certificates.fields import load_settings
 from app.certificates.issuing import (
     FIX_TEXTS,
+    PLACEHOLDER_NUMBER,
     AssetCache,
     Fix,
     Prepared,
@@ -39,6 +41,7 @@ from app.certificates.issuing import (
     published_version,
     snapshot,
 )
+from app.certificates.render import render_pdf
 from app.certificates.stored import render_certificate
 from app.cohorts.status import GRADUATE
 from app.core import clock
@@ -61,6 +64,8 @@ from app.models import (
     Student,
 )
 from app.permissions import allows
+
+Issuer = aliased(AppUser)
 
 router = APIRouter(
     prefix="/api/v1", tags=["certificates"], dependencies=[Depends(require_csrf_header)]
@@ -202,6 +207,42 @@ async def check(
             s: sum(1 for i in items if i["status"] == s) for s in ("ready", "issued", "fix")
         },
     }
+
+
+@router.get("/cohorts/{cohort_id}/enrollments/{enrollment_id}/certificate/preview")
+async def preview_one(
+    cohort_id: uuid.UUID,
+    enrollment_id: uuid.UUID,
+    p: Change,
+    db: DB,
+    template_id: uuid.UUID | None = None,
+    lang: Lang | None = None,
+) -> Response:
+    """The student's certificate with the template's published version and a placeholder number.
+    Writes nothing: no number, no row, no audit entry."""
+    cohort, course = await _cohort(db, p, cohort_id)
+    enrollment = await db.get(Enrollment, enrollment_id)
+    if enrollment is None or enrollment.cohort_id != cohort.id:
+        raise DomainError(NOT_FOUND)
+    if template_id is not None:
+        template = await chosen_template(db, template_id)
+    else:
+        template = await pick_template(db, course.id, cohort.instructor_id)
+    layout = layout_of(await published_version(db, template))
+    prep = await prepare(
+        db, enrollment_id, layout, lang or template.lang, {}, AssetCache(db),
+        await load_settings(db), number=enrollment.certificate_no or PLACEHOLDER_NUMBER,
+    )  # fmt: skip
+    prep.ctx.verify_code = PLACEHOLDER_NUMBER
+    name = str(prep.ctx.values["student.full_name"])
+    if fix := fix_of(layout, prep.ctx, prep.assets):
+        raise DomainError(CERT_NOT_READY, items=[_fix_item(enrollment_id, name, fix)])
+    pdf = await render_pdf(layout, prep.ctx, prep.assets)
+    return Response(
+        pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": 'inline; filename="preview.pdf"'},
+    )
 
 
 # ---- issue -----------------------------------------------------------------------------------
@@ -463,6 +504,7 @@ def _select() -> Any:
             Course.name.label("course_name"),
             Branch.name.label("branch_name"),
             AppUser.full_name.label("instructor_name"),
+            Issuer.full_name.label("issued_by_name"),
             CertTemplate.name.label("template_name"),
         )
         .join(Enrollment, Enrollment.id == Certificate.enrollment_id)
@@ -472,6 +514,7 @@ def _select() -> Any:
         .join(Branch, Branch.id == Certificate.branch_id)
         .join(CertTemplate, CertTemplate.id == Certificate.template_id)
         .outerjoin(AppUser, AppUser.id == Certificate.instructor_id)
+        .outerjoin(Issuer, Issuer.id == Certificate.issued_by)
     )
 
 
@@ -502,6 +545,7 @@ def _row(r: Any) -> dict[str, Any]:
         "replaced_by_id": c.replaced_by_id,
         "issued_at": c.issued_at,
         "issued_by": c.issued_by,
+        "issued_by_name": r.issued_by_name,
     }
 
 
