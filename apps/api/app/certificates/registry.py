@@ -43,7 +43,7 @@ from app.certificates.stored import render_certificate
 from app.cohorts.status import GRADUATE
 from app.core import clock
 from app.core.db import DB
-from app.core.errors import NOT_FOUND, DomainError
+from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.search import search_clause
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
@@ -60,6 +60,7 @@ from app.models import (
     Enrollment,
     Student,
 )
+from app.permissions import allows
 
 router = APIRouter(
     prefix="/api/v1", tags=["certificates"], dependencies=[Depends(require_csrf_header)]
@@ -376,6 +377,8 @@ async def issue_one(enrollment_id: uuid.UUID, body: IssueOne, p: Change, db: DB)
     if non_graduate:
         if not settings_row.allow_non_graduate:
             raise DomainError(NOT_GRADUATE)
+        if not allows(p.level("cert_templates"), "change"):
+            raise DomainError(FORBIDDEN, section="cert_templates", level="change")
         if not body.comment:
             raise DomainError(CERT_COMMENT_REQUIRED).for_field("comment", "required")
     prep = await prepare(db, enrollment_id, layout, lang, custom, AssetCache(db), settings_row)

@@ -212,7 +212,7 @@ async def test_a_number_given_by_the_graduates_screen_is_kept(admin: httpx.Async
 
 
 async def test_non_graduate_follows_the_setting_and_needs_a_comment(
-    admin: httpx.AsyncClient,
+    admin: httpx.AsyncClient, login_as: SignedIn
 ) -> None:
     await make_template()
     _, ids = await mixed(admin)
@@ -225,6 +225,9 @@ async def test_non_graduate_follows_the_setting_and_needs_a_comment(
     assert (r.status_code, r.json()["code"]) == (422, "cert_comment_required")
     r = await admin.post(path, json={"comment": "   "})
     assert r.status_code == 422
+    issuer = await login_as("issuer", await make_role("Выдача2", {"certificates": "change"}))
+    r = await issuer.post(path, json={"comment": "договорённость"})
+    assert (r.status_code, r.json()["code"]) == (403, "forbidden")
     r = await admin.post(path, json={"comment": "договорённость"})
     assert r.status_code == 201, r.text
     assert r.json()["number"].startswith("CERT-")
