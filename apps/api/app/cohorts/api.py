@@ -14,7 +14,7 @@ from typing import Annotated, Any, Self
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from sqlalchemy import delete, exists, func, or_, select, union, update
+from sqlalchemy import ColumnElement, delete, exists, func, or_, select, union, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -71,7 +71,6 @@ from app.models import (
     Lead,
     Lesson,
     Payment,
-    Role,
     Room,
     Student,
 )
@@ -307,17 +306,17 @@ async def _detail(db: AsyncSession, cohort_id: uuid.UUID) -> dict[str, Any]:
 async def _check_instructor(
     db: AsyncSession, instructor_id: uuid.UUID | None, branch_id: uuid.UUID
 ) -> None:
-    """An active user with role instructor, working in the cohort's branch (or in all)."""
+    """An active user who teaches (the flag, not the role), in the cohort's branch (or in all)."""
     if instructor_id is None:
         return
     row = (
         await db.execute(
-            select(AppUser.is_active, AppUser.branch_id, Role.code)
-            .join(Role, Role.id == AppUser.role_id)
-            .where(AppUser.id == instructor_id)
+            select(AppUser.is_active, AppUser.branch_id, AppUser.teaches).where(
+                AppUser.id == instructor_id
+            )
         )
     ).first()
-    if row is None or not row[0] or row[2] != "instructor" or row[1] not in (None, branch_id):
+    if row is None or not row[0] or not row[2] or row[1] not in (None, branch_id):
         raise DomainError(INSTRUCTOR_INVALID)
 
 
@@ -469,14 +468,13 @@ async def list_instructors(
 ) -> list[dict[str, Any]]:
     """Active instructors who may teach in `branch_id` (their branch, or all branches): the
     choices of the cohort form. Not the users section: a manager needs no rights on it."""
-    where = [Role.code == "instructor", AppUser.is_active]
+    where: list[ColumnElement[bool]] = [AppUser.teaches.is_(True), AppUser.is_active.is_(True)]
     if p.branch_id is not None:
         branch_id = p.branch_id
     if branch_id:
         where.append(or_(AppUser.branch_id.is_(None), AppUser.branch_id == branch_id))
     rows = await db.execute(
         select(AppUser.id, AppUser.full_name, AppUser.branch_id)
-        .join(Role, Role.id == AppUser.role_id)
         .where(*where)
         .order_by(AppUser.full_name)
     )

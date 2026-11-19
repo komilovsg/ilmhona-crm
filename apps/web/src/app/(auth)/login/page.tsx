@@ -37,7 +37,7 @@ export default function LoginPage() {
       const me = await api<Me>("/api/v1/auth/login", { method: "POST", body: { login, password, remember } });
 
       queryClient.setQueryData(ME_KEY, me);
-      router.replace(me.must_change_password ? "/change-password" : homePath(me.permissions));
+      router.replace(me.must_change_password ? "/change-password" : homePath(me.permissions, me.role.code, me.teaches));
     } catch (e) {
       setError(messageOf(e));
       setBusy(false);

@@ -20,12 +20,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.audit.log import diff_of, record
-from app.auth.deps import Principal, require, require_csrf_header
+from app.auth.deps import Principal, require_csrf_header
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
-from app.education.scope import check_cohort_visible, cohort_filters, is_instructor, writer
+from app.education.scope import check_cohort_visible, cohort_filters, own_only, view_or_own, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics.money import (
     cohort_periods,
@@ -40,7 +40,7 @@ from app.payments.errors import COHORT_NO_INSTRUCTOR, PAYOUT_PERIOD_INVALID
 
 router = APIRouter(prefix="/api/v1", tags=["salaries"], dependencies=[Depends(require_csrf_header)])
 
-View = Annotated[Principal, require("instructors", "view")]
+ViewOwn = Annotated[Principal, view_or_own("instructors")]
 Change = Annotated[Principal, writer("instructors")]
 
 MIN_DATE, MAX_DATE = date(2020, 1, 1), date(2035, 12, 31)
@@ -89,7 +89,7 @@ def _next_month(d: date) -> date:
 def _own(p: Principal, instructor_id: uuid.UUID | None) -> uuid.UUID | None:
     """Which instructor's money the request is about: an instructor's own, always; asking for
     somebody else's is 404."""
-    if is_instructor(p):
+    if own_only(p, "instructors"):
         if instructor_id not in (None, p.id):
             raise DomainError(NOT_FOUND)
         return p.id
@@ -138,7 +138,7 @@ async def _schedule(
 
 @router.get("/salaries")
 async def get_salaries(
-    p: View,
+    p: ViewOwn,
     db: DB,
     month: MonthParam = None,
     instructor_id: uuid.UUID | None = None,
@@ -165,7 +165,7 @@ SCHEDULE_COLUMNS: list[Col[dict[str, Any]]] = [
 
 @router.get("/salaries/export")
 async def export_salaries(
-    p: View,
+    p: ViewOwn,
     db: DB,
     month: MonthParam = None,
     instructor_id: uuid.UUID | None = None,
@@ -303,14 +303,14 @@ async def _payout_row(db: AsyncSession, p: Principal, payout_id: uuid.UUID) -> A
     if row is None:
         raise DomainError(NOT_FOUND)
     p.check_scope(row[2].branch_id)
-    if is_instructor(p) and row[0].instructor_id != p.id:
+    if own_only(p, "instructors") and row[0].instructor_id != p.id:
         raise DomainError(NOT_FOUND)  # another instructor's payout
     return row
 
 
 @router.get("/payouts")
 async def list_payouts(
-    p: View,
+    p: ViewOwn,
     db: DB,
     instructor_id: uuid.UUID | None = None,
     cohort_id: uuid.UUID | None = None,
@@ -361,7 +361,7 @@ PAYOUT_COLUMNS: list[Col[dict[str, Any]]] = [
 
 @router.get("/payouts/export")
 async def export_payouts(
-    p: View,
+    p: ViewOwn,
     db: DB,
     instructor_id: uuid.UUID | None = None,
     cohort_id: uuid.UUID | None = None,
@@ -434,7 +434,7 @@ async def create_payout(body: PayoutIn, p: Change, db: DB) -> dict[str, Any]:
 
 
 @router.get("/payouts/{payout_id}")
-async def get_payout(payout_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
+async def get_payout(payout_id: uuid.UUID, p: ViewOwn, db: DB) -> dict[str, Any]:
     return _payout_out(*await _payout_row(db, p, payout_id))
 
 

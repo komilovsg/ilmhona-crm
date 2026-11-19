@@ -7,8 +7,8 @@ so changing the director is one edit instead of a new background per template.
 
 from alembic import op
 
-revision = "0021"
-down_revision = "0020"
+revision = "0022"
+down_revision = "0021"
 
 
 def upgrade() -> None:

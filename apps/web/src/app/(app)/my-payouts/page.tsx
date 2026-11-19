@@ -32,19 +32,21 @@ export default function MyPayoutsPage() {
     enabled: !!me,
   });
   const schedule = useQuery({
-    queryKey: ["salaries", "mine"],
-    queryFn: () => api<SalaryData>("/api/v1/salaries", { params: { month: "all" } }),
+    queryKey: ["salaries", "mine", me?.id],
+    queryFn: () => api<SalaryData>("/api/v1/salaries", { params: { month: "all", instructor_id: me?.id } }),
+    enabled: !!me,
   });
   const payouts = useQuery({
-    queryKey: ["payouts", "mine", page],
-    queryFn: () => api<PayoutsPage>("/api/v1/payouts", { params: { page: String(page), page_size: String(PAGE_SIZE) } }),
-    enabled: tab === "payouts",
+    queryKey: ["payouts", "mine", me?.id, page],
+    queryFn: () =>
+      api<PayoutsPage>("/api/v1/payouts", { params: { instructor_id: me?.id, page: String(page), page_size: String(PAGE_SIZE) } }),
+    enabled: tab === "payouts" && !!me,
   });
 
   return (
     <>
       <PageHeader
-        actions={<ExportButton path={tab === "schedule" ? "/api/v1/salaries/export" : "/api/v1/payouts/export"} params={tab === "schedule" ? { month: "all" } : {}} />}
+        actions={<ExportButton path={tab === "schedule" ? "/api/v1/salaries/export" : "/api/v1/payouts/export"} params={tab === "schedule" ? { month: "all", instructor_id: me?.id } : { instructor_id: me?.id }} />}
         title="Мои выплаты"
       />
 

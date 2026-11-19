@@ -24,7 +24,7 @@ export type NavItem = {
   href: string;
   label: string;
   icon: string;
-  /** Only for the instructor role (`own`) or only for everybody else (`staff`); default: all. */
+  /** `own`: only for users who teach (any role); `staff`: only for everybody but the instructor role; default: all. */
   audience?: "own" | "staff";
 };
 
@@ -54,15 +54,24 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "attendance", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
 ];
 
-function forRole(item: NavItem, roleCode: string | null | undefined): boolean {
+function forRole(item: NavItem, roleCode: string | null | undefined, teaches?: boolean): boolean {
   if (!item.audience) return true;
+  // «Мои выплаты» follows the «Ведёт занятия» flag, whatever the role
+  if (item.audience === "own") return !!teaches;
 
-  return (item.audience === "own") === (roleCode === "instructor");
+  return roleCode !== "instructor";
+}
+
+/** Own pages need no section right: the API lets a teaching user read their own card and money. */
+function shown(item: NavItem, permissions: Permissions | undefined, roleCode: string | null | undefined, teaches?: boolean): boolean {
+  if (item.audience === "own") return !!teaches;
+
+  return can(permissions, item.section, "view") && forRole(item, roleCode, teaches);
 }
 
 /** The sidebar: only sections the user may at least view (and pages meant for their role). */
-export function visibleNav(permissions: Permissions | undefined, roleCode?: string | null): NavItem[] {
-  return NAV_ITEMS.filter((item) => can(permissions, item.section, "view") && forRole(item, roleCode));
+export function visibleNav(permissions: Permissions | undefined, roleCode?: string | null, teaches?: boolean): NavItem[] {
+  return NAV_ITEMS.filter((item) => shown(item, permissions, roleCode, teaches));
 }
 
 export const BOTTOM_NAV_SIZE = 4;
@@ -83,18 +92,18 @@ export function splitNav(items: NavItem[], roleCode?: string | null): { main: Na
 }
 
 /** Where to land after sign-in: the dashboard, else the first allowed section, else the profile. */
-export function homePath(permissions: Permissions | undefined, roleCode?: string | null): string {
-  return visibleNav(permissions, roleCode)[0]?.href ?? "/profile";
+export function homePath(permissions: Permissions | undefined, roleCode?: string | null, teaches?: boolean): string {
+  return visibleNav(permissions, roleCode, teaches)[0]?.href ?? "/profile";
 }
 
 /** May this user open `pathname`? Profile is always open; unknown paths are left to 404. */
-export function canOpen(permissions: Permissions | undefined, pathname: string, roleCode?: string | null): boolean {
+export function canOpen(permissions: Permissions | undefined, pathname: string, roleCode?: string | null, teaches?: boolean): boolean {
   if (pathname === "/profile") return true;
   // the employment list is a page of «Выпускники и трудоустройство»
   const path = pathname === "/employment" ? "/graduates" : pathname;
   const item = NAV_ITEMS.find((i) => path === i.href || path.startsWith(`${i.href}/`));
 
-  return item ? can(permissions, item.section, "view") && forRole(item, roleCode) : true;
+  return item ? shown(item, permissions, roleCode, teaches) : true;
 }
 
 // Matrix editor: three columns, «change» implies delete (no separate column).

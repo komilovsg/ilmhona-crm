@@ -135,6 +135,7 @@ async def seed_demo(db: AsyncSession, on: date | None = None) -> tuple[str, int]
     ) -> AppUser:
         u = AppUser(
             id=ids.next(),
+            teaches=code == "instructor",
             login=f"{LOGIN_PREFIX}{login}",
             full_name=name,
             phone=f"+99200000{n:04d}",

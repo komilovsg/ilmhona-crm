@@ -24,11 +24,11 @@ from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.search import search_clause
 from app.core.versioning import Version, check_version
-from app.education.scope import cohort_filters, is_instructor, writer
+from app.education.scope import cohort_filters, own_only, view_or_own, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
 from app.metrics.money import cohort_income, instructor_stats
-from app.models import AppUser, Branch, CertAsset, Cohort, Course, Role
+from app.models import AppUser, Branch, CertAsset, Cohort, Course
 from app.users.errors import BRANCH_FORBIDDEN
 
 router = APIRouter(
@@ -36,6 +36,7 @@ router = APIRouter(
 )
 
 View = Annotated[Principal, require("instructors", "view")]
+ViewOwn = Annotated[Principal, view_or_own("instructors")]
 Change = Annotated[Principal, writer("instructors")]
 
 Rate = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
@@ -47,20 +48,17 @@ class RateUpdate(BaseModel):
 
 
 def _users_where(p: Principal) -> list[ColumnElement[bool]]:
-    where: list[ColumnElement[bool]] = [Role.code == "instructor"]
+    where: list[ColumnElement[bool]] = [AppUser.teaches.is_(True)]
     if p.branch_id is not None:
         where.append(or_(AppUser.branch_id.is_(None), AppUser.branch_id == p.branch_id))
-    if is_instructor(p):
-        where.append(AppUser.id == p.id)  # the instructor sees themself only
+    if own_only(p, "instructors"):
+        where.append(AppUser.id == p.id)  # an instructor (or a teaching user) sees themself only
     return where
 
 
 def _select(where: list[ColumnElement[bool]]) -> Any:
     return (
-        select(AppUser, Branch.name)
-        .join(Role, Role.id == AppUser.role_id)
-        .outerjoin(Branch, Branch.id == AppUser.branch_id)
-        .where(*where)
+        select(AppUser, Branch.name).outerjoin(Branch, Branch.id == AppUser.branch_id).where(*where)
     )
 
 
@@ -165,7 +163,7 @@ async def export_instructors(p: View, db: DB, q: str | None = None) -> Response:
 
 
 @router.get("/{user_id}")
-async def get_instructor(user_id: uuid.UUID, p: View, db: DB) -> dict[str, Any]:
+async def get_instructor(user_id: uuid.UUID, p: ViewOwn, db: DB) -> dict[str, Any]:
     u, branch = await _load(db, p, user_id)
     return await _detail(db, p, u, branch)
 

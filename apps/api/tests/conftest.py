@@ -276,8 +276,11 @@ async def make_user(
     must_change: bool = False,
     active: bool = True,
     phone: str | None = None,
+    teaches: bool | None = None,
 ) -> uuid.UUID:
     rid = await role_id(role) if isinstance(role, str) else role
+    if teaches is None:  # the instructor role teaches by default, like the migration does
+        teaches = rid == await role_id("instructor")
     async with sessionmaker() as db:
         user = AppUser(
             login=login,
@@ -288,6 +291,7 @@ async def make_user(
             is_active=active,
             password_hash=hash_password(password),
             must_change_password=must_change,
+            teaches=teaches,
         )
         db.add(user)
         await db.commit()

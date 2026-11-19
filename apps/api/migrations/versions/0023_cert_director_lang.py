@@ -6,8 +6,8 @@ its variant; an empty one falls back to the Russian columns.
 
 from alembic import op
 
-revision = "0022"
-down_revision = "0021"
+revision = "0023"
+down_revision = "0022"
 
 
 def upgrade() -> None:

@@ -90,6 +90,8 @@ class AppUser(Versioned, Legacy, Base):
     must_change_password: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     # starting rate per month of an instructor for a cohort (copied into the cohort's own rate)
     default_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
+    # may be a cohort's instructor, whatever the role (the role only gives rights)
+    teaches: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     temp_password_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # instructor's signature image for certificates (a transparent PNG in cert_asset)
     signature_asset_id: Mapped[UUID | None] = mapped_column(

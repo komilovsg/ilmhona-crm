@@ -6,8 +6,8 @@ template draws the signature of the graduate's cohort instructor.
 
 from alembic import op
 
-revision = "0023"
-down_revision = "0022"
+revision = "0024"
+down_revision = "0023"
 
 
 def upgrade() -> None:

@@ -6,8 +6,8 @@ published version is never updated: a change is a new version row.
 
 from alembic import op
 
-revision = "0020"
-down_revision = "0019"
+revision = "0021"
+down_revision = "0020"
 
 OLD_SECTIONS = (
     "dashboard", "leads", "students", "cohorts", "attendance", "payments", "rooms", "graduates",

@@ -427,6 +427,7 @@ class Importer:
                         password_hash=UNUSABLE_HASH,
                         must_change_password=True,
                         default_rate=rate,
+                        teaches=True,
                         legacy_ref=ref,
                     )  # fmt: skip
                 )
