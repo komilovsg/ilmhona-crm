@@ -8,38 +8,48 @@ renders; the template editor API is in `editor.py`.
 import re
 import uuid
 from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 import anyio
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.certificates.assets import load_assets, store_asset
-from app.certificates.errors import CERT_ASSET_INVALID, CERT_NO_TEMPLATE, CERT_NOT_ISSUED
+from app.certificates.errors import (
+    CERT_ASSET_INVALID,
+    CERT_DIRECTOR_OVERFLOW,
+    CERT_NO_TEMPLATE,
+    CERT_NOT_ISSUED,
+    CERT_TEXT_OVERFLOW,
+)
 from app.certificates.fields import (
     SAMPLE_KINDS,
     apply_settings,
+    director_for,
     enrollment_context,
     image_refs,
     load_settings,
     sample_context,
 )
-from app.certificates.layout import Layout, parse_layout
-from app.certificates.render import render_pdf
+from app.certificates.layout import FieldRun, Layout, TextLayer, parse_layout
+from app.certificates.render import fit_size, render_pdf, resolve_text
 from app.certificates.signature import INKS, MAX_INPUT_BYTES
 from app.certificates.signature import clean as clean_image
+from app.certificates.stored import render_certificate
 from app.core import clock
 from app.core.db import DB
-from app.core.errors import NOT_FOUND, DomainError
+from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.versioning import Version, check_version
 from app.importer.parse import _CYR
 from app.leads.scope import reader
 from app.models import (
     AppUser,
     CertAsset,
+    Certificate,
     CertSettings,
     CertTemplate,
     CertTemplateRule,
@@ -159,6 +169,30 @@ async def certificate_pdf(
     p.check_scope(cohort.branch_id)
     if not enrollment.certificate_no:
         raise DomainError(CERT_NOT_ISSUED)
+    issued = (
+        await db.execute(
+            select(Certificate).where(
+                Certificate.enrollment_id == enrollment_id, Certificate.status == "valid"
+            )
+        )
+    ).scalar_one_or_none()
+    if issued is not None:  # an issued certificate renders as it was issued
+        pdf = await render_certificate(db, issued)
+        name = file_name(issued.number, str(issued.data["values"].get("student.full_name", "")))
+        await record(
+            db,
+            p.id,
+            "enrollment.certificate_pdf",
+            "enrollment",
+            enrollment.id,
+            {"certificate_no": [None, issued.number], "template": [None, "issued"]},
+            branch_id=cohort.branch_id,
+        )
+        return Response(
+            pdf,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
     if template_id is not None:
         template = await db.get(CertTemplate, template_id)
         if template is None:
@@ -225,6 +259,90 @@ class SettingsUpdate(BaseModel):
     director_title_en: Text120 | None = None
     director_name_tg: Text120 | None = None
     director_title_tg: Text120 | None = None
+    # superadmin only; "" or null clears the address
+    verify_base_url: str | None = None
+    allow_non_graduate: bool | None = None
+
+    @field_validator("verify_base_url")
+    @classmethod
+    def _origin(cls, value: str | None) -> str | None:
+        """An https origin: no path, query, fragment or credentials (a trailing slash is fine)."""
+        value = (value or "").strip()
+        if not value:
+            return None
+        try:
+            url = urlsplit(value)
+            port = url.port
+        except ValueError:
+            raise ValueError("not a URL") from None
+        ok = (
+            url.scheme == "https"
+            and url.hostname
+            and url.username is None
+            and url.password is None
+            and url.path in ("", "/")
+            and not url.query
+            and not url.fragment
+            and "?" not in value
+            and "#" not in value
+        )
+        if not ok or len(value) > 200:
+            raise ValueError("an https address without a path is needed")
+        host = url.hostname or ""
+        return f"https://{host}" + (f":{port}" if port else "")
+
+
+DIRECTOR_KEYS = (
+    "director_name",
+    "director_title",
+    "director_name_en",
+    "director_title_en",
+    "director_name_tg",
+    "director_title_tg",
+)
+SUPERADMIN_ONLY = ("verify_base_url", "allow_non_graduate")
+
+
+async def check_director_fits(db: AsyncSession, row: CertSettings, changes: dict[str, Any]) -> None:
+    """The new director name or title must fit every active template; 422 names the ones that
+    do not, instead of a failure at PDF time."""
+    merged = CertSettings(**{k: changes.get(k, getattr(row, k)) for k in DIRECTOR_KEYS})
+    templates = (
+        (
+            await db.execute(
+                select(CertTemplate)
+                .where(CertTemplate.status == "active")
+                .order_by(CertTemplate.name)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    bad: list[str] = []
+    for template in templates:
+        try:
+            layout = await latest_layout(db, template)
+        except DomainError:
+            continue  # nothing published: nothing renders
+        ctx = sample_context("short")
+        ctx.values["company.director_name"], ctx.values["company.director_title"] = director_for(
+            merged, template.lang
+        )
+        for layer in layout.layers:
+            if not isinstance(layer, TextLayer) or not any(
+                isinstance(r, FieldRun) and r.field.startswith("company.director")
+                for r in layer.content
+            ):
+                continue
+            try:
+                fit_size(resolve_text(layer, ctx), layer)
+            except DomainError as exc:
+                if exc.error is not CERT_TEXT_OVERFLOW:
+                    raise
+                bad.append(template.name)
+                break
+    if bad:
+        raise DomainError(CERT_DIRECTOR_OVERFLOW, templates=bad)
 
 
 async def _settings_out(db: AsyncSession, row: CertSettings) -> dict[str, Any]:
@@ -240,6 +358,8 @@ async def _settings_out(db: AsyncSession, row: CertSettings) -> dict[str, Any]:
         "director_title_tg": row.director_title_tg,
         "signature_asset_id": row.director_signature_asset_id,
         "seal_asset_id": row.seal_asset_id,
+        "verify_base_url": row.verify_base_url,
+        "allow_non_graduate": row.allow_non_graduate,
         "version": row.version,
         "updated_at": row.updated_at,
         "updated_by": by,
@@ -256,12 +376,20 @@ async def update_settings(
     body: SettingsUpdate, p: TemplatesChange, version: Version, db: DB
 ) -> dict[str, Any]:
     row = await load_settings(db)
-    changes = body.model_dump(exclude_unset=True, exclude_none=True)
+    changes = {
+        k: v
+        for k, v in body.model_dump(exclude_unset=True).items()
+        if v is not None or k == "verify_base_url"
+    }
+    if any(k in changes for k in SUPERADMIN_ONLY) and not p.is_superadmin:
+        raise DomainError(FORBIDDEN, section="cert_settings", level="superadmin")
 
     async def current() -> dict[str, Any]:
         return await _settings_out(db, row)
 
     await check_version(db, row, version, "cert_settings", current, changes=changes)
+    if any(k in changes for k in DIRECTOR_KEYS):
+        await check_director_fits(db, row, changes)
     before = {k: getattr(row, k) for k in changes}
     for key, value in changes.items():
         setattr(row, key, value)
