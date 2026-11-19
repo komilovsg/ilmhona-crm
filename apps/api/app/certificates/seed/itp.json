@@ -1,0 +1,263 @@
+{
+  "schema": 1,
+  "page": {
+    "width_mm": 297,
+    "height_mm": 210.0
+  },
+  "background": {
+    "asset": "itp.png"
+  },
+  "layers": [
+    {
+      "id": "dir_cover",
+      "type": "rect",
+      "x_mm": 224,
+      "y_mm": 125.5,
+      "w_mm": 53,
+      "h_mm": 44,
+      "rotation": 0,
+      "locked": false,
+      "fill": "#ffffff"
+    },
+    {
+      "id": "dir_seal",
+      "type": "image",
+      "x_mm": 230,
+      "y_mm": 133.1,
+      "w_mm": 28.4,
+      "h_mm": 28.5,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 227.59,
+      "y_mm": 133.58,
+      "w_mm": 34.08,
+      "h_mm": 25.84,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 227.85,
+      "y_mm": 157.1,
+      "w_mm": 49,
+      "h_mm": 5.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.1,
+        "min_size_pt": 7.0,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 227.85,
+      "y_mm": 162.3,
+      "w_mm": 49,
+      "h_mm": 5.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 12.1,
+        "min_size_pt": 7.0,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
+      "id": "student_id",
+      "type": "text",
+      "x_mm": 29.1,
+      "y_mm": 97.9,
+      "w_mm": 66.3,
+      "h_mm": 8.3,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 19.6,
+        "min_size_pt": 19.6,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "ID "
+        },
+        {
+          "field": "certificate.number"
+        }
+      ]
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "x_mm": 29.1,
+      "y_mm": 107.3,
+      "w_mm": 255.9,
+      "h_mm": 10.3,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 24.4,
+        "min_size_pt": 14.5,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.first_name"
+        },
+        {
+          "text": " "
+        },
+        {
+          "field": "student.last_name"
+        }
+      ]
+    },
+    {
+      "id": "finished",
+      "type": "text",
+      "x_mm": 29.1,
+      "y_mm": 126.4,
+      "w_mm": 78.7,
+      "h_mm": 9.1,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 21.5,
+        "min_size_pt": 21.5,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "gender": {
+            "male": "Окончил курс:",
+            "female": "Окончила курс:"
+          }
+        }
+      ]
+    },
+    {
+      "id": "date",
+      "type": "text",
+      "x_mm": 130.0,
+      "y_mm": 185.0,
+      "w_mm": 60.0,
+      "h_mm": 7.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 17.1,
+        "min_size_pt": 17.1,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "| "
+        },
+        {
+          "field": "certificate.issued_date",
+          "format": "dd.mm.yyyy"
+        }
+      ]
+    },
+    {
+      "id": "instructor",
+      "type": "text",
+      "x_mm": 228.3,
+      "y_mm": 181.1,
+      "w_mm": 68.7,
+      "h_mm": 5.4,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 12.7,
+        "min_size_pt": 12.7,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "instructor.full_name"
+        }
+      ]
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Chip } from "@heroui/chip";
 
 
@@ -19,6 +19,7 @@ import { ListSkeleton } from "@/components/Skeletons";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useCanChangeGraduates, useRefreshReports } from "@/hooks/reports";
+import { getFile, graduateTemplatesPath, saveBlob, type GraduateCertTemplates } from "@/hooks/certs";
 import { api } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import { dushanbeDay } from "@/lib/format";
@@ -28,6 +29,7 @@ import type { GraduateCourseRow, GraduateRow, Paged } from "@/lib/reports-types"
 import { notify, notifyError } from "@/lib/toast";
 import { lazyModal } from "@/lib/lazy-modal";
 
+const CertDownloadModal = lazyModal(() => import("./CertDownloadModal").then((m) => m.CertDownloadModal));
 const EmploymentFormModal = lazyModal(() => import("./EmploymentFormModal").then((m) => m.EmploymentFormModal));
 
 const PAGE_SIZE = 25;
@@ -55,10 +57,12 @@ export default function GraduatesPage() {
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
   const refresh = useRefreshReports();
+  const qc = useQueryClient();
   const [view, setView] = useState<View>("students");
   const [f, setF] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [job, setJob] = useState<GraduateRow | null>(null);
+  const [choosing, setChoosing] = useState<{ row: GraduateRow; data: GraduateCertTemplates } | null>(null);
   const [issuing, setIssuing] = useState<GraduateRow | null>(null);
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
   const set = (next: Filters) => {
@@ -90,11 +94,26 @@ export default function GraduatesPage() {
       notifyError(e);
     },
   });
+  const download = useMutation({
+    mutationFn: async (g: GraduateRow) => {
+      const data = await qc.fetchQuery({ queryKey: ["graduate-cert-templates", g.enrollment_id], queryFn: () => api<GraduateCertTemplates>(graduateTemplatesPath(g.enrollment_id)), staleTime: 0 });
+
+      if (data.templates.length > 1) {
+        setChoosing({ row: g, data });
+
+        return;
+      }
+      const { blob, name } = await getFile(`/api/v1/graduates/${g.enrollment_id}/certificate/pdf`);
+
+      saveBlob(blob, name ?? `${g.certificate_no ?? "certificate"}.pdf`);
+    },
+    onError: notifyError,
+  });
   const actions = (g: GraduateRow) => [
-    ...(g.certificate_no ? [] : [{ key: "cert", label: "Выдать сертификат", icon: "graduates" }]),
-    { key: "job", label: "Добавить трудоустройство", icon: "plus" },
+    ...(g.certificate_no ? [{ key: "pdf", label: "Скачать PDF", icon: "download" }] : canChange ? [{ key: "cert", label: "Выдать сертификат", icon: "graduates" }] : []),
+    ...(canChange ? [{ key: "job", label: "Добавить трудоустройство", icon: "plus" }] : []),
   ];
-  const onAction = (g: GraduateRow, key: string) => (key === "cert" ? setIssuing(g) : setJob(g));
+  const onAction = (g: GraduateRow, key: string) => (key === "cert" ? setIssuing(g) : key === "pdf" ? download.mutate(g) : setJob(g));
 
   return (
     <>
@@ -179,7 +198,7 @@ export default function GraduatesPage() {
                         <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{orDash(g.paid, formatPrice)}</td>
                         <td className="px-4 py-3 whitespace-nowrap">{g.certificate_no ?? "—"}</td>
                         <td className="px-4 py-3">{g.employed ? g.organization : "—"}</td>
-                        <td className="px-2 py-3">{canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
+                        <td className="px-2 py-3">{actions(g).length > 0 && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -200,7 +219,7 @@ export default function GraduatesPage() {
                         <Chip color="success" size="sm" variant="flat">
                           {g.score} б.{g.score_legacy && " (старая система)"}
                         </Chip>
-                        {canChange && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}
+                        {actions(g).length > 0 && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}
                       </div>
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -261,6 +280,15 @@ export default function GraduatesPage() {
         </QueryState>
       )}
 
+      {choosing && (
+        <CertDownloadModal
+          data={choosing.data}
+          enrollmentId={choosing.row.enrollment_id}
+          fallbackName={`${choosing.row.certificate_no ?? "certificate"}.pdf`}
+          student={choosing.row.student_name}
+          onClose={() => setChoosing(null)}
+        />
+      )}
       {job && <EmploymentFormModal enrollmentId={job.enrollment_id} job={null} student={{ id: job.student_id, name: job.student_name }} onClose={() => setJob(null)} />}
       {issuing && (
         <ConfirmModal

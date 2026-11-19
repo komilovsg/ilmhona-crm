@@ -1,0 +1,62 @@
+[
+  {
+    "key": "general_ru",
+    "name": "General RU",
+    "lang": "ru",
+    "layout": "general_ru.json"
+  },
+  {
+    "key": "general_en",
+    "name": "General EN",
+    "lang": "en",
+    "layout": "general_en.json"
+  },
+  {
+    "key": "itp",
+    "name": "Программирование с нуля",
+    "lang": "ru",
+    "layout": "itp.json"
+  },
+  {
+    "key": "kids",
+    "name": "Kids",
+    "lang": "ru",
+    "layout": "kids.json"
+  },
+  {
+    "key": "kids_scratch",
+    "name": "Kids Scratch",
+    "lang": "ru",
+    "layout": "kids_scratch.json"
+  },
+  {
+    "key": "proskills",
+    "name": "ProSkills",
+    "lang": "ru",
+    "layout": "proskills.json"
+  },
+  {
+    "key": "proskills_islom",
+    "name": "ProSkills — Исломиддин Нуриддинов",
+    "lang": "ru",
+    "layout": "proskills_islom.json"
+  },
+  {
+    "key": "proskills_umed",
+    "name": "ProSkills — Умед Худойбердиев",
+    "lang": "ru",
+    "layout": "proskills_umed.json"
+  },
+  {
+    "key": "freelance_jamshed",
+    "name": "Freelance — Джамшед Бобоев",
+    "lang": "ru",
+    "layout": "freelance_jamshed.json"
+  },
+  {
+    "key": "freelance_zarifkhon",
+    "name": "Freelance — Зарифхон Олимов",
+    "lang": "ru",
+    "layout": "freelance_zarifkhon.json"
+  }
+]

@@ -13,6 +13,7 @@ from app.models import (
     AppUser,
     AuditLog,
     Campaign,
+    CertTemplate,
     Cohort,
     Course,
     Employment,
@@ -36,6 +37,7 @@ _NAME_FIELD = {
     "lead": "full_name",
     "campaign": "name",
     "goal": "title",
+    "cert_template": "name",
 }
 # entity -> (id column, name column)
 _NAME_COLUMN = {
@@ -48,6 +50,7 @@ _NAME_COLUMN = {
     "lead": (Lead.id, Lead.full_name),
     "campaign": (Campaign.id, Campaign.name),
     "goal": (Goal.id, Goal.title),
+    "cert_template": (CertTemplate.id, CertTemplate.name),
 }
 
 

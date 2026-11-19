@@ -117,6 +117,7 @@ export type InstructorCard = {
   students: number;
   income: Money;
   paid_out: Money;
+  has_signature: boolean;
 };
 
 export type InstructorDetail = InstructorCard & {

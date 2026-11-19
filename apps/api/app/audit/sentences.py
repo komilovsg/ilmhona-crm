@@ -32,6 +32,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "leads": ("lead",),
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
+    "cert_templates": ("cert_template", "cert_settings", "cert_asset", "cert_template_rule"),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -93,6 +94,21 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "campaign.create": ("создана", "кампания"),
     "campaign.update": ("изменена", "кампания"),
     "campaign.delete": ("удалена", "кампания"),
+    "cert_template.publish": ("опубликован", "шаблон сертификата"),
+    "cert_template.create": ("создан", "шаблон сертификата"),
+    "cert_template.update": ("изменён", "шаблон сертификата"),
+    "cert_template.draft_update": ("изменён", "черновик шаблона"),
+    "cert_template.publish_version": ("опубликована", "версия шаблона"),
+    "cert_template.restore": ("восстановлен", "черновик шаблона"),
+    "cert_asset.upload": ("загружено", "изображение для сертификатов"),
+    "cert_template_rule.replace": ("изменены", "правила выбора шаблона сертификата"),
+    "cert_settings.update": ("изменены", "настройки сертификатов"),
+    "cert_settings.signature_upload": ("загружена", "подпись директора"),
+    "cert_settings.signature_delete": ("удалена", "подпись директора"),
+    "cert_settings.seal_upload": ("загружена", "печать"),
+    "cert_settings.seal_delete": ("удалена", "печать"),
+    "instructor.signature_upload": ("загружена", "подпись инструктора"),
+    "instructor.signature_delete": ("удалена", "подпись инструктора"),
     "employment.create": ("добавлено", "трудоустройство"),
     "employment.update": ("изменено", "трудоустройство"),
     "employment.delete": ("удалено", "трудоустройство"),
@@ -106,6 +122,12 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "note.delete": ("удалена", "заметка"),
     "dashboard_pref.update": ("изменены", "настройки дашборда"),
     "dashboard_pref.reset": ("сброшены", "настройки дашборда"),
+}
+CERT_IMAGE_SENTENCES = {
+    "cert_settings.signature_upload": "загружена подпись директора",
+    "cert_settings.signature_delete": "удалена подпись директора",
+    "cert_settings.seal_upload": "загружена печать для сертификатов",
+    "cert_settings.seal_delete": "удалена печать для сертификатов",
 }
 # grading schemes: «Курбон: изменена шкала оценок потока G-012 — баллы: Посещаемость 20, … → …»
 GRADING = {
@@ -189,6 +211,7 @@ FIELDS: dict[str, str] = {
     "teaches": "Ведёт занятия",
     "is_active": "активен",
     "name": "название",
+    "lang": "язык",
     "capacity": "вместимость",
     "direction": "направление",
     "default_price_month": "цена в месяц",
@@ -418,6 +441,32 @@ def sentence(
         return (
             f"{who}: Цель академии изменена: «{text}»" if text else f"{who}: Цель академии очищена"
         )
+    if a == "cert_settings.update":
+        parts = []
+        for key, word in (
+            ("director_name", "директор"),
+            ("director_title", "должность"),
+            ("director_name_en", "директор (EN)"),
+            ("director_title_en", "должность (EN)"),
+            ("director_name_tg", "директор (TJ)"),
+            ("director_title_tg", "должность (TJ)"),
+        ):
+            old, new = _pair(e.diff.get(key))
+            if key in e.diff:
+                parts.append(f"{word} {old or '—'} → {new or '—'}")
+        return f"{who}: изменены настройки сертификатов: {'; '.join(parts)}"
+    if a == "cert_template.publish_version":
+        _, number = _pair(e.diff.get("version_no"))
+        return f"{who}: опубликована версия {number} шаблона {lab}"
+    if a == "cert_template.restore":
+        _, number = _pair(e.diff.get("restored_from"))
+        return f"{who}: черновик шаблона {lab} восстановлен из версии {number}"
+    if a in CERT_IMAGE_SENTENCES:
+        return f"{who}: {CERT_IMAGE_SENTENCES[a]}"
+    if a == "instructor.signature_upload":
+        return f"{who}: загружена подпись инструктора {lab} для сертификатов"
+    if a == "instructor.signature_delete":
+        return f"{who}: удалена подпись инструктора {lab} для сертификатов"
     if a == "export":
         table = TABLES.get(e.entity, e.entity)
         _, rows = _pair(e.diff.get("rows"))
@@ -464,6 +513,10 @@ def sentence(
             lost.append(f"сертификат {cert}")
         tail = f"; потеряно: {', '.join(lost)}" if lost else ""
         return f"{who}: студент {student} убран из потока {cohort}{tail}"
+    if a == "enrollment.certificate_pdf":
+        student, cohort = _pieces(lab)
+        _, number = _pair(e.diff.get("certificate_no"))
+        return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
     if a == "enrollment.certificate":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))

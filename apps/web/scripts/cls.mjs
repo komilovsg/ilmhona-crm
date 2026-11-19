@@ -55,6 +55,7 @@ for (const vp of VIEWPORTS) {
   const get = async (path) => (await context.request.get(`${BASE}${path}`)).json();
   const cohort = (await get("/api/v1/cohorts?page_size=1")).items?.[0];
   const student = (await get("/api/v1/students?page_size=1")).items?.[0];
+  const template = (await get("/api/v1/cert-templates")).items?.[0];
   const pages = [
     "/dashboard",
     "/users",
@@ -72,6 +73,8 @@ for (const vp of VIEWPORTS) {
     "/graduates",
     "/employment",
     "/settings/grading",
+    "/settings/certificates",
+    ...(template ? [`/settings/certificates/${template.id}`] : []),
     ...(cohort ? [`/cohorts/${cohort.id}`, `/cohorts/${cohort.id}?tab=analytics`] : []),
     "/students",
     ...(student ? [`/students/${student.id}`] : []),

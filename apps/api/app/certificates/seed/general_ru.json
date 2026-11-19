@@ -1,0 +1,454 @@
+{
+  "schema": 1,
+  "page": {
+    "width_mm": 297,
+    "height_mm": 210.0
+  },
+  "background": null,
+  "layers": [
+    {
+      "id": "frame",
+      "type": "image",
+      "x_mm": 10.933,
+      "y_mm": 10.682,
+      "w_mm": 273.59,
+      "h_mm": 188.501,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/frame.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "panel",
+      "type": "image",
+      "x_mm": 0.001,
+      "y_mm": 0.363,
+      "w_mm": 132.832,
+      "h_mm": 147.389,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/panel.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "panel_line",
+      "type": "image",
+      "x_mm": 10.933,
+      "y_mm": 10.682,
+      "w_mm": 122.429,
+      "h_mm": 137.6,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/panel_line.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dots",
+      "type": "image",
+      "x_mm": 218.33,
+      "y_mm": 0.0,
+      "w_mm": 39.016,
+      "h_mm": 23.286,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/dots.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo",
+      "type": "image",
+      "x_mm": 38.65,
+      "y_mm": 35.129,
+      "w_mm": 53.945,
+      "h_mm": 58.996,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/logo.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "title",
+      "type": "image",
+      "x_mm": 141.126,
+      "y_mm": 32.493,
+      "w_mm": 125.166,
+      "h_mm": 13.193,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/title.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "hashtag",
+      "type": "image",
+      "x_mm": 35.832,
+      "y_mm": 104.779,
+      "w_mm": 63.343,
+      "h_mm": 5.397,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/hashtag.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "website",
+      "type": "image",
+      "x_mm": 48.69,
+      "y_mm": 133.72,
+      "w_mm": 33.771,
+      "h_mm": 5.408,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/website.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "instructor_caption",
+      "type": "image",
+      "x_mm": 86.408,
+      "y_mm": 187.968,
+      "w_mm": 44.953,
+      "h_mm": 4.438,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "asset": "parts/general_ru/instructor_caption.svg"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "dir_name",
+      "type": "text",
+      "x_mm": 19.507,
+      "y_mm": 179.707,
+      "w_mm": 66.0,
+      "h_mm": 6.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 15.7,
+        "min_size_pt": 7.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_name"
+        }
+      ]
+    },
+    {
+      "id": "dir_title",
+      "type": "text",
+      "x_mm": 19.46,
+      "y_mm": 186.922,
+      "w_mm": 66.0,
+      "h_mm": 6.0,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 14.0,
+        "min_size_pt": 7.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "company.director_title"
+        }
+      ]
+    },
+    {
+      "id": "dir_signature",
+      "type": "image",
+      "x_mm": 22.571,
+      "y_mm": 154.872,
+      "w_mm": 42.333,
+      "h_mm": 31.75,
+      "rotation": 0.0,
+      "locked": false,
+      "source": {
+        "signature": "director"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "seal",
+      "type": "image",
+      "x_mm": 27.929,
+      "y_mm": 155.833,
+      "w_mm": 32.131,
+      "h_mm": 32.455,
+      "rotation": -7.42,
+      "locked": false,
+      "source": {
+        "company": "seal"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "number",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 47.1,
+      "w_mm": 51.5,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "№ "
+        },
+        {
+          "field": "certificate.number"
+        }
+      ]
+    },
+    {
+      "id": "date",
+      "type": "text",
+      "x_mm": 193.6,
+      "y_mm": 47.1,
+      "w_mm": 31.0,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 400,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "от "
+        },
+        {
+          "field": "certificate.issued_date",
+          "format": "dd.mm.yyyy"
+        }
+      ]
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "x_mm": 140.6,
+      "y_mm": 81.7,
+      "w_mm": 144.4,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 33.7,
+        "min_size_pt": 20.0,
+        "color": "#1a9eda",
+        "align": "left",
+        "valign": "top",
+        "line_height": 0.9,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.first_name"
+        }
+      ]
+    },
+    {
+      "id": "surname",
+      "type": "text",
+      "x_mm": 140.6,
+      "y_mm": 92.4,
+      "w_mm": 144.4,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 33.7,
+        "min_size_pt": 20.0,
+        "color": "#1a9eda",
+        "align": "left",
+        "valign": "top",
+        "line_height": 0.9,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "student.last_name"
+        }
+      ]
+    },
+    {
+      "id": "finished",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 103.1,
+      "w_mm": 155.7,
+      "h_mm": 10.7,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 15.2,
+        "min_size_pt": 15.2,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 2.0,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "gender": {
+            "male": "окончил курс",
+            "female": "окончила курс"
+          }
+        }
+      ]
+    },
+    {
+      "id": "course_label",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 129.7,
+      "w_mm": 119.0,
+      "h_mm": 7.6,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 500,
+        "italic": false,
+        "size_pt": 18.0,
+        "min_size_pt": 18.0,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "text": "по программе"
+        }
+      ]
+    },
+    {
+      "id": "course",
+      "type": "text",
+      "x_mm": 141.3,
+      "y_mm": 137.5,
+      "w_mm": 143.7,
+      "h_mm": 10.5,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 600,
+        "italic": false,
+        "size_pt": 24.7,
+        "min_size_pt": 15.0,
+        "color": "#000000",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "course.name"
+        }
+      ]
+    },
+    {
+      "id": "instructor",
+      "type": "text",
+      "x_mm": 85.8,
+      "y_mm": 179.8,
+      "w_mm": 119.0,
+      "h_mm": 6.2,
+      "rotation": 0,
+      "locked": false,
+      "style": {
+        "font": "Montserrat",
+        "weight": 700,
+        "italic": false,
+        "size_pt": 14.6,
+        "min_size_pt": 14.6,
+        "color": "#3c3c3b",
+        "align": "left",
+        "valign": "top",
+        "line_height": 1.2,
+        "letter_spacing_pt": 0,
+        "uppercase": false
+      },
+      "content": [
+        {
+          "field": "instructor.full_name"
+        }
+      ]
+    }
+  ]
+}
