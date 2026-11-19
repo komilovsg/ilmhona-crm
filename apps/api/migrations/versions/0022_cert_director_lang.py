@@ -18,10 +18,8 @@ def upgrade() -> None:
                 f"DEFAULT '' CONSTRAINT cert_settings_{part}_{lang}_check "
                 f"CHECK (char_length(director_{part}_{lang}) <= 120)"
             )
-    op.execute(
-        "UPDATE cert_settings SET director_name_en = 'Ozodamo Faromuz', "
-        "director_title_en = 'CEO Ilmhona' WHERE id = 1"
-    )
+    # the English name is left empty (falls back to the Russian one) until the director fills it in
+    op.execute("UPDATE cert_settings SET director_title_en = 'CEO Ilmhona' WHERE id = 1")
 
 
 def downgrade() -> None:
