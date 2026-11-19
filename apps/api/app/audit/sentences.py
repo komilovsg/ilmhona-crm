@@ -67,6 +67,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "course.delete": ("удалён", "курс"),
     "user.create": ("создан", "пользователь"),
     "user.update": ("изменён", "пользователь"),
+    "user.merge": ("объединён", "пользователь"),
     "user.delete": ("удалён", "пользователь"),
     "user.activate": ("активирован", "пользователь"),
     "user.reset_password": ("сброшен", "пароль пользователя"),

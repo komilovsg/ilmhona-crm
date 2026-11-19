@@ -8,6 +8,9 @@ Safe to run any number of times.
 
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
+
+`python -m app.cli merge-users --from A --into B [--dry-run]` — re-point everything of account A
+to B and deactivate A (app/merge_users.py).
 """
 
 import argparse
@@ -16,6 +19,7 @@ import sys
 from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from app.audit.log import record
 from app.cohorts.status import STATUSES, sync_status
@@ -23,6 +27,7 @@ from app.core.config import settings
 from app.core.db import engine, sessionmaker
 from app.core.security import hash_password, temp_password
 from app.demo import demo_exists, seed_demo, wipe_demo
+from app.merge_users import MergeError, merge_users
 from app.models import AppUser, Cohort, Role
 from app.permissions import SUPERADMIN_CODE
 
@@ -127,6 +132,21 @@ async def wipe_command() -> int:
     return rows
 
 
+async def merge_command(source: str, target: str, dry_run: bool) -> str:
+    try:
+        async with sessionmaker() as db:
+            report = await merge_users(db, source.strip(), target.strip(), dry_run)
+            if dry_run:
+                await db.rollback()
+            else:
+                await db.commit()
+    except IntegrityError as e:  # e.g. the instructor's lessons would overlap the target's
+        raise MergeError(f"database refused the merge, nothing changed: {e.orig}") from None
+    finally:
+        await engine.dispose()
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -136,7 +156,18 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("daily", help="update cohort statuses, finished enrollments; purge old logins")
     sub.add_parser("seed-demo", help="load a fake dataset (all names invented)")
     sub.add_parser("wipe-demo", help="delete the rows seed-demo created, and only those")
+    merge = sub.add_parser("merge-users", help="move one account's data to another, deactivate it")
+    merge.add_argument("--from", dest="source", required=True, help="login to merge away")
+    merge.add_argument("--into", dest="target", required=True, help="login that keeps everything")
+    merge.add_argument("--dry-run", action="store_true", help="only count, write nothing")
     args = parser.parse_args(argv)
+    if args.command == "merge-users":
+        try:
+            print(asyncio.run(merge_command(args.source, args.target, args.dry_run)))
+        except MergeError as e:
+            print(e, file=sys.stderr)
+            return 1
+        return 0
     if args.command == "daily":
         count, purged = asyncio.run(_daily_and_close())
         print(f"cohort statuses changed: {count}; login attempts purged: {purged}")
