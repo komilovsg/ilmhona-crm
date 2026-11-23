@@ -82,6 +82,12 @@ async def test_check_then_batch_issue_of_twenty_graduates(admin: httpx.AsyncClie
     items = r.json()["items"]
     numbers = sorted(i["number"] for i in items)
     assert len(items) == 20 and len(set(numbers)) == 20
+    # every enrollment pins the version its certificate was drawn from
+    pinned = await sql(
+        "SELECT count(*) FROM enrollment e JOIN certificate c ON c.enrollment_id = e.id "
+        "WHERE e.certificate_version_id = c.template_version_id"
+    )
+    assert pinned[0][0] == 20
     assert numbers[0].endswith("-0001") and numbers[-1].endswith("-0020")
     assert all(
         len(i["verify_code"]) == 12 and set(i["verify_code"]) <= set(CODE_ALPHABET) for i in items
@@ -252,6 +258,11 @@ async def test_reissue_keeps_the_number_and_replaces_the_old_row(admin: httpx.As
     assert r.status_code == 201, r.text
     new = r.json()
     assert new["number"] == first["number"] and new["verify_code"] != first["verify_code"]
+    pin = await sql(
+        "SELECT count(*) FROM enrollment e JOIN certificate c ON c.enrollment_id = e.id "
+        f"WHERE c.id = '{new['id']}' AND e.certificate_version_id = c.template_version_id"
+    )
+    assert pin[0][0] == 1
     assert new["id"] != first["id"]
     old = (await admin.get(f"{REG}/{first['id']}")).json()
     assert old["status"] == "replaced" and old["replaced_by_id"] == new["id"]
