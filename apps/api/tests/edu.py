@@ -7,7 +7,6 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
-
 from sqlalchemy import select
 
 from app.cohorts import status as st
