@@ -266,7 +266,7 @@ async def test_asset_upload_kinds_and_limits(admin: httpx.AsyncClient) -> None:
     assert (body["kind"], body["mime"], body["width_px"], body["height_px"]) == (
         "background", "image/png", 60, 40,
     )  # fmt: skip
-    assert set(body) == {"id", "kind", "mime", "width_px", "height_px", "size_bytes"}
+    assert set(body) == {"id", "kind", "mime", "width_px", "height_px", "size_bytes", "cut"}
     again = await admin.post(url, files=upload(png((1, 2, 3), (60, 40))), data={"kind": "image"})
     assert again.json()["id"] == body["id"]  # deduplicated
     buf = io.BytesIO()
