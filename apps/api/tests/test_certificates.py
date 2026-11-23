@@ -493,11 +493,15 @@ async def test_issued_certificate_keeps_its_version_and_new_ones_get_the_new_ico
     admin: httpx.AsyncClient,
 ) -> None:
     old_icon = await admin.post(
-        "/api/v1/cert-assets", files={"file": ("a.svg", SVG, "image/svg+xml")}, data={"kind": "image"}
+        "/api/v1/cert-assets",
+        files={"file": ("a.svg", SVG, "image/svg+xml")},
+        data={"kind": "image"},
     )
     new_svg = SVG.replace(b"#eee", b"#c00")
     new_icon = await admin.post(
-        "/api/v1/cert-assets", files={"file": ("b.svg", new_svg, "image/svg+xml")}, data={"kind": "image"}
+        "/api/v1/cert-assets",
+        files={"file": ("b.svg", new_svg, "image/svg+xml")},
+        data={"kind": "image"},
     )
     icon = {
         "id": "donor",
@@ -519,7 +523,9 @@ async def test_issued_certificate_keeps_its_version_and_new_ones_get_the_new_ico
     await certify(admin, first)
     before = await admin.get(f"{G}/{first}/certificate/pdf")
     # the owner replaces the icon and publishes version 2
-    v2 = with_layers(text_layer("a", {"text": "ВТОРАЯ"}), {**icon, "source": {"asset": new_icon.json()["id"]}})
+    v2 = with_layers(
+        text_layer("a", {"text": "ВТОРАЯ"}), {**icon, "source": {"asset": new_icon.json()["id"]}}
+    )
     await sql(
         "INSERT INTO cert_template_version (template_id, version_no, layout) VALUES (:t, 2, CAST(:l AS jsonb))",
         t=tid, l=json.dumps(v2),
