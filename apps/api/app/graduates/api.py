@@ -15,6 +15,7 @@ from sqlalchemy import select, text
 
 from app.audit.log import record
 from app.auth.deps import Principal, require_csrf_header
+from app.certificates.api import pin_default_version
 from app.cohorts.status import GRADUATE
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
@@ -207,6 +208,7 @@ async def issue_certificate(enrollment_id: uuid.UUID, p: Change, db: DB) -> dict
     enrollment.certificate_no = f"CERT-{now.year}-{n:04d}"
     enrollment.certificate_issued_at = now
     await db.flush()
+    await pin_default_version(db, enrollment, cohort.course_id, cohort.instructor_id)
     await record(
         db,
         p.id,

@@ -273,6 +273,10 @@ class Enrollment(Versioned, Legacy, Base):
     # CERT-YYYY-NNNN, only for a graduate (certificate_no_seq)
     certificate_no: Mapped[str | None] = mapped_column(Text)
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # the published template version the certificate is drawn from: a later publish never changes it
+    certificate_version_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cert_template_version.id", ondelete="SET NULL")
+    )
     needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     review_reason: Mapped[str | None] = mapped_column(Text)
     # the old system's total when it had no homework / final to go with it
