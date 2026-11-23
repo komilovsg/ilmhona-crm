@@ -15,7 +15,7 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
-import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS } from "@/lib/education";
+import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS, endDateOf, monthsOf } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow } from "@/lib/types";
@@ -45,6 +45,13 @@ export function CohortFormModal({
   const [roomId, setRoomId] = useState<string | null>(cohort?.room_id ?? preset?.room_id ?? null);
   const [start, setStart] = useState(cohort?.start_date ?? preset?.start_date ?? "");
   const [end, setEnd] = useState(cohort?.end_date ?? "");
+  const [months, setMonths] = useState(cohort ? String(monthsOf(cohort.start_date, cohort.end_date) ?? "") : "");
+  // the end follows the start and the length; a hand-typed end stays until one of them changes
+  const plan = (nextStart: string, nextMonths: string) => {
+    const n = Number(nextMonths);
+
+    if (nextStart && Number.isInteger(n) && n >= 1 && n <= 36) setEnd(endDateOf(nextStart, n));
+  };
   const [weekdays, setWeekdays] = useState<number[]>(cohort?.weekdays ?? (preset ? [preset.weekday] : []));
   const [startTime, setStartTime] = useState(cohort?.start_time ?? preset?.start_time ?? "10:00");
   const [endTime, setEndTime] = useState(cohort?.end_time ?? preset?.end_time ?? "11:30");
@@ -175,6 +182,10 @@ export function CohortFormModal({
               const course = courses.find((c) => c.id === id);
 
               if (!cohort && course && price === "") setPrice(String(Number(course.default_price_month)));
+              if (!cohort && course && months === "") {
+                setMonths(String(course.duration_months));
+                plan(start, String(course.duration_months));
+              }
             }}
           />
           <SelectField
@@ -217,7 +228,23 @@ export function CohortFormModal({
             max={MAX_DATE}
             min={MIN_DATE}
             value={start}
-            {...fe.field("start_date", setStart)}
+            {...fe.field("start_date", (v: string) => {
+              setStart(v);
+              plan(v, months);
+            })}
+          />
+          <Input
+            description="Дата конца считается сама; её можно поправить"
+            label="Длительность, мес."
+            max={36}
+            min={1}
+            placeholder=" "
+            type="number"
+            value={months}
+            onValueChange={(v) => {
+              setMonths(v);
+              plan(start, v);
+            }}
           />
           <DateField
             isRequired
@@ -225,7 +252,10 @@ export function CohortFormModal({
             max={MAX_DATE}
             min={MIN_DATE}
             value={end}
-            {...fe.field("end_date", setEnd)}
+            {...fe.field("end_date", (v: string) => {
+              setEnd(v);
+              setMonths(String(monthsOf(start, v) ?? ""));
+            })}
           />
           <Input isRequired label="Время начала" placeholder=" " type="time" value={startTime} {...fe.field("start_time", setStartTime)} />
           <Input isRequired label="Время конца" placeholder=" " type="time" value={endTime} {...fe.field("end_time", setEndTime)} />

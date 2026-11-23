@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
@@ -59,8 +60,8 @@ export default function GraduatesPage() {
   const refresh = useRefreshReports();
   const qc = useQueryClient();
   const [view, setView] = useState<View>("students");
-  const [f, setF] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
+  const [f, setF] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [job, setJob] = useState<GraduateRow | null>(null);
   const [choosing, setChoosing] = useState<{ row: GraduateRow; data: GraduateCertTemplates } | null>(null);
   const [issuing, setIssuing] = useState<GraduateRow | null>(null);

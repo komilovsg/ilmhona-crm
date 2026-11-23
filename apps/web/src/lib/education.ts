@@ -143,3 +143,29 @@ export function scheduleProblem(f: {
 
   return null;
 }
+
+/** The last day of a course of `months` months: 01.09 + 3 → 30.11; a start on a day the last
+ * month does not have (31.01 + 1) ends with that month. */
+export function endDateOf(start: string, months: number): string {
+  const [y, m, d] = start.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const days = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  const iso = (day: number) => new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), day)).toISOString().slice(0, 10);
+
+  return d > days ? iso(days) : addDays(iso(d), -1);
+}
+
+/** The whole months between the dates when `end` is exactly a course end, else null. */
+export function monthsOf(start: string, end: string): number | null {
+  if (!start || !end) return null;
+  for (let n = 1; n <= 36; n++) if (endDateOf(start, n) === end) return n;
+
+  return null;
+}
+
+export const EXPELLED = "отчислен";
+
+/** Expelled students go to the end of the list; the order inside each part stays. */
+export function expelledLast<T extends { status: string }>(rows: T[]): T[] {
+  return [...rows.filter((r) => r.status !== EXPELLED), ...rows.filter((r) => r.status === EXPELLED)];
+}

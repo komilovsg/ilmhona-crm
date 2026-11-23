@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useDeferredValue, useState } from "react";
@@ -172,8 +173,8 @@ function Entry({ row }: { row: AuditRow }) {
 
 export default function AuditPage() {
   const overlayMotion = useOverlayMotion();
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const q = useDeferredValue(filters.q.trim());
   const list = useQuery({

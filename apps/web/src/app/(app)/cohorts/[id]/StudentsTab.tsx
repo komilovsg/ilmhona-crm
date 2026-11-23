@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import Link from "next/link";
+import clsx from "clsx";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
@@ -21,7 +22,7 @@ import { useIsInstructor, useRefreshEducation } from "@/hooks/education";
 import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
-import { ENROLLMENT_STATUSES, formatPrice } from "@/lib/education";
+import { ENROLLMENT_STATUSES, EXPELLED, expelledLast, formatPrice } from "@/lib/education";
 import type { CohortPayments } from "@/lib/money-types";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
@@ -118,7 +119,9 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   });
   const confirm = useSubmit(() => removing ? remove.mutateAsync(removing.id) : Promise.resolve());
 
-  const rows = list.data ?? [];
+  const rows = expelledLast(list.data ?? []);
+  const firstExpelled = rows.findIndex((r) => r.status === EXPELLED);
+  const expelledTitle = `Отчисленные (${firstExpelled < 0 ? 0 : rows.length - firstExpelled})`;
   const flag = (r: EnrollmentRow) =>
     r.needs_review && (
       <div className="mt-1">
@@ -236,8 +239,16 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                {rows.map((r, i) => (
+                  <Fragment key={r.id}>
+                  {i === firstExpelled && (
+                    <tr className="border-y-2 border-divider bg-default-50 text-xs text-default-500">
+                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 7 : 4} scope="colgroup">
+                        {expelledTitle}
+                      </th>
+                    </tr>
+                  )}
+                  <tr className={clsx("border-b border-divider last:border-0 hover:bg-default-50", r.status === EXPELLED && "text-default-500")}>
                     <td className="px-4 py-3 font-medium">
                       <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
                         {r.student_name}
@@ -255,13 +266,18 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                     )}
                     <td className="px-2">{trash(r)}</td>
                   </tr>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
           </div>
           <ul data-rows className="space-y-3 md:hidden">
-            {rows.map((r) => (
-              <li key={r.id} className="rounded-2xl bg-content1 p-4">
+            {rows.map((r, i) => (
+              <Fragment key={r.id}>
+              {i === firstExpelled && (
+                <li className="border-t-2 border-divider px-1 pt-3 text-xs font-medium text-default-500">{expelledTitle}</li>
+              )}
+              <li className={clsx("rounded-2xl bg-content1 p-4", r.status === EXPELLED && "text-default-500")}>
                 <div className="flex items-start justify-between gap-2">
                   <Link className="min-w-0 truncate font-medium" href={`/students/${r.student_id}`}>
                     {r.student_name}
@@ -281,6 +297,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   </div>
                 )}
               </li>
+              </Fragment>
             ))}
           </ul>
         </>
