@@ -66,7 +66,7 @@ async def create_superadmin(login: str, full_name: str) -> str | None:
 
 
 async def daily(on: date | None = None) -> int:
-    """Re-derive every open cohort's status from the dates. Returns how many changed."""
+    """набор → активный by the start date (nothing finishes by date). Returns how many changed."""
     changed = 0
     async with sessionmaker() as db:
         cohorts = (
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     create = sub.add_parser("create-superadmin", help="create a superadmin with a temp password")
     create.add_argument("--login", required=True)
     create.add_argument("--full-name", default="Суперадмин")
-    sub.add_parser("daily", help="update cohort statuses, finished enrollments; purge old logins")
+    sub.add_parser("daily", help="start cohorts by date (набор → активный); purge old logins")
     sub.add_parser("seed-demo", help="load a fake dataset (all names invented)")
     sub.add_parser("wipe-demo", help="delete the rows seed-demo created, and only those")
     certs = sub.add_parser("import-cert-templates", help="load certificate templates from disk")

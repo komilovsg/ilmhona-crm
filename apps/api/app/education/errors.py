@@ -31,6 +31,12 @@ LESSON_NOT_HELD = errors.define("lesson_not_held", 409, "Lesson is on a later da
 ENROLLED_AFTER_LESSON = errors.define(
     "enrolled_after_lesson", 422, "The student was enrolled after that lesson"
 )
+COHORT_NOT_ACTIVE = errors.define("cohort_not_active", 409, "Only an active cohort can be finished")
+COHORT_NOT_DONE = errors.define("cohort_not_done", 409, "Cohort is not finished")
+# params: preview (the fresh numbers and lists)
+FINISH_CHANGED = errors.define(
+    "finish_changed", 409, "Who graduates changed since the preview was shown"
+)
 COHORT_NOT_CANCELLED = errors.define("cohort_not_cancelled", 409, "Cohort is not cancelled")
 INSTRUCTOR_INVALID = errors.define(
     "instructor_invalid", 422, "Instructor must be an active instructor of the cohort's branch"

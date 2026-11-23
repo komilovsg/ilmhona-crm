@@ -7,8 +7,12 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
+from sqlalchemy import select
 
+from app.cohorts import status as st
 from app.cohorts.status import today
+from app.core.db import sessionmaker
+from app.models import Cohort
 from tests.conftest import branch_id, sql
 
 C = "/api/v1/cohorts"
@@ -120,3 +124,26 @@ async def instructor_rights(**sections: str) -> AsyncIterator[None]:
                 s=section,
                 l=level,
             )
+
+
+async def finish_overdue(on: date | None = None) -> int:
+    """What the old daily job did, now by hand: finish every активный cohort whose end date passed
+    (the real `finish_preview` + `finish`). Returns how many were finished."""
+    done = 0
+    async with sessionmaker() as db:
+        cohorts = (
+            (
+                await db.execute(
+                    select(Cohort).where(
+                        Cohort.status == st.ACTIVE, Cohort.end_date < (on or today())
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for cohort in cohorts:
+            await st.finish(db, cohort, None, await st.finish_preview(db, cohort, lock=True))
+            done += 1
+        await db.commit()
+    return done

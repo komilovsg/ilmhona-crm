@@ -19,9 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
-from app.certificates.assets import MAX_BYTES, inspect, load_assets, store_asset
+from app.certificates.assets import MAX_BYTES, inspect, load_assets, store_asset, svg_sides
 from app.certificates.cutout import cut_background
 from app.certificates.errors import (
+    CERT_ASSET_DIMENSIONS,
     CERT_ASSET_INVALID,
     CERT_ASSET_MISSING,
     CERT_NOTHING_TO_PUBLISH,
@@ -420,9 +421,10 @@ def asset_out(a: CertAsset) -> dict[str, Any]:
 
 
 def _check_sides(data: bytes) -> None:
-    mime, w, h, _ = inspect(data)
-    if mime != "image/svg+xml" and ((w or 0) > MAX_SIDE_PX or (h or 0) > MAX_SIDE_PX):
-        raise DomainError(CERT_ASSET_INVALID, reason="dimensions")
+    mime, w, h, clean = inspect(data)
+    sides = svg_sides(clean) if mime == "image/svg+xml" else [w or 0, h or 0]
+    if any(side > MAX_SIDE_PX for side in sides):
+        raise DomainError(CERT_ASSET_DIMENSIONS, side_px=MAX_SIDE_PX)
 
 
 @router.post("/cert-assets")

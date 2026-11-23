@@ -38,9 +38,12 @@ from app.core.versioning import Version, check_version
 from app.education.errors import (
     COHORT_CLOSED,
     COHORT_IN_USE,
+    COHORT_NOT_ACTIVE,
     COHORT_NOT_CANCELLED,
+    COHORT_NOT_DONE,
     ENROLLMENT_HAS_RECORDS,
     ENROLLMENT_NOT_YOURS,
+    FINISH_CHANGED,
     INSTRUCTOR_INVALID,
     LESSON_CANCELLED,
     ROOM_BRANCH_MISMATCH,
@@ -260,6 +263,7 @@ def _out(
         "capacity": c.capacity,
         "price_month": c.price_month,
         "status": c.status,
+        "overdue": st.is_overdue(c),
         "fill": fill,
     }
 
@@ -299,8 +303,18 @@ async def _detail(db: AsyncSession, cohort_id: uuid.UUID) -> dict[str, Any]:
         .select_from(Lesson)
         .where(Lesson.cohort_id == cohort_id, Lesson.instructor_conflict)
     )
-    # lessons that came overlapping another lesson of the instructor (old data): to check
-    return {**(await _outs(db, rows))[0], "instructor_conflicts": conflicts or 0}
+    certificates = await db.scalar(
+        select(func.count())
+        .select_from(Enrollment)
+        .where(Enrollment.cohort_id == cohort_id, Enrollment.certificate_no.is_not(None))
+    )
+    # lessons that came overlapping another lesson of the instructor (old data): to check;
+    # issued certificates: while there are any, a finished cohort cannot be reopened
+    return {
+        **(await _outs(db, rows))[0],
+        "instructor_conflicts": conflicts or 0,
+        "certificates_issued": certificates or 0,
+    }
 
 
 async def _check_instructor(
@@ -351,11 +365,17 @@ def _now() -> datetime:
 
 
 def _cohort_where(
-    p: Principal, status: str | None, branch_id: uuid.UUID | None, q: str | None
+    p: Principal,
+    status: str | None,
+    branch_id: uuid.UUID | None,
+    q: str | None,
+    overdue: bool = False,
 ) -> list[Any]:
     where: list[Any] = list(cohort_filters(p))
     if status:
         where.append(Cohort.status == status)
+    if overdue:  # «Срок вышел, не завершён»
+        where += [Cohort.status == st.ACTIVE, Cohort.end_date < st.today()]
     if branch_id:
         where.append(Cohort.branch_id == branch_id)
     if q and q.strip():
@@ -374,10 +394,11 @@ async def list_cohorts(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
+    overdue: bool = False,
     page: Page = 1,
     page_size: PageSize = 24,
 ) -> dict[str, Any]:
-    where = _cohort_where(p, status, branch_id, q)
+    where = _cohort_where(p, status, branch_id, q, overdue)
     total = (
         await db.execute(
             select(func.count())
@@ -445,8 +466,9 @@ async def export_cohorts(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
+    overdue: bool = False,
 ) -> Response:
-    where = _cohort_where(p, status, branch_id, q)
+    where = _cohort_where(p, status, branch_id, q, overdue)
     rows = (await db.execute(_cohort_ordered(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     columns = [*COHORT_COLUMNS, *PAID_COLUMNS] if can_view_payments(p) else COHORT_COLUMNS
@@ -458,7 +480,7 @@ async def export_cohorts(
         title="Потоки",
         columns=columns,
         rows=await _with_paid(db, p, await _outs(db, list(rows))),
-        filters={"status": status, "branch_id": branch_id, "q": q},
+        filters={"status": status, "branch_id": branch_id, "q": q, "overdue": overdue or None},
     )
 
 
@@ -504,7 +526,7 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
         capacity=body.capacity,
         price_month=course.default_price_month if body.price_month is None else body.price_month,
         instructor_rate=await _default_rate(db, body.instructor_id),
-        status=st.status_for(body.start_date, body.end_date, st.today()),
+        status=st.open_status(body.start_date, st.today()),
     )
     db.add(cohort)
     await db.flush()
@@ -655,7 +677,7 @@ async def restore_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
         )
     )
     await db.flush()
-    cohort.status = st.status_for(cohort.start_date, cohort.end_date, st.today())
+    cohort.status = st.open_status(cohort.start_date, st.today())
     await generate_lessons(db, cohort, after=now)
     await settle_conflicts(db, {cohort.instructor_id})
     await st.sync_status(db, cohort, p.id)
@@ -669,6 +691,57 @@ async def restore_cohort(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
         {"status": [st.CANCELLED, cohort.status]},
         branch_id=cohort.branch_id,
     )
+    return await _detail(db, cohort.id)
+
+
+class FinishIn(Strict):
+    graduates: int = Field(ge=0)
+    completed: int = Field(ge=0)
+
+
+@router.get("/cohorts/{cohort_id}/finish-preview")
+async def finish_preview(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, Any]:
+    """Who the finish would make выпускник / завершил, and who is left out. Writes nothing."""
+    cohort = await _load(db, p, cohort_id)
+    if cohort.status != st.ACTIVE:
+        raise DomainError(COHORT_NOT_ACTIVE)
+    return await st.finish_preview(db, cohort)
+
+
+@router.post("/cohorts/{cohort_id}/finish")
+async def finish_cohort(
+    cohort_id: uuid.UUID, body: FinishIn, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    """Finish by hand (also before end_date): «завершён», the активный students close by the
+    pass rule, all under row locks. The counts are what the user saw in the preview: other
+    numbers now = 409 `finish_changed` with the fresh preview, nothing written."""
+    cohort = await _load(db, p, cohort_id)
+    await check_version(db, cohort, version, "cohort", lambda: _detail(db, cohort.id))
+    if cohort.status != st.ACTIVE:
+        raise DomainError(COHORT_NOT_ACTIVE)
+    preview = await st.finish_preview(db, cohort, lock=True)
+    if (preview["graduates"], preview["completed"]) != (body.graduates, body.completed):
+        raise DomainError(FINISH_CHANGED, preview=preview)
+    await st.finish(db, cohort, p.id, preview)
+    cohort.updated_at = _now()
+    return await _detail(db, cohort.id)
+
+
+@router.post("/cohorts/{cohort_id}/reopen")
+async def reopen_cohort(
+    cohort_id: uuid.UUID, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    """Superadmin only, and only while no certificate was issued in the cohort."""
+    if not p.is_superadmin:
+        raise DomainError(FORBIDDEN, section="cohorts", level="superadmin")
+    cohort = await _load(db, p, cohort_id)
+    await check_version(db, cohort, version, "cohort", lambda: _detail(db, cohort.id))
+    if cohort.status != st.DONE:
+        raise DomainError(COHORT_NOT_DONE)
+    if await st.has_certificates(db, cohort):
+        raise DomainError(CERTIFICATE_ISSUED)
+    await st.reopen(db, cohort, p.id)
+    cohort.updated_at = _now()
     return await _detail(db, cohort.id)
 
 
