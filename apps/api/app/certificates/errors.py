@@ -3,6 +3,7 @@ from app.core.errors import errors
 CERT_FIELD_UNKNOWN = errors.define("cert_field_unknown", 422, "Unknown field in the template")
 CERT_LAYOUT_INVALID = errors.define("cert_layout_invalid", 422, "The template layout is invalid")
 CERT_ASSET_INVALID = errors.define("cert_asset_invalid", 422, "The image is not acceptable")
+CERT_ASSET_DIMENSIONS = errors.define("cert_asset_dimensions", 422, "The image is too large")
 CERT_ASSET_MISSING = errors.define("cert_asset_missing", 422, "An image of the template is gone")
 CERT_GENDER_MISSING = errors.define(
     "cert_gender_missing", 409, "The student's gender is needed by the template"

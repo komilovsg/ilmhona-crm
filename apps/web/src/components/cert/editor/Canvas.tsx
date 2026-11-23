@@ -4,7 +4,7 @@ import { useRef, useState, type CSSProperties, type Dispatch, type RefObject } f
 import clsx from "clsx";
 
 import type { BlockKey } from "@/lib/cert-editor/blocks";
-import { isOutside, rectOf, resizeRect, round1, SAFE_MARGIN_MM, snapMove, snapResize, type Guide, type Handle, type Rect } from "@/lib/cert-editor/geometry";
+import { isOutside, pickLayer, rectOf, resizeKeepAspect, resizeRect, round1, SAFE_MARGIN_MM, snapMove, snapResize, type Guide, type Handle, type Rect } from "@/lib/cert-editor/geometry";
 import { withRect, type Action, type EditorState } from "@/lib/cert-editor/reducer";
 import type { Run } from "@/lib/cert-editor/types";
 import { LayerView } from "./LayerView";
@@ -70,7 +70,9 @@ export function Canvas({
 
       return;
     }
-    const id = target.closest<HTMLElement>("[data-layer-id]")?.dataset.layerId;
+    // by geometry, not by the element under the pointer: a layer lying over an icon must not hide it
+    const box = (sheet.current ?? (e.currentTarget as HTMLElement)).getBoundingClientRect();
+    const id = pickLayer(layout.layers, (e.clientX - box.left) / view.scale, (e.clientY - box.top) / view.scale, selection, e.altKey && !e.shiftKey)?.id;
 
     pressed.current = id ?? null;
     if (!id) {
@@ -130,11 +132,14 @@ export function Canvas({
       });
     } else {
       const others = layout.layers.filter((l) => l.id !== g.id).map(rectOf);
-      const raw = resizeRect(g.orig, g.handle, dx, dy);
-      const snapped = snapResize(raw, g.handle, others, page, { enabled: snapOn, threshold: 6 / view.scale });
-      const r = snapOn ? snapped.rect : { x: round1(raw.x), y: round1(raw.y), w: round1(raw.w), h: round1(raw.h) };
+      const free = resizeRect(g.orig, g.handle, dx, dy);
+      // pictures keep their proportions on a corner drag; Shift stretches them
+      const proportional = layout.layers.find((l) => l.id === g.id)?.type === "image" && !e.shiftKey && g.handle.length === 2;
+      const raw = proportional ? resizeKeepAspect(g.orig, g.handle, free) : free;
+      const snapped = snapResize(raw, g.handle, others, page, { enabled: snapOn && !proportional, threshold: 6 / view.scale });
+      const r = snapOn && !proportional ? snapped.rect :{ x: round1(raw.x), y: round1(raw.y), w: round1(raw.w), h: round1(raw.h) };
 
-      setGuides(snapOn ? snapped.guides : []);
+      setGuides(snapOn && !proportional ? snapped.guides : []);
       dispatch({ type: "update", ids: [g.id], live: true, fn: withRect({ x: round1(r.x), y: round1(r.y), w: round1(r.w), h: round1(r.h) }) });
     }
   }

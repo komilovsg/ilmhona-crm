@@ -286,6 +286,23 @@ def test_a_huge_pdf_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
     assert exc.value.error.code == "cert_pdf_too_large"
 
 
+RED = b"0.8 0 0 rg"
+
+
+def pdf_streams(pdf: bytes) -> bytes:
+    """Every decoded stream of the file: page content, forms, images (an SVG icon is drawn as paths)."""
+    reader = PdfReader(io.BytesIO(pdf))
+    out = b""
+    for n in range(1, len(reader.xref_objStm) + 400):
+        try:
+            obj = reader.get_object(n)
+        except Exception:
+            continue
+        if hasattr(obj, "get_data"):
+            out += obj.get_data()
+    return out
+
+
 # ---- images ----------------------------------------------------------------------------------
 
 EVIL_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -315,6 +332,27 @@ def test_svg_sanitizer_drops_scripts_handlers_and_external_references() -> None:
     ):
         assert bad not in out, bad
     assert "data:image/png;base64,AAAA" in out and 'href="#ok"' in out and "<rect" in out
+
+
+HOSTILE_SVGS = {
+    "animate_href": b'<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="href" values="javascript:alert(1)"/><rect width="1" height="1"/></a></svg>',
+    "set_href": b'<svg xmlns="http://www.w3.org/2000/svg"><a href="#x"><set attributeName="href" to="javascript:alert(1)"/></a></svg>',
+    "prefixed_script": b'<s:svg xmlns:s="http://www.w3.org/2000/svg"><s:script>alert(1)</s:script><s:rect width="1" height="1"/></s:svg>',
+    "uppercase_handler": b'<svg xmlns="http://www.w3.org/2000/svg"><rect width="1" height="1" OnClick="alert(1)" ONMOUSEOVER="x()"/></svg>',
+    "xlink_javascript": b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><a xlink:href="javascript:alert(1)"><rect width="1" height="1"/></a></svg>',
+    "css_import_attr": b'<svg xmlns="http://www.w3.org/2000/svg"><style>@import "http://evil.example/x.css";</style><rect width="1" height="1" style="background:url(//evil.example/x)"/></svg>',
+    "iframe_object_embed": b'<svg xmlns="http://www.w3.org/2000/svg"><iframe src="http://evil.example"/><object data="http://evil.example"/><embed src="http://evil.example"/><rect width="1" height="1"/></svg>',
+    "nested_foreign": b'<svg xmlns="http://www.w3.org/2000/svg"><g><g><foreignObject><body xmlns="http://www.w3.org/1999/xhtml" onload="x()"/></foreignObject></g></g><rect width="1" height="1"/></svg>',
+}
+
+
+@pytest.mark.parametrize("name", sorted(HOSTILE_SVGS))
+def test_hostile_svgs_are_cleaned(name: str) -> None:
+    out = sanitize_svg(HOSTILE_SVGS[name]).decode().lower()
+    for bad in ("javascript", "evil.example", "script", "foreignobject", "onclick", "onload"):
+        assert bad not in out, (name, bad)
+    for tag in ("<iframe", "<object", "<embed", "<animate", "<set", "onmouseover", "@import"):
+        assert tag not in out, (name, tag)
 
 
 def test_svg_with_a_doctype_or_entities_is_refused() -> None:
@@ -428,6 +466,9 @@ async def test_template_comes_from_the_query_then_the_course_rule_then_the_defau
         "INSERT INTO cert_template_rule (course_id, template_id) VALUES (:c, :t)",
         c=cohort["course_id"], t=ruled,
     )  # fmt: skip
+    # an issued certificate keeps its template when the rules change later
+    assert "СПЕЦИАЛЬНЫЙ" not in pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
+    await sql("UPDATE enrollment SET certificate_version_id = NULL")
     assert "СПЕЦИАЛЬНЫЙ" in pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
     r = await admin.get(f"{G}/{eid}/certificate/pdf", params={"template_id": explicit})
     assert "ВЫБРАННЫЙ" in pdf_text(r.content)
@@ -449,6 +490,67 @@ async def test_the_latest_published_version_is_used(admin: httpx.AsyncClient) ->
     assert "ВТОРАЯ" in pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
     with pytest.raises(Exception, match="never updated"):
         await sql("UPDATE cert_template_version SET version_no = 9")
+
+
+async def test_issued_certificate_keeps_its_version_and_new_ones_get_the_new_icon(
+    admin: httpx.AsyncClient,
+) -> None:
+    old_icon = await admin.post(
+        "/api/v1/cert-assets",
+        files={"file": ("a.svg", SVG, "image/svg+xml")},
+        data={"kind": "image"},
+    )
+    new_svg = SVG.replace(b"#eee", b"#c00")
+    new_icon = await admin.post(
+        "/api/v1/cert-assets",
+        files={"file": ("b.svg", new_svg, "image/svg+xml")},
+        data={"kind": "image"},
+    )
+    icon = {
+        "id": "donor",
+        "type": "image",
+        "x_mm": 20,
+        "y_mm": 20,
+        "w_mm": 40,
+        "h_mm": 20,
+        "source": {"asset": old_icon.json()["id"]},
+    }
+    tid = await make_template(lay=with_layers(text_layer("a", {"text": "ПЕРВАЯ"}), icon))
+    cohort, ids = await finished_cohort(admin, {"Каримов Али": (40, 35), "Рахимов Тимур": (40, 35)})
+    for eid in ids.values():
+        await sql(
+            "UPDATE student SET gender = 'male' WHERE id = (SELECT student_id FROM enrollment WHERE id = :i)",
+            i=eid,
+        )
+    first, second = ids["Каримов Али"], ids["Рахимов Тимур"]
+    await certify(admin, first)
+    before = await admin.get(f"{G}/{first}/certificate/pdf")
+    # the owner replaces the icon and publishes version 2
+    v2 = with_layers(
+        text_layer("a", {"text": "ВТОРАЯ"}), {**icon, "source": {"asset": new_icon.json()["id"]}}
+    )
+    await sql(
+        "INSERT INTO cert_template_version (template_id, version_no, layout) VALUES (:t, 2, CAST(:l AS jsonb))",
+        t=tid, l=json.dumps(v2),
+    )  # fmt: skip
+    after = await admin.get(f"{G}/{first}/certificate/pdf")
+    explicit = await admin.get(f"{G}/{first}/certificate/pdf", params={"template_id": tid})
+    assert after.content == before.content == explicit.content
+    for r in (before, after, explicit):
+        assert r.status_code == 200, r.text
+        assert "ПЕРВАЯ" in pdf_text(r.content) and "ВТОРАЯ" not in pdf_text(r.content)
+    await certify(admin, second)
+    fresh = await admin.get(f"{G}/{second}/certificate/pdf")
+    assert "ВТОРАЯ" in pdf_text(fresh.content)
+    assert RED in pdf_streams(fresh.content) and RED not in pdf_streams(before.content)
+    assert RED not in pdf_streams(after.content)
+    pinned = await sql(
+        "SELECT e.id, v.version_no FROM enrollment e JOIN cert_template_version v ON v.id = e.certificate_version_id"
+    )
+    assert {str(r[0]): r[1] for r in pinned} == {first: 1, second: 2}
+    # the template list names the pinned template as the default
+    listed = (await admin.get(f"{G}/{first}/certificate/templates")).json()
+    assert listed["default_template_id"] == tid
 
 
 async def test_templates_list_and_preview(admin: httpx.AsyncClient, login_as: SignedIn) -> None:

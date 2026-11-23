@@ -41,7 +41,7 @@
     "clsx": "2.1.1",
     "fflate": "^0.8.3",
     "framer-motion": "^12.43.0",
-    "next": "16.4.3",
+    "next": "16.4.5",
     "pdf-lib": "^1.17.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
@@ -52,7 +52,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.5",
     "playwright-core": "1.62.1",
     "postcss": "^8",
     "tailwindcss": "^4",

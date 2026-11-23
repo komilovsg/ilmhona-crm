@@ -69,18 +69,35 @@ TemplatesChange = Annotated[Principal, require("cert_templates", "change")]
 DEFAULT_KEY = "general_ru"
 
 
-async def latest_layout(db: AsyncSession, template: CertTemplate) -> Layout:
-    layout = (
+async def latest_version(db: AsyncSession, template: CertTemplate) -> CertTemplateVersion:
+    version = (
         await db.execute(
-            select(CertTemplateVersion.layout)
+            select(CertTemplateVersion)
             .where(CertTemplateVersion.template_id == template.id)
             .order_by(CertTemplateVersion.version_no.desc())
             .limit(1)
         )
     ).scalar_one_or_none()
-    if layout is None:
+    if version is None:
         raise DomainError(CERT_NO_TEMPLATE)
-    return parse_layout(layout)
+    return version
+
+
+async def latest_layout(db: AsyncSession, template: CertTemplate) -> Layout:
+    return parse_layout((await latest_version(db, template)).layout)
+
+
+async def pin_default_version(
+    db: AsyncSession, enrollment: Enrollment, course_id: uuid.UUID, instructor_id: uuid.UUID | None
+) -> None:
+    """At issue: the certificate is drawn from the version the rules choose now, for good.
+    Without any published template nothing is pinned (the first PDF pins it)."""
+    try:
+        template = await pick_template(db, course_id, instructor_id)
+        enrollment.certificate_version_id = (await latest_version(db, template)).id
+    except DomainError:
+        return
+    await db.flush()
 
 
 async def pick_template(
@@ -193,14 +210,29 @@ async def certificate_pdf(
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
+    pinned = (
+        await db.get(CertTemplateVersion, enrollment.certificate_version_id)
+        if enrollment.certificate_version_id
+        else None
+    )
     if template_id is not None:
         template = await db.get(CertTemplate, template_id)
         if template is None:
             raise DomainError(NOT_FOUND)
+    elif pinned is not None:
+        template = await db.get(CertTemplate, pinned.template_id)
+        assert template is not None
     else:
         template = await pick_template(db, course.id, instructor.id if instructor else None)
+    # a certificate already drawn from this template keeps its version; another template (or the
+    # first PDF) takes the newest published one and is remembered
+    if pinned is not None and pinned.template_id == template.id:
+        version = pinned
+    else:
+        version = await latest_version(db, template)
+        enrollment.certificate_version_id = version.id
     apply_settings(ctx, await load_settings(db), template.lang)
-    layout = await latest_layout(db, template)
+    layout = parse_layout(version.layout)
     assets = await load_assets(db, [*layout.asset_refs(), *image_refs(ctx)])
     pdf = await render_pdf(layout, ctx, assets)
     await record(

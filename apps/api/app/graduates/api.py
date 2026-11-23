@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from app.audit.log import record
 from app.auth.deps import Principal, require_csrf_header
+from app.certificates.api import pin_default_version
 from app.cohorts.status import GRADUATE
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
@@ -202,6 +203,7 @@ async def issue_certificate(enrollment_id: uuid.UUID, p: Change, db: DB) -> dict
     if enrollment.status == GRADUATE and enrollment.certificate_no:
         raise DomainError(CERTIFICATE_ISSUED)
     await assign_number(db, enrollment)
+    await pin_default_version(db, enrollment, cohort.course_id, cohort.instructor_id)
     await record(
         db,
         p.id,

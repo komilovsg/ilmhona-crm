@@ -498,7 +498,7 @@ async def test_a_director_name_that_does_not_fit_is_422_with_template_names(
 # ---- migration -------------------------------------------------------------------------------
 
 
-async def test_migration_0026_up_and_down() -> None:
+async def test_migration_0027_up_and_down() -> None:
     name = f"{TEST_DB}_mig_cert"
     url_ = SERVER_URL.set(database=name)
     server = create_async_engine(SERVER_URL.set(database="postgres"), isolation_level="AUTOCOMMIT")
@@ -514,9 +514,9 @@ async def test_migration_0026_up_and_down() -> None:
             return (await conn.execute(text(query))).scalar_one()
 
     try:
-        await asyncio.to_thread(command.upgrade, cfg, "0025")
-        assert await one("SELECT to_regclass('certificate')") is None
         await asyncio.to_thread(command.upgrade, cfg, "0026")
+        assert await one("SELECT to_regclass('certificate')") is None
+        await asyncio.to_thread(command.upgrade, cfg, "0027")
         assert await one("SELECT to_regclass('certificate')") == "certificate"
         assert (
             await one(
@@ -525,7 +525,7 @@ async def test_migration_0026_up_and_down() -> None:
             == 1
         )
         assert await one("SELECT allow_non_graduate FROM cert_settings") is False
-        await asyncio.to_thread(command.downgrade, cfg, "0025")
+        await asyncio.to_thread(command.downgrade, cfg, "0026")
         assert await one("SELECT to_regclass('certificate')") is None
         assert (
             await one(

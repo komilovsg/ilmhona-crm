@@ -266,6 +266,7 @@ async def _create(
     await assign_number(db, enrollment, graduate_only=not non_graduate and previous is None)
     number = enrollment.certificate_no
     assert number
+    enrollment.certificate_version_id = version.id  # the PDF route keeps drawing from it
     code = new_verify_code()
     cert = Certificate(
         number=number,

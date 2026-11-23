@@ -5,9 +5,37 @@
     "height_mm": 210.0
   },
   "background": {
-    "asset": "scratch.png"
+    "asset": "clean/scratch.png"
   },
   "layers": [
+    {
+      "id": "logo_intel",
+      "type": "image",
+      "x_mm": 18.29,
+      "y_mm": 181.52,
+      "w_mm": 26.58,
+      "h_mm": 11.43,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/scratch_intel.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_ilmhona",
+      "type": "image",
+      "x_mm": 51.56,
+      "y_mm": 181.52,
+      "w_mm": 40.81,
+      "h_mm": 10.33,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/scratch_ilmhona.png"
+      },
+      "fit": "contain"
+    },
     {
       "id": "dir_cover",
       "type": "rect",

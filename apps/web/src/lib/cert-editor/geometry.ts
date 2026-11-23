@@ -41,6 +41,51 @@ export function hitTest<T extends { x_mm: number; y_mm: number; w_mm: number; h_
   return null;
 }
 
+/** Layers under the point, topmost first (a layer's rectangle ignores rotation). */
+export function hitStack<T extends { x_mm: number; y_mm: number; w_mm: number; h_mm: number }>(layers: T[], xMm: number, yMm: number): T[] {
+  const out: T[] = [];
+
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const r = rectOf(layers[i]);
+
+    if (xMm >= r.x && xMm <= r.x + r.w && yMm >= r.y && yMm <= r.y + r.h) out.push(layers[i]);
+  }
+
+  return out;
+}
+
+/**
+ * The layer a press selects. Plain press: a layer that is already selected stays (so an icon can be
+ * dragged where text lies over it), else the topmost. `below`: the next layer under the selected one,
+ * wrapping to the top, so a layer hidden behind others can be reached.
+ */
+export function pickLayer<T extends { id: string; x_mm: number; y_mm: number; w_mm: number; h_mm: number }>(
+  layers: T[],
+  xMm: number,
+  yMm: number,
+  selection: string[],
+  below = false,
+): T | null {
+  const stack = hitStack(layers, xMm, yMm);
+
+  if (!stack.length) return null;
+  const at = stack.findIndex((l) => selection.includes(l.id));
+
+  if (below) return stack[at < 0 ? 0 : (at + 1) % stack.length];
+
+  return at >= 0 ? stack[at] : stack[0];
+}
+
+/** A corner drag that keeps the proportions of `orig`: the opposite corner stays, the larger scale wins. */
+export function resizeKeepAspect(orig: Rect, handle: Handle, raw: Rect, min = MIN_SIZE_MM): Rect {
+  if (handle.length !== 2) return raw;
+  const s = Math.max(raw.w / orig.w, raw.h / orig.h, min / orig.w, min / orig.h);
+  const w = orig.w * s;
+  const h = orig.h * s;
+
+  return { x: handle.includes("w") ? orig.x + orig.w - w : orig.x, y: handle.includes("n") ? orig.y + orig.h - h : orig.y, w, h };
+}
+
 export function isOutside(r: Rect, page: Page): boolean {
   return r.x < 0 || r.y < 0 || r.x + r.w > page.width_mm || r.y + r.h > page.height_mm;
 }

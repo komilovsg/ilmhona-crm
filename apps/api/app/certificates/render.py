@@ -11,6 +11,7 @@ margin on the width), greedy word wrap, explicit line breaks respected.
 
 import html
 import io
+import os
 import threading
 from datetime import date
 from urllib.parse import unquote
@@ -283,6 +284,9 @@ def build_html(
 
 
 def render_sync(layout: Layout, ctx: Context, assets: Assets) -> bytes:
+    # font subsets carry a modified-time stamp (fontTools reads this variable): fixed, the same
+    # certificate renders to the same bytes every time
+    os.environ.setdefault("SOURCE_DATE_EPOCH", "1767225600")
     with _SLOTS:
         doc, resources = build_html(layout, ctx, assets)
         try:

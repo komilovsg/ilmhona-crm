@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { fitScale, hitTest, isOutside, mmToPx, moveRect, nudgeDelta, pxToMm, resizeRect, snapMove, snapResize, type Handle } from "./geometry.ts";
+import { fitScale, hitStack, hitTest, pickLayer, resizeKeepAspect, isOutside, mmToPx, moveRect, nudgeDelta, pxToMm, resizeRect, snapMove, snapResize, type Handle } from "./geometry.ts";
 
 const PAGE = { width_mm: 297, height_mm: 210 };
 const R = { x: 50, y: 40, w: 60, h: 20 };
@@ -93,4 +93,33 @@ test("hit test takes the topmost layer; outside detection", () => {
   assert.equal(hitTest(layers, 150, 150), null);
   assert.equal(isOutside({ x: 290, y: 0, w: 10, h: 5 }, PAGE), true);
   assert.equal(isOutside({ x: 10, y: 10, w: 10, h: 5 }, PAGE), false);
+});
+
+test("pick: topmost, a selected layer stays, below cycles through the stack", () => {
+  const layers = [
+    { id: "icon", x_mm: 10, y_mm: 10, w_mm: 20, h_mm: 20 },
+    { id: "rect", x_mm: 0, y_mm: 0, w_mm: 100, h_mm: 100 },
+    { id: "text", x_mm: 5, y_mm: 5, w_mm: 50, h_mm: 50 },
+  ];
+
+  assert.equal(pickLayer(layers, 15, 15, [])?.id, "text");
+  assert.equal(pickLayer(layers, 15, 15, ["icon"])?.id, "icon");
+  assert.equal(pickLayer(layers, 15, 15, ["text"], true)?.id, "rect");
+  assert.equal(pickLayer(layers, 15, 15, ["rect"], true)?.id, "icon");
+  assert.equal(pickLayer(layers, 15, 15, ["icon"], true)?.id, "text");
+  assert.equal(pickLayer(layers, 15, 15, [], true)?.id, "text");
+  assert.equal(pickLayer(layers, 99, 99, [])?.id, "rect");
+  assert.equal(pickLayer(layers, 150, 150, []), null);
+  assert.deepEqual(hitStack(layers, 15, 15).map((l) => l.id), ["text", "rect", "icon"]);
+});
+
+test("corner resize keeps the proportions and the opposite corner", () => {
+  const o = { x: 10, y: 10, w: 40, h: 20 };
+
+  assert.deepEqual(resizeKeepAspect(o, "se", { x: 10, y: 10, w: 80, h: 25 }), { x: 10, y: 10, w: 80, h: 40 });
+  assert.deepEqual(resizeKeepAspect(o, "nw", { x: 0, y: 0, w: 50, h: 30 }), { x: -10, y: 0, w: 60, h: 30 });
+  assert.deepEqual(resizeKeepAspect(o, "e", { x: 10, y: 10, w: 60, h: 20 }), { x: 10, y: 10, w: 60, h: 20 });
+  const tiny = resizeKeepAspect(o, "se", { x: 10, y: 10, w: 1, h: 1 });
+
+  assert.ok(tiny.w >= 2 && tiny.h >= 2 && Math.abs(tiny.w / tiny.h - 2) < 1e-9);
 });

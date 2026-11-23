@@ -275,6 +275,10 @@ class Enrollment(Versioned, Legacy, Base):
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # numbered although not a graduate (superadmin's switch in the certificate settings)
     certificate_non_graduate: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # the published template version the certificate is drawn from: a later publish never changes it
+    certificate_version_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("cert_template_version.id", ondelete="SET NULL")
+    )
     needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     review_reason: Mapped[str | None] = mapped_column(Text)
     # the status the enrollment had when its cohort was finished (reopen restores it)

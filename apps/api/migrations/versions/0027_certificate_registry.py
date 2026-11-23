@@ -9,8 +9,8 @@ enrollment carries `certificate_non_graduate`, which the graduate-only check on 
 
 from alembic import op
 
-revision = "0026"
-down_revision = "0025"
+revision = "0027"
+down_revision = "0026"
 
 OLD_SECTIONS = (
     "dashboard", "leads", "students", "cohorts", "attendance", "payments", "rooms", "graduates",
