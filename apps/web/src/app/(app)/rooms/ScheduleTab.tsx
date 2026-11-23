@@ -15,7 +15,23 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { addDays, dayMonth, dayTitle, mondayOf, todayIso, weekOf } from "@/lib/education";
 import { useIsPhone } from "@/lib/client-store";
-import { SLOT, TICK, boardDays, boardHours, clock, courseHue, linesOf, slotsOf } from "@/lib/schedule-board";
+import {
+  type MonthSpan,
+  type Period,
+  PERIODS,
+  SLOT,
+  TICK,
+  boardDays,
+  boardHours,
+  clock,
+  courseHue,
+  linesOf,
+  monthsOfPeriod,
+  periodTitle,
+  shiftDay,
+  slotsOf,
+  weekBands,
+} from "@/lib/schedule-board";
 import type { GridLesson, ScheduleGrid } from "@/lib/types";
 
 const LINE_PX = 5; // one TICK of the board: a half-hour row is 30px
@@ -40,10 +56,20 @@ function Block({ lesson, style }: { lesson: GridLesson; style: CSSProperties }) 
 }
 
 /** Time down the side, a column per room inside each day; an empty cell is a free room. */
-function Board({ grid, days, today }: { grid: ScheduleGrid; days: string[]; today: string }) {
+function Board({
+  grid,
+  days,
+  today,
+  hours,
+}: {
+  grid: ScheduleGrid;
+  days: string[];
+  today: string;
+  hours: { from: number; to: number };
+}) {
   const rooms = grid.rooms;
   const lessons = grid.lessons.filter((l) => days.includes(l.date));
-  const { from, to } = boardHours(lessons);
+  const { from, to } = hours;
   const slots = slotsOf(from, to);
   const perSlot = SLOT / TICK;
   const column = (day: number, room: number) => 2 + day * rooms.length + room;
@@ -64,12 +90,13 @@ function Board({ grid, days, today }: { grid: ScheduleGrid; days: string[]; toda
           <div
             key={d}
             className={clsx(
-              "border-b border-l-2 border-divider px-2 py-2 text-center text-sm font-medium",
+              "border-b border-l-2 border-divider py-2 text-sm font-medium",
               d === today && "bg-primary/10 text-brand-text",
             )}
             style={{ gridRow: 1, gridColumn: `${column(di, 0)} / span ${rooms.length}` }}
           >
-            {dayTitle(d)}
+            {/* the day stays in sight while its rooms scroll by */}
+            <span className="sticky left-14 inline-block px-2">{dayTitle(d)}</span>
           </div>
         ))}
         {days.map((d, di) =>
@@ -96,20 +123,22 @@ function Board({ grid, days, today }: { grid: ScheduleGrid; days: string[]; toda
             {clock(slot)}
           </div>
         ))}
+        {/* the lines: one strip per half hour across, one per room down */}
+        {slots.map((slot, si) => (
+          <div
+            key={`row-${slot}`}
+            className="border-b border-divider"
+            style={{ gridColumn: "2 / -1", gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
+          />
+        ))}
         {days.map((d, di) =>
-          rooms.map((room, ri) =>
-            slots.map((slot, si) => (
-              <div
-                key={`${d}-${room.id}-${slot}`}
-                className={clsx(
-                  "border-b border-divider",
-                  ri === 0 ? "border-l-2" : "border-l",
-                  d === today && "bg-primary/5",
-                )}
-                style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
-              />
-            )),
-          ),
+          rooms.map((room, ri) => (
+            <div
+              key={`col-${d}-${room.id}`}
+              className={clsx("border-divider", ri === 0 ? "border-l-2" : "border-l", d === today && "bg-primary/5")}
+              style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1} / -1` }}
+            />
+          )),
         )}
         {lessons.map((l) => {
           const ri = rooms.findIndex((r) => r.id === l.room_id);
@@ -130,16 +159,54 @@ function Board({ grid, days, today }: { grid: ScheduleGrid; days: string[]; toda
   );
 }
 
-/** The room board: a week on a desktop; one day with prev / next buttons on a phone. */
+const skeleton = <Bone className="h-96 w-full rounded-2xl" />;
+const noRooms = <EmptyState title="Нет аудиторий" />;
+
+/** One month: its weeks one under another, each a board of its own. */
+function MonthBoards({ span, branch, today }: { span: MonthSpan; branch: string | null; today: string }) {
+  const grid = useQuery({
+    queryKey: ["schedule", span.from, span.to, branch],
+    queryFn: () =>
+      api<ScheduleGrid>("/api/v1/rooms/schedule", {
+        params: { date_from: span.from, date_to: span.to, branch_id: branch ?? undefined },
+      }),
+  });
+
+  return (
+    <section className="mb-8">
+      <h2 className="mb-3 text-lg font-semibold">{span.title}</h2>
+      <QueryState empty={noRooms} isEmpty={(d) => d.rooms.length === 0} query={grid} skeleton={skeleton}>
+        {(data) => {
+          const hours = boardHours(data.lessons);
+
+          return (
+            <div className="space-y-4">
+              {weekBands(span.from, span.to).map((week) => (
+                // a year is some fifty boards: the ones off screen are not laid out
+                <div key={week[0]} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 520px" }}>
+                  <Board days={boardDays(week, data.lessons)} grid={data} hours={hours} today={today} />
+                </div>
+              ))}
+            </div>
+          );
+        }}
+      </QueryState>
+    </section>
+  );
+}
+
+/** The room board: a week (one day on a phone), or a month, half a year, a year month by month. */
 export function ScheduleTab() {
   const phone = useIsPhone();
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const today = todayIso();
   const [day, setDay] = useState(today);
+  const [period, setPeriod] = useState<Period>("week");
   const [branch, setBranch] = useState<string | null>(null);
   const monday = mondayOf(day);
   const days = weekOf(day);
+  const weekly = period === "week";
 
   const grid = useQuery({
     queryKey: ["schedule", monday, branch],
@@ -148,25 +215,53 @@ export function ScheduleTab() {
         params: { date_from: monday, branch_id: branch ?? undefined },
       }),
     placeholderData: keepPreviousData,
+    enabled: weekly,
   });
 
-  const step = phone ? 1 : 7;
-  const title = phone ? dayTitle(day) : `${dayMonth(days[0])} – ${dayMonth(days[6])}`;
+  const months = weekly ? [] : monthsOfPeriod(period, day);
+  const step = (dir: -1 | 1) => setDay(weekly && phone ? addDays(day, dir) : shiftDay(period, day, dir));
+  const title = !weekly
+    ? periodTitle(period, day)
+    : phone
+      ? dayTitle(day)
+      : `${dayMonth(days[0])} – ${dayMonth(days[6])}`;
+  // the export takes up to two months at once
+  const exported = weekly
+    ? { date_from: monday, branch_id: branch }
+    : period === "month"
+      ? { date_from: months[0].from, date_to: months[0].to, branch_id: branch }
+      : null;
 
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button isIconOnly aria-label="Назад" variant="flat" onPress={() => setDay(addDays(day, -step))}>
+        <Button isIconOnly aria-label="Назад" variant="flat" onPress={() => step(-1)}>
           <Icon name="chevron-left" />
         </Button>
         <div className="min-w-32 text-center text-base font-medium">{title}</div>
-        <Button isIconOnly aria-label="Вперёд" variant="flat" onPress={() => setDay(addDays(day, step))}>
+        <Button isIconOnly aria-label="Вперёд" variant="flat" onPress={() => step(1)}>
           <Icon name="chevron-right" />
         </Button>
         <Button color="primary" variant="flat" onPress={() => setDay(today)}>
           Сегодня
         </Button>
-        <ExportButton params={{ date_from: monday, branch_id: branch }} path="/api/v1/rooms/schedule/export" />
+        <div aria-label="Период" className="flex rounded-xl bg-content1 p-1" role="group">
+          {PERIODS.map((p) => (
+            <button
+              key={p.key}
+              aria-pressed={period === p.key}
+              className={clsx(
+                "min-h-9 rounded-lg px-3 text-sm",
+                period === p.key ? "bg-primary/15 font-medium text-brand-text" : "text-default-600 hover:bg-default-100",
+              )}
+              type="button"
+              onClick={() => setPeriod(p.key)}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+        {exported && <ExportButton params={exported} path="/api/v1/rooms/schedule/export" />}
         {!me?.branch && (
           <SelectField filter
             allLabel="Все филиалы"
@@ -178,14 +273,17 @@ export function ScheduleTab() {
           />
         )}
       </div>
-      <QueryState
-        empty={<EmptyState title="Нет аудиторий" />}
-        isEmpty={(d) => d.rooms.length === 0}
-        query={grid}
-        skeleton={<Bone className="h-96 w-full rounded-2xl" />}
-      >
-        {(data) => <Board days={phone ? [day] : boardDays(days, data.lessons)} grid={data} today={today} />}
-      </QueryState>
+      {weekly ? (
+        <QueryState empty={noRooms} isEmpty={(d) => d.rooms.length === 0} query={grid} skeleton={skeleton}>
+          {(data) => {
+            const shown = phone ? [day] : boardDays(days, data.lessons);
+
+            return <Board days={shown} grid={data} hours={boardHours(data.lessons)} today={today} />;
+          }}
+        </QueryState>
+      ) : (
+        months.map((span) => <MonthBoards key={span.from} branch={branch} span={span} today={today} />)
+      )}
     </>
   );
 }
