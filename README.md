@@ -62,4 +62,3 @@ make api                      # API on :8200   (docs: http://localhost:8200/api/
 - [`docs/ANALYSIS.md`](docs/ANALYSIS.md) — анализ старой системы и список багов
 - [`docs/IMPORT.md`](docs/IMPORT.md) — перенос данных из старой системы
 - [`docs/ops/deploy.md`](docs/ops/deploy.md), [`monitoring.md`](docs/ops/monitoring.md), [`restore-drill.md`](docs/ops/restore-drill.md) — деплой, мониторинг, восстановление
-- [`docs/security/`](docs/security/) — отчёт о проверке безопасности
