@@ -3,7 +3,8 @@
 The layouts live in the repo (`app/certificates/seed/`); the images are company files kept out
 of it. `background.asset` and image `asset` in a layout file are file names relative to the
 images directory; here they become `cert_asset` ids. Safe to run again: identical images are
-stored once, an unchanged layout publishes nothing.
+stored once, an unchanged layout publishes nothing. With `draft_only` the layouts only replace
+the editable draft: no version is published, settings and signatures are left alone.
 """
 
 import json
@@ -38,6 +39,7 @@ class Counts:
     templates_created: int = 0
     templates_updated: int = 0
     versions_published: int = 0
+    drafts_saved: int = 0
     settings_changed: int = 0
     signatures_assigned: int = 0
     signatures_unmatched: list[str] = field(default_factory=list)
@@ -79,7 +81,9 @@ def load_layouts(layouts: Path) -> list[tuple[dict[str, Any], Layout]]:
     return parsed
 
 
-async def import_templates(db: AsyncSession, layouts: Path, images: Path) -> Counts:
+async def import_templates(
+    db: AsyncSession, layouts: Path, images: Path, draft_only: bool = False
+) -> Counts:
     counts = Counts()
     parsed = load_layouts(layouts)
     for item, layout in parsed:
@@ -109,6 +113,14 @@ async def import_templates(db: AsyncSession, layouts: Path, images: Path) -> Cou
             template.updated_at = func.now()
             await db.flush()
             counts.templates_updated += 1
+            if draft_only:
+                counts.drafts_saved += 1
+                await record(
+                    db, None, "cert_template.draft_update", "cert_template", template.id,
+                    {"cli": [None, "import-cert-templates"]}, label=template.name,
+                )  # fmt: skip
+        if draft_only:
+            continue
         latest = (
             await db.execute(
                 select(CertTemplateVersion.version_no, CertTemplateVersion.layout)
@@ -130,6 +142,8 @@ async def import_templates(db: AsyncSession, layouts: Path, images: Path) -> Cou
                 template.id,
                 {"version": [None, number], "cli": [None, "import-cert-templates"]},
             )
+    if draft_only:
+        return counts
     await import_settings(db, images, counts)
     await import_instructor_signatures(db, images, counts)
     return counts

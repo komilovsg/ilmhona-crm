@@ -639,6 +639,25 @@ async def test_import_is_idempotent_and_publishes_only_changes(tmp_path: Path) -
     assert log == 2
 
 
+async def test_draft_import_replaces_the_draft_and_publishes_nothing(tmp_path: Path) -> None:
+    d = write_seed(tmp_path)
+    await run_import(d)
+    changed = layout("bg.png")
+    changed["layers"][1]["content"][0]["text"] = "завершил курс «"
+    (d / "general_ru.json").write_text(json.dumps(changed))
+    async with sessionmaker() as db:
+        c = await import_templates(db, d, d, draft_only=True)
+        await db.commit()
+    assert (c.templates_updated, c.drafts_saved, c.versions_published) == (1, 1, 0)
+    assert await counts() == (1, 1, 1)
+    (row,) = await sql(
+        "SELECT draft = (SELECT layout FROM cert_template_version) FROM cert_template"
+    )
+    assert row[0] is False
+    (log,) = await sql("SELECT count(*) FROM audit_log WHERE action = 'cert_template.draft_update'")
+    assert log[0] == 1
+
+
 async def test_import_with_separate_image_dir_and_a_shared_image(tmp_path: Path) -> None:
     d = write_seed(tmp_path)
     images = tmp_path / "imgs"

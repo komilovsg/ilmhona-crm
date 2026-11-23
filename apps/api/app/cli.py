@@ -9,7 +9,7 @@ Safe to run any number of times.
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
 
-`python -m app.cli import-cert-templates [DIR] [--layouts DIR] [--images DIR]` — certificate
+`python -m app.cli import-cert-templates [DIR] [--layouts DIR] [--images DIR] [--draft]` — certificate
 templates from layout JSON files (+ `templates.json`) and their images into the database
 (app/certificates/importer.py). Safe to run again.
 """
@@ -136,10 +136,10 @@ async def wipe_command() -> int:
 SEED_DIR = Path(__file__).parent / "certificates" / "seed"
 
 
-async def import_certs_command(layouts: Path, images: Path) -> Counts:
+async def import_certs_command(layouts: Path, images: Path, draft: bool = False) -> Counts:
     try:
         async with sessionmaker() as db:
-            counts = await import_templates(db, layouts, images)
+            counts = await import_templates(db, layouts, images, draft)
             await db.commit()
     finally:
         await engine.dispose()
@@ -163,18 +163,24 @@ def main(argv: list[str] | None = None) -> int:
     certs.add_argument(
         "--images", type=Path, help="images the layouts name (default: the layouts dir)"
     )
+    certs.add_argument(
+        "--draft", action="store_true", help="replace the drafts only, publish no version"
+    )
     args = parser.parse_args(argv)
     if args.command == "import-cert-templates":
         layouts = args.layouts or args.dir or SEED_DIR
         try:
-            counts = asyncio.run(import_certs_command(layouts, args.images or args.dir or layouts))
+            counts = asyncio.run(
+                import_certs_command(layouts, args.images or args.dir or layouts, args.draft)
+            )
         except ImportProblem as exc:
             print(f"import failed: {exc}", file=sys.stderr)
             return 1
         print(
             f"assets created: {counts.assets_created}; templates created: "
             f"{counts.templates_created}, updated: {counts.templates_updated}; "
-            f"versions published: {counts.versions_published}; "
+            f"versions published: {counts.versions_published}, drafts saved: "
+            f"{counts.drafts_saved}; "
             f"settings changed: {counts.settings_changed}; "
             f"instructor signatures: {counts.signatures_assigned}, "
             f"unmatched names: {counts.signatures_unmatched or 'none'}"
