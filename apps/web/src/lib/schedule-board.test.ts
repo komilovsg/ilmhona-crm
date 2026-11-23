@@ -80,6 +80,7 @@ test("a month is printed week by week", async () => {
 test("a step moves by the period", async () => {
   const { shiftDay } = await import("./schedule-board.ts");
 
+  assert.equal(shiftDay("day", "2026-12-31", 1), "2027-01-01");
   assert.equal(shiftDay("week", "2026-12-28", 1), "2027-01-04");
   assert.equal(shiftDay("month", "2026-01-31", 1), "2026-02-01");
   assert.equal(shiftDay("month", "2026-01-15", -1), "2025-12-01");

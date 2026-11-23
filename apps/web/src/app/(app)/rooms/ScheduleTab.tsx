@@ -6,6 +6,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import clsx from "clsx";
 
+import { DateField } from "@/components/DateField";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
@@ -13,7 +14,7 @@ import { Bone } from "@/components/Skeletons";
 import { SelectField } from "@/components/SelectField";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { addDays, dayMonth, dayTitle, mondayOf, todayIso, weekOf } from "@/lib/education";
+import { dayMonth, dayTitle, mondayOf, todayIso, weekOf } from "@/lib/education";
 import { useIsPhone } from "@/lib/client-store";
 import {
   type MonthSpan,
@@ -35,6 +36,8 @@ import {
 import type { GridLesson, ScheduleGrid } from "@/lib/types";
 
 const LINE_PX = 5; // one TICK of the board: a half-hour row is 30px
+const DAY_PX = 36; // the day row
+const ROOM_PX = 28; // the room row
 
 function Block({ lesson, style }: { lesson: GridLesson; style: CSSProperties }) {
   const hue = courseHue(lesson.course_name);
@@ -72,31 +75,45 @@ function Board({
   const { from, to } = hours;
   const slots = slotsOf(from, to);
   const perSlot = SLOT / TICK;
-  const column = (day: number, room: number) => 2 + day * rooms.length + room;
+  // each day is a block of its own: a narrow empty column follows its rooms
+  const column = (day: number, room: number) => 1 + day * (rooms.length + 1) + room;
+  const dayColumns = (day: number) => `${column(day, 0)} / span ${rooms.length}`;
   const HEAD = 2; // the day row and the room row
 
   return (
-    <div className="overflow-x-auto rounded-2xl bg-content1">
+    <div className="flex overflow-hidden rounded-2xl bg-content1 text-xs">
+      {/* the hours stand still while the days scroll sideways */}
+      <div aria-hidden className="w-13 shrink-0 border-r border-divider" style={{ paddingTop: DAY_PX + ROOM_PX }}>
+        {slots.map((slot) => (
+          <div
+            key={slot}
+            className="border-b border-divider pr-2 text-right tabular-nums text-default-500"
+            style={{ height: perSlot * LINE_PX }}
+          >
+            {clock(slot)}
+          </div>
+        ))}
+      </div>
+      <div className="min-w-0 flex-1 overflow-x-auto">
       <div
-        className="grid text-xs"
+        className="grid"
         role="table"
         style={{
-          gridTemplateColumns: `3.25rem repeat(${days.length * rooms.length}, minmax(5.5rem, 1fr))`,
-          gridTemplateRows: `auto auto repeat(${slots.length * perSlot}, ${LINE_PX}px)`,
+          gridTemplateColumns: `${days.map(() => `repeat(${rooms.length}, minmax(5.5rem, 1fr))`).join(" 0.75rem ")}`,
+          gridTemplateRows: `${DAY_PX}px ${ROOM_PX}px repeat(${slots.length * perSlot}, ${LINE_PX}px)`,
         }}
       >
-        <div className="sticky left-0 z-20 row-span-2 bg-content1" />
         {days.map((d, di) => (
           <div
             key={d}
             className={clsx(
-              "border-b border-l-2 border-divider py-2 text-sm font-medium",
+              "flex items-center rounded-t-lg border border-divider bg-default-100 text-sm font-medium",
               d === today && "bg-primary/10 text-brand-text",
             )}
-            style={{ gridRow: 1, gridColumn: `${column(di, 0)} / span ${rooms.length}` }}
+            style={{ gridRow: 1, gridColumn: dayColumns(di) }}
           >
             {/* the day stays in sight while its rooms scroll by */}
-            <span className="sticky left-14 inline-block px-2">{dayTitle(d)}</span>
+            <span className="sticky left-0 inline-block px-2">{dayTitle(d)}</span>
           </div>
         ))}
         {days.map((d, di) =>
@@ -104,8 +121,9 @@ function Board({
             <div
               key={`${d}-${room.id}`}
               className={clsx(
-                "truncate border-b border-divider px-1 py-1.5 text-center font-medium text-default-600",
-                ri === 0 ? "border-l-2" : "border-l",
+                "truncate border-b border-divider px-1 text-center font-medium leading-7 text-default-600",
+                "border-l",
+                ri === rooms.length - 1 && "border-r",
               )}
               style={{ gridRow: 2, gridColumn: column(di, ri) }}
               title={`${room.name} · ${room.branch_name}`}
@@ -114,28 +132,21 @@ function Board({
             </div>
           )),
         )}
-        {slots.map((slot, si) => (
-          <div
-            key={slot}
-            className="sticky left-0 z-20 border-b border-divider bg-content1 pr-2 text-right tabular-nums text-default-500"
-            style={{ gridColumn: 1, gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
-          >
-            {clock(slot)}
-          </div>
-        ))}
         {/* the lines: one strip per half hour across, one per room down */}
-        {slots.map((slot, si) => (
-          <div
-            key={`row-${slot}`}
-            className="border-b border-divider"
-            style={{ gridColumn: "2 / -1", gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
-          />
-        ))}
+        {days.map((d, di) =>
+          slots.map((slot, si) => (
+            <div
+              key={`row-${d}-${slot}`}
+              className="border-b border-divider"
+              style={{ gridColumn: dayColumns(di), gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
+            />
+          )),
+        )}
         {days.map((d, di) =>
           rooms.map((room, ri) => (
             <div
               key={`col-${d}-${room.id}`}
-              className={clsx("border-divider", ri === 0 ? "border-l-2" : "border-l", d === today && "bg-primary/5")}
+              className={clsx("border-l border-divider", ri === rooms.length - 1 && "border-r", d === today && "bg-primary/5")}
               style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1} / -1` }}
             />
           )),
@@ -154,6 +165,7 @@ function Board({
             />
           );
         })}
+      </div>
       </div>
     </div>
   );
@@ -206,7 +218,8 @@ export function ScheduleTab() {
   const [branch, setBranch] = useState<string | null>(null);
   const monday = mondayOf(day);
   const days = weekOf(day);
-  const weekly = period === "week";
+  const oneDay = period === "day" || (phone && period === "week");
+  const weekly = period === "day" || period === "week";
 
   const grid = useQuery({
     queryKey: ["schedule", monday, branch],
@@ -219,10 +232,10 @@ export function ScheduleTab() {
   });
 
   const months = weekly ? [] : monthsOfPeriod(period, day);
-  const step = (dir: -1 | 1) => setDay(weekly && phone ? addDays(day, dir) : shiftDay(period, day, dir));
+  const step = (dir: -1 | 1) => setDay(shiftDay(oneDay ? "day" : period, day, dir));
   const title = !weekly
     ? periodTitle(period, day)
-    : phone
+    : oneDay
       ? dayTitle(day)
       : `${dayMonth(days[0])} – ${dayMonth(days[6])}`;
   // the export takes up to two months at once
@@ -261,6 +274,7 @@ export function ScheduleTab() {
             </button>
           ))}
         </div>
+        <DateField filter className="w-40" label="Дата" value={day} onValueChange={(v) => v && setDay(v)} />
         {exported && <ExportButton params={exported} path="/api/v1/rooms/schedule/export" />}
         {!me?.branch && (
           <SelectField filter
@@ -276,7 +290,7 @@ export function ScheduleTab() {
       {weekly ? (
         <QueryState empty={noRooms} isEmpty={(d) => d.rooms.length === 0} query={grid} skeleton={skeleton}>
           {(data) => {
-            const shown = phone ? [day] : boardDays(days, data.lessons);
+            const shown = oneDay ? [day] : boardDays(days, data.lessons);
 
             return <Board days={shown} grid={data} hours={boardHours(data.lessons)} today={today} />;
           }}

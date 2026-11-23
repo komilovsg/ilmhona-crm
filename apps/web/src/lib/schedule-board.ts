@@ -63,9 +63,11 @@ export function boardDays(week: string[], lessons: { date: string }[]): string[]
   return lessons.some((l) => l.date === week[6]) ? week : week.slice(0, 6);
 }
 
-export type Period = "week" | "month" | "half" | "year";
+export type Period = "day" | "week" | "month" | "half" | "year";
+export type LongPeriod = Exclude<Period, "day" | "week">;
 
 export const PERIODS: { key: Period; label: string }[] = [
+  { key: "day", label: "День" },
   { key: "week", label: "Неделя" },
   { key: "month", label: "Месяц" },
   { key: "half", label: "Полгода" },
@@ -81,7 +83,7 @@ const parts = (day: string) => day.split("-").map(Number) as [number, number, nu
 export type MonthSpan = { from: string; to: string; title: string };
 
 /** The months a period shows: the month of `day`, six months from it, or its calendar year. */
-export function monthsOfPeriod(period: Exclude<Period, "week">, day: string): MonthSpan[] {
+export function monthsOfPeriod(period: LongPeriod, day: string): MonthSpan[] {
   const [y, m] = parts(day);
   const first = period === "year" ? 0 : m - 1;
 
@@ -114,13 +116,14 @@ export function weekBands(from: string, to: string): string[][] {
 export function shiftDay(period: Period, day: string, dir: -1 | 1): string {
   const [y, m, d] = parts(day);
 
+  if (period === "day") return iso(y, m - 1, d + dir);
   if (period === "week") return iso(y, m - 1, d + 7 * dir);
   if (period === "year") return iso(y + dir, 0, 1);
 
   return iso(y, m - 1 + MONTH_COUNT[period] * dir, 1);
 }
 
-export function periodTitle(period: Exclude<Period, "week">, day: string): string {
+export function periodTitle(period: LongPeriod, day: string): string {
   const months = monthsOfPeriod(period, day);
 
   if (period === "year") return day.slice(0, 4);
