@@ -19,7 +19,7 @@ function replace(query: string) {
 /** State that also lives in the address. The value on screen is React state (typing never waits
  * for the router) and the address follows it; an address somebody else set (Back, a menu link)
  * is read back. */
-function useAddress<V>(read: (search: string) => V): [V, (next: (cur: V) => V, query: (next: V) => string) => void] {
+function useAddress<V>(read: (search: string) => V): [V, (next: (cur: V) => V, query: string) => void] {
   const search = useSearchParams().toString();
   const [value, setValue] = useState(() => read(search));
   const [seen, setSeen] = useState(search);
@@ -35,15 +35,10 @@ function useAddress<V>(read: (search: string) => V): [V, (next: (cur: V) => V, q
     else own.queries.delete(search);
   }, [search]);
 
-  const set = useCallback((next: (cur: V) => V, query: (next: V) => string) => {
-    setValue((cur) => {
-      const value = next(cur);
-
-      // the address is read at the time of the call: two setters in one handler both apply
-      replace(query(value));
-
-      return value;
-    });
+  const set = useCallback((next: (cur: V) => V, query: string) => {
+    // the address first, and outside the state updater: the router must not be told while React renders
+    replace(query);
+    setValue(next);
   }, []);
 
   return [value, set];
@@ -57,10 +52,8 @@ export function useUrlState<T extends UrlShape>(defaults: T): [T, (patch: Partia
   const [value, write] = useAddress(read);
   const set = useCallback(
     (patch: Partial<T>) =>
-      write(
-        (cur) => ({ ...cur, ...patch }),
-        () => writeState(window.location.search, defaults, patch),
-      ),
+      // the address is read at the time of the call: two setters in one handler both apply
+      write((cur) => ({ ...cur, ...patch }), writeState(window.location.search, defaults, patch)),
     [write, defaults],
   );
 
@@ -71,10 +64,7 @@ export function useUrlPage(): [number, (page: number) => void] {
   const [page, write] = useAddress(readPage);
   const set = useCallback(
     (next: number) =>
-      write(
-        () => next,
-        () => writePage(window.location.search, next),
-      ),
+      write(() => next, writePage(window.location.search, next)),
     [write],
   );
 

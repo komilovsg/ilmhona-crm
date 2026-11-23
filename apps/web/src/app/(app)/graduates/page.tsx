@@ -1,6 +1,7 @@
 "use client";
 
 import { useUrlPage, useUrlState } from "@/hooks/url-state";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
@@ -143,14 +144,19 @@ export default function GraduatesPage() {
         {view === "students" && (
           <FilterInput isClearable placeholder="Поиск по имени или телефону" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         )}
-        {!me?.branch && (
-          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
-        )}
         {view === "students" && (
           <>
             <SelectField filter allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ ...f, course })} />
-            <SelectField filter allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
-            <SelectField filter allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
+            <FilterDrawer
+              count={[f.branch, f.employed, f.certificate].filter(Boolean).length}
+              onReset={() => set({ ...f, branch: null, employed: null, certificate: null })}
+            >
+              {!me?.branch && (
+                <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
+              )}
+              <SelectField filter allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
+              <SelectField filter allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
+            </FilterDrawer>
           </>
         )}
       </div>

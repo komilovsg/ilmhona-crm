@@ -8,6 +8,7 @@ import clsx from "clsx";
 
 import { DateField } from "@/components/DateField";
 import { ExportButton } from "@/components/ExportButton";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
@@ -337,18 +338,19 @@ export function ScheduleTab() {
           Сегодня
         </Button>
         <Segmented label="Период" options={PERIODS} value={period} onChange={setPeriod} />
-        <DateField filter className="w-40" label="Дата" value={day} onValueChange={(v) => v && setDay(v)} />
         {exported && <ExportButton params={exported} path="/api/v1/rooms/schedule/export" />}
-        {!me?.branch && (
-          <SelectField filter
-            allLabel="Все филиалы"
-            className="w-full md:ml-auto md:w-48"
-            label="Филиал"
-            options={branches.map((b) => ({ key: b.id, label: b.name }))}
-            value={branch}
-            onChange={setBranch}
-          />
-        )}
+        <FilterDrawer count={branch ? 1 : 0} onReset={() => setBranch(null)}>
+          <DateField filter label="Перейти к дате" value={day} onValueChange={(v) => v && setDay(v)} />
+          {!me?.branch && (
+            <SelectField filter
+              allLabel="Все филиалы"
+              label="Филиал"
+              options={branches.map((b) => ({ key: b.id, label: b.name }))}
+              value={branch}
+              onChange={setBranch}
+            />
+          )}
+        </FilterDrawer>
       </div>
       {weekly ? (
         <QueryState empty={noRooms} isEmpty={(d) => d.rooms.length === 0} query={grid} skeleton={skeleton}>
