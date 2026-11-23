@@ -9,8 +9,8 @@ Safe to run any number of times.
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
 
-`python -m app.cli import-cert-templates [DIR] [--layouts DIR] [--images DIR] [--draft]` — certificate
-templates from layout JSON files (+ `templates.json`) and their images into the database
+`python -m app.cli import-cert-templates [DIR] [--layouts DIR] [--images DIR] [--draft]` —
+certificate templates from layout JSON files (+ `templates.json`) and their images into the database
 (app/certificates/importer.py). Safe to run again.
 """
 
