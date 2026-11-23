@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ const TempPasswordModal = lazyModal(() => import("@/components/TempPasswordModal
 
 const PAGE_SIZE = 25;
 type Filters = { q: string; branch: string | null; role: string | null; status: string | null };
+const NO_FILTERS: Filters = { q: "", branch: null, role: null, status: null };
 type Action = { kind: "activate" | "deactivate" | "delete"; user: UserRow };
 
 function ResetRequests({ onIssue }: { onIssue: (userId: string, login: string) => void }) {
@@ -194,8 +196,8 @@ export default function UsersPage() {
   const queryClient = useQueryClient();
   const { data: me } = useMe();
   const canChange = can(me?.permissions, "users", "change");
-  const [filters, setFilters] = useState<Filters>({ q: "", branch: null, role: null, status: null });
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [editing, setEditing] = useState<UserRow | "new" | null>(null);
   const [action, setAction] = useState<Action | null>(null);
