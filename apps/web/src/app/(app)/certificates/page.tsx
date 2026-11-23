@@ -8,6 +8,7 @@ import { Chip } from "@heroui/chip";
 import { CertCommentModal } from "@/components/certs/CertCommentModal";
 import { DateField } from "@/components/DateField";
 import { ExportButton } from "@/components/ExportButton";
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { PageHeader } from "@/components/PageHeader";
 import { Pager } from "@/components/Pager";
@@ -68,13 +69,13 @@ export default function CertificatesPage() {
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
   const { data: instructors = [] } = useInstructors();
-  const templates = useTemplates();
+  const seesTemplates = !!me && can(me.permissions, "cert_templates", "view");
+  const templates = useTemplates(seesTemplates);
   const refresh = useRefreshIssued();
-  const [f, setF] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
+  const [f, setF] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [pending, setPending] = useState<Pending | null>(null);
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
-  const seesTemplates = !!me && can(me.permissions, "cert_templates", "view");
   const set = (next: Filters) => {
     setF(next);
     setPage(1);
@@ -145,7 +146,7 @@ export default function CertificatesPage() {
         empty={<EmptyState hint={filtered ? "Измените поиск или фильтры." : "Сертификаты появятся здесь после выдачи в карточке потока."} title={filtered ? "Сертификаты не найдены" : "Сертификатов пока нет"} />}
         isEmpty={(d) => d.items.length === 0}
         query={list}
-        skeleton={<ListSkeleton cols={9} />}
+        skeleton={<ListSkeleton cols={8} />}
       >
         {(d) => (
           <>
@@ -157,11 +158,9 @@ export default function CertificatesPage() {
                     <th className="px-4 py-3 font-medium">ФИО</th>
                     <th className="px-4 py-3 font-medium">Курс · поток</th>
                     <th className="px-4 py-3 font-medium">Инструктор</th>
-                    <th className="px-4 py-3 font-medium">Филиал</th>
-                    <th className="px-4 py-3 font-medium">Дата</th>
+                    <th className="px-4 py-3 font-medium">Дата · выдал</th>
                     <th className="px-4 py-3 font-medium">Шаблон</th>
                     <th className="px-4 py-3 font-medium">Статус</th>
-                    <th className="px-4 py-3 font-medium">Выдал</th>
                     <th className="w-12 px-2 py-3" />
                   </tr>
                 </thead>
@@ -179,16 +178,18 @@ export default function CertificatesPage() {
                         <Link className="text-xs text-brand-text" href={`/cohorts/${r.cohort_id}`}>
                           {r.cohort_code}
                         </Link>
+                        <span className="text-xs text-default-500"> · {r.branch_name}</span>
                       </td>
                       <td className="px-4 py-3">{r.instructor_name ?? "—"}</td>
-                      <td className="px-4 py-3">{r.branch_name}</td>
-                      <td className="px-4 py-3 whitespace-nowrap">{formatDate(r.issued_at)}</td>
+                      <td className="px-4 py-3">
+                        <div className="whitespace-nowrap">{formatDate(r.issued_at)}</div>
+                        <div className="text-xs text-default-500">{r.issued_by_name ?? "—"}</div>
+                      </td>
                       <td className="px-4 py-3">{r.template_name}</td>
                       <td className="px-4 py-3">
                         <StatusBadge status={r.status} />
                         {r.revoke_reason && <div className="mt-1 max-w-48 text-xs text-default-500">{r.revoke_reason}</div>}
                       </td>
-                      <td className="px-4 py-3">{r.issued_by_name ?? "—"}</td>
                       <td className="px-2 py-3">{menu(r)}</td>
                     </tr>
                   ))}
