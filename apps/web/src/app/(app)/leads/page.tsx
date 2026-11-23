@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useState } from "react";
@@ -158,8 +159,8 @@ export default function LeadsPage() {
   const urlTab = useBrowserValue<"all" | "callback">(() => (new URLSearchParams(window.location.search).get("tab") === "callback" ? "callback" : "all"), "all", "ilm-leads-tab");
   const [picked, setTab] = useState<"all" | "callback" | null>(null);
   const tab = picked ?? urlTab;
-  const [f, setF] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
+  const [f, setF] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [editing, setEditing] = useState<LeadRow | "new" | null>(null);
   const [converting, setConverting] = useState<LeadRow | null>(null);
   const [removing, setRemoving] = useState<LeadRow | null>(null);
@@ -170,7 +171,7 @@ export default function LeadsPage() {
   const callback = tab === "callback";
 
   const set = (next: Partial<Filters>) => {
-    setF((cur) => ({ ...cur, ...next }));
+    setF(next);
     setPage(1);
   };
   // filters that live in the phone sheet (search and status stay inline)

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
@@ -112,13 +113,15 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
   );
 }
 
+const NO_FILTERS: Filters = { q: "", status: null, branch: null };
+
 export default function CohortsPage() {
   const overlayMotion = useOverlayMotion();
   const canChange = useCanChange("cohorts");
   const seesPayments = useSeesPayments();
   const summary = useEducationSummary();
-  const [filters, setFilters] = useState<Filters>({ q: "", status: null, branch: null });
-  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [creating, setCreating] = useState(false);
 

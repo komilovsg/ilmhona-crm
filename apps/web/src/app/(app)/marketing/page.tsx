@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useState } from "react";
@@ -57,7 +58,7 @@ export default function MarketingPage() {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const refresh = useRefreshSales();
-  const [f, setF] = useState<Filters>(NO_FILTERS);
+  const [f, setF] = useUrlState(NO_FILTERS);
   const [editing, setEditing] = useState<CampaignRow | "new" | null>(null);
   const [removing, setRemoving] = useState<CampaignRow | null>(null);
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);

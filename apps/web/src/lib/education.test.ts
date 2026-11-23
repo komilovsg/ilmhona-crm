@@ -68,3 +68,23 @@ test("prices show kopecks only when there are some", () => {
   assert.equal(formatPrice("3450.5").replace(/\s/g, " "), "3 450,50 TJS");
   assert.equal(formatPrice(1200).replace(/\s/g, " "), "1 200 TJS");
 });
+
+test("the end date of a course follows its start and length", async () => {
+  const { endDateOf, monthsOf } = await import("./education.ts");
+
+  assert.equal(endDateOf("2026-09-01", 3), "2026-11-30");
+  assert.equal(endDateOf("2026-01-31", 1), "2026-02-28");
+  assert.equal(endDateOf("2028-01-31", 1), "2028-02-29");
+  assert.equal(endDateOf("2026-11-15", 2), "2027-01-14");
+  assert.equal(endDateOf("2026-12-01", 1), "2026-12-31");
+  assert.equal(monthsOf("2026-09-01", "2026-11-30"), 3);
+  assert.equal(monthsOf("2026-09-01", "2026-11-20"), null);
+  assert.equal(monthsOf("", "2026-11-20"), null);
+});
+
+test("expelled students close the list", async () => {
+  const { expelledLast } = await import("./education.ts");
+  const rows = [{ id: 1, status: "отчислен" }, { id: 2, status: "активный" }, { id: 3, status: "отчислен" }, { id: 4, status: "выпускник" }];
+
+  assert.deepEqual(expelledLast(rows).map((r) => r.id), [2, 4, 1, 3]);
+});

@@ -1,7 +1,7 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { DateField } from "@/components/DateField";
-import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { ExportButton } from "@/components/ExportButton";
@@ -32,8 +32,8 @@ const NUM = "px-3 py-3 text-right tabular-nums whitespace-nowrap";
 export default function MasterListPage() {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
-  const [f, setF] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
+  const [f, setF] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
   const set = (next: Filters) => {
     setF(next);
