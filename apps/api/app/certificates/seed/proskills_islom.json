@@ -5,9 +5,23 @@
     "height_mm": 210.1
   },
   "background": {
-    "asset": "proskills-islom.png"
+    "asset": "clean/proskills-islom.png"
   },
   "layers": [
+    {
+      "id": "logo_ilmhona",
+      "type": "image",
+      "x_mm": 50.36,
+      "y_mm": 30.72,
+      "w_mm": 32.76,
+      "h_mm": 35.72,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/proskills-islom_ilmhona.png"
+      },
+      "fit": "contain"
+    },
     {
       "id": "dir_cover",
       "type": "rect",

@@ -377,7 +377,10 @@ def test_covered_seed_layouts_draw_the_director_over_a_cover() -> None:
     }
     assert set(covered) == {"proskills", "proskills_islom", "proskills_umed", "itp", "kids_scratch"}
     for ids in covered.values():
-        assert ids[:5] == ["dir_cover", "dir_seal", "dir_signature", "dir_name", "dir_title"]
+        # the logos cut out of the background lie under everything; the director group follows
+        above = [i for i in ids if not i.startswith("logo_")]
+        assert above[:5] == ["dir_cover", "dir_seal", "dir_signature", "dir_name", "dir_title"]
+        assert ids[: len(ids) - len(above)] == [i for i in ids if i.startswith("logo_")]
 
 
 # ---- director per template language ----------------------------------------------------------

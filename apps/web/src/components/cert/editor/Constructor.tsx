@@ -155,7 +155,13 @@ export function Constructor({ initial, onReplace }: { initial: TemplateDetail; o
   const upload = useCallback(async (file: File, kind: "background" | "image") => {
     setBusy("upload");
     try {
-      return await uploadForm<CertAsset>("/api/v1/cert-assets", file, file.name, { fields: { kind } });
+      // a logo on a flat background is stored without it; the server leaves other pictures alone
+      const fields: Record<string, string> = kind === "image" ? { kind, cut: "true" } : { kind };
+      const asset = await uploadForm<CertAsset & { cut?: boolean }>("/api/v1/cert-assets", file, file.name, { fields });
+
+      if (asset.cut) notify("Фон картинки убран");
+
+      return asset;
     } catch (e) {
       notifyError(e);
 
