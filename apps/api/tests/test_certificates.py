@@ -466,6 +466,9 @@ async def test_template_comes_from_the_query_then_the_course_rule_then_the_defau
         "INSERT INTO cert_template_rule (course_id, template_id) VALUES (:c, :t)",
         c=cohort["course_id"], t=ruled,
     )  # fmt: skip
+    # an issued certificate keeps its template when the rules change later
+    assert "СПЕЦИАЛЬНЫЙ" not in pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
+    await sql("UPDATE enrollment SET certificate_version_id = NULL")
     assert "СПЕЦИАЛЬНЫЙ" in pdf_text((await admin.get(f"{G}/{eid}/certificate/pdf")).content)
     r = await admin.get(f"{G}/{eid}/certificate/pdf", params={"template_id": explicit})
     assert "ВЫБРАННЫЙ" in pdf_text(r.content)
