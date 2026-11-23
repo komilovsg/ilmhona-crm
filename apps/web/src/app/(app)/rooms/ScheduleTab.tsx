@@ -11,6 +11,7 @@ import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
+import { Segmented } from "@/components/Segmented";
 import { SelectField } from "@/components/SelectField";
 import { useCanChange } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
@@ -39,28 +40,46 @@ import type { GridLesson, ScheduleGrid } from "@/lib/types";
 import { type Slot, SlotActions } from "./SlotActions";
 
 const LINE_PX = 5; // one TICK of the board: a half-hour row is 30px
-const DAY_PX = 36; // the day row
+const DAY_PX = 40; // the day row
 const ROOM_PX = 28; // the room row
 
 function Block({ lesson, style }: { lesson: GridLesson; style: CSSProperties }) {
-  const hue = courseHue(lesson.course_name);
-
   return (
     <Link
-      className="z-10 m-px overflow-hidden rounded-md px-1.5 py-0.5 text-center text-[11px] leading-tight text-white shadow-sm ring-1 ring-inset ring-white/15 transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-1"
+      className="lesson z-10 m-px overflow-hidden py-1 pl-2.5 pr-1.5 text-[11px] leading-[1.25] focus-visible:outline-2 focus-visible:outline-offset-1"
       href={`/cohorts/${lesson.cohort_id}`}
-      style={{ ...style, backgroundImage: `linear-gradient(to bottom, hsl(${hue} 55% 41%), hsl(${hue} 58% 33%))` }}
+      style={{ ...style, "--h": courseHue(lesson.course_name) } as CSSProperties}
       title={[`${lesson.start}–${lesson.end}`, lesson.course_name, lesson.cohort_code, lesson.instructor_name]
         .filter(Boolean)
         .join(" · ")}
     >
-      <div className="tabular-nums opacity-80">
+      <div className="text-xs font-semibold [overflow-wrap:anywhere]">{lesson.course_name}</div>
+      <div className="mt-0.5 truncate tabular-nums opacity-75">
         {lesson.start}–{lesson.end}
       </div>
-      <div className="font-semibold [overflow-wrap:anywhere]">{lesson.course_name}</div>
-      <div className="truncate opacity-90">{lesson.cohort_code}</div>
-      {lesson.instructor_name && <div className="truncate opacity-90">{lesson.instructor_name}</div>}
+      <div className="truncate opacity-75">{[lesson.cohort_code, lesson.instructor_name].filter(Boolean).join(" · ")}</div>
     </Link>
+  );
+}
+
+/** «Пн 23.11»: the number leads, the weekday and the month are quiet. */
+function DayTitle({ day, today }: { day: string; today: boolean }) {
+  const [weekday, date] = dayTitle(day).split(" ");
+  const [number, month] = date.split(".");
+
+  return (
+    <span className="sticky left-0 inline-flex items-baseline gap-1.5 px-3">
+      <span className="text-[11px] font-medium uppercase tracking-[0.08em] text-default-500">{weekday}</span>
+      <span
+        className={clsx(
+          "text-sm font-semibold tabular-nums",
+          today && "rounded-md bg-primary px-1.5 py-0.5 text-primary-foreground",
+        )}
+      >
+        {number}
+        {!today && <span className="font-normal text-default-400">.{month}</span>}
+      </span>
+    </span>
   );
 }
 
@@ -92,19 +111,17 @@ function Board({
   const nowLine = days.includes(today) && now >= from && now < to ? HEAD + Math.floor((now - from) / TICK) + 1 : null;
 
   return (
-    <div className="flex overflow-hidden rounded-2xl bg-content1 text-xs">
+    <div className="surface-card flex overflow-hidden bg-content1 text-xs">
       {/* the hours stand still while the days scroll sideways */}
-      <div aria-hidden className="w-13 shrink-0 border-r border-divider" style={{ paddingTop: DAY_PX + ROOM_PX }}>
+      <div aria-hidden className="w-12 shrink-0" style={{ paddingTop: DAY_PX + ROOM_PX }}>
         {slots.map((slot) => (
           <div
             key={slot}
-            className={clsx(
-              "border-b pr-2 text-right tabular-nums",
-              slot % 60 === 0 ? "border-divider/50 text-default-600" : "border-divider text-[10px] text-default-400",
-            )}
+            className="pr-2 text-right text-[11px] tabular-nums text-default-500"
             style={{ height: perSlot * LINE_PX }}
           >
-            {clock(slot)}
+            {/* the hour is named on its line; the half hour is only a tick of the grid */}
+            {slot % 60 === 0 && <span className="relative -top-2">{clock(slot)}</span>}
           </div>
         ))}
       </div>
@@ -121,13 +138,12 @@ function Board({
           <div
             key={d}
             className={clsx(
-              "flex items-center rounded-t-lg border border-divider bg-default-100/70 text-sm font-medium backdrop-blur",
-              d === today && "bg-primary/10 text-brand-text",
+              "flex items-center rounded-t-[10px] border border-b-0 border-[var(--hairline-strong)] bg-default-50",
             )}
             style={{ gridRow: 1, gridColumn: dayColumns(di) }}
           >
             {/* the day stays in sight while its rooms scroll by */}
-            <span className="sticky left-0 inline-block px-2">{dayTitle(d)}</span>
+            <DayTitle day={d} today={d === today} />
           </div>
         ))}
         {days.map((d, di) =>
@@ -135,9 +151,10 @@ function Board({
             <div
               key={`${d}-${room.id}`}
               className={clsx(
-                "truncate border-b border-divider px-1 text-center font-medium leading-7 text-default-600",
-                "border-l",
-                ri === rooms.length - 1 && "border-r",
+                "truncate border-b border-[var(--hairline-strong)] bg-default-50 px-1 text-center text-[11px] font-medium leading-7 text-default-600",
+                "border-l border-l-[var(--hairline)]",
+                ri === 0 && "border-l-[var(--hairline-strong)]",
+                ri === rooms.length - 1 && "border-r border-r-[var(--hairline-strong)]",
               )}
               style={{ gridRow: 2, gridColumn: column(di, ri) }}
               title={`${room.name} · ${room.branch_name}`}
@@ -152,7 +169,7 @@ function Board({
             <div
               key={`row-${d}-${slot}`}
               // the line under :00 is the half hour: lighter than the hour line
-              className={clsx("border-b", slot % 60 === 0 ? "border-dashed border-divider/50" : "border-divider")}
+              className={clsx("border-b", slot % 60 === 0 ? "border-dashed border-[var(--hairline)]" : "border-[var(--hairline-strong)]")}
               style={{ gridColumn: dayColumns(di), gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
             />
           )),
@@ -162,10 +179,11 @@ function Board({
             <div
               key={`col-${d}-${room.id}`}
               className={clsx(
-                "border-l border-divider",
-                ri === rooms.length - 1 && "border-r",
-                d === today && "bg-primary/5",
-                onPick && "cursor-cell hover:bg-primary/10",
+                "border-l border-l-[var(--hairline)]",
+                ri === 0 && "border-l-[var(--hairline-strong)]",
+                ri === rooms.length - 1 && "border-r border-r-[var(--hairline-strong)]",
+                d === today && "bg-primary/[0.04]",
+                onPick && "cursor-cell transition-colors hover:bg-primary/[0.08]",
               )}
               style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1} / -1` }}
               title={onPick ? `${room.name}: свободно — нажмите, чтобы занять` : undefined}
@@ -318,22 +336,7 @@ export function ScheduleTab() {
         <Button color="primary" variant="flat" onPress={() => setDay(today)}>
           Сегодня
         </Button>
-        <div aria-label="Период" className="flex rounded-xl bg-content1/70 p-1 backdrop-blur" role="group">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              aria-pressed={period === p.key}
-              className={clsx(
-                "min-h-9 rounded-lg px-3 text-sm",
-                period === p.key ? "bg-primary/15 font-medium text-brand-text" : "text-default-600 hover:bg-default-100",
-              )}
-              type="button"
-              onClick={() => setPeriod(p.key)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
+        <Segmented label="Период" options={PERIODS} value={period} onChange={setPeriod} />
         <DateField filter className="w-40" label="Дата" value={day} onValueChange={(v) => v && setDay(v)} />
         {exported && <ExportButton params={exported} path="/api/v1/rooms/schedule/export" />}
         {!me?.branch && (

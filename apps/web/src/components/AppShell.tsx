@@ -22,7 +22,7 @@ import { useMe, useResetRequests } from "@/hooks/queries";
 import { SIDEBAR_STORAGE_KEY } from "@/context/theme-init";
 import { api } from "@/lib/api";
 import { useBrowserValue } from "@/lib/client-store";
-import { can, canOpen, splitNav, visibleNav, type NavItem } from "@/lib/permissions";
+import { NAV_GROUPS, can, canOpen, splitNav, visibleNav, type NavGroup, type NavItem } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
 
@@ -101,11 +101,41 @@ function Badge({ n }: { n: number | undefined }) {
   );
 }
 
-const ROW = "relative flex items-center gap-3 rounded-lg px-[15px] py-2.5 text-sm transition-colors";
+const ROW = "relative flex min-h-9 items-center gap-3 rounded-lg px-[15px] py-2 text-sm transition-colors";
+
+const GROUPS_KEY = "ilm-nav-closed";
+const GROUPS_EVENT = "ilm-nav-groups";
+const NO_GROUPS: NavGroup[] = [];
+let cachedGroups: { raw: string; list: NavGroup[] } = { raw: "", list: NO_GROUPS };
+
+/** The sidebar groups the user folded (the same array while the stored value is the same). */
+function readClosedGroups(): NavGroup[] {
+  let raw = cachedGroups.raw;
+
+  try {
+    raw = localStorage.getItem(GROUPS_KEY) ?? "";
+  } catch {
+    // private mode
+  }
+  if (raw !== cachedGroups.raw) cachedGroups = { raw, list: raw ? (raw.split(",") as NavGroup[]) : NO_GROUPS };
+
+  return cachedGroups.list;
+}
 
 function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
   const { collapsed, toggle } = useSidebarCollapsed();
   const overlayMotion = useOverlayMotion();
+  const closed = useBrowserValue(readClosedGroups, NO_GROUPS, GROUPS_EVENT);
+  const toggleGroup = (key: NavGroup) => {
+    const next = closed.includes(key) ? closed.filter((k) => k !== key) : [...closed, key];
+
+    try {
+      localStorage.setItem(GROUPS_KEY, next.join(","));
+    } catch {
+      // private mode: the groups stay open
+    }
+    window.dispatchEvent(new Event(GROUPS_EVENT));
+  };
 
   return (
     <aside className="sb-aside fixed inset-y-0 left-0 hidden flex-col bg-sidebar md:flex">
@@ -118,37 +148,62 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
           </span>
         </Link>
       </div>
-      <nav aria-label="Разделы" className="flex-1 space-y-0.5 overflow-y-auto overflow-x-hidden px-3 pb-3">
-        {items.map((item) => {
-          const active = isActive(pathname, item.href);
-          const badge = badges[item.href];
+      <nav aria-label="Разделы" className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
+        {NAV_GROUPS.map((group) => {
+          const rows = items.filter((i) => i.group === group.key);
+
+          if (rows.length === 0) return null;
+          const here = rows.some((i) => isActive(pathname, i.href));
+          // the group of the open page never hides it
+          const open = here || !closed.includes(group.key);
 
           return (
-            <Tooltip
-              key={item.href}
-              closeDelay={0}
-              content={item.label}
-              delay={300}
-              isDisabled={!collapsed}
-              motionProps={overlayMotion}
-              placement="right"
-            >
-              <Link
-                aria-current={active ? "page" : undefined}
-                className={`${ROW} ${
-                  active ? "bg-[#00A0DC]/15 text-[#38BDF0]" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"
-                }`}
-                href={item.href}
-              >
-                <span className="relative shrink-0">
-                  <Icon name={item.icon} size={18} />
-                  {/* collapsed rail: the count shows as a dot on the icon */}
-                  {badge ? <span className="sb-dot absolute -right-1.5 -top-1 hidden size-2.5 rounded-full bg-[#E26A3D]" /> : null}
-                </span>
-                <span className="sb-label">{item.label}</span>
-                <Badge n={badge} />
-              </Link>
-            </Tooltip>
+            <div key={group.key} className="sb-group">
+              {group.label && (
+                <button
+                  aria-expanded={open}
+                  className="sb-label flex min-h-8 w-full items-center gap-1.5 rounded-md px-[15px] text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6f7c88] hover:text-[#aab5bf]"
+                  type="button"
+                  onClick={() => toggleGroup(group.key)}
+                >
+                  <span className="flex-1">{group.label}</span>
+                  <Icon className={`transition-transform duration-150 ${open ? "" : "-rotate-90"}`} name="chevron-down" size={12} />
+                </button>
+              )}
+              {open &&
+                rows.map((item) => {
+                  const active = isActive(pathname, item.href);
+                  const badge = badges[item.href];
+
+                  return (
+                    <Tooltip
+                      key={item.href}
+                      closeDelay={0}
+                      content={item.label}
+                      delay={300}
+                      isDisabled={!collapsed}
+                      motionProps={overlayMotion}
+                      placement="right"
+                    >
+                      <Link
+                        aria-current={active ? "page" : undefined}
+                        className={`${ROW} ${
+                          active ? "sb-active bg-white/[0.07] font-medium text-white" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"
+                        }`}
+                        href={item.href}
+                      >
+                        <span className={`relative shrink-0 ${active ? "text-[#38BDF0]" : ""}`}>
+                          <Icon name={item.icon} size={18} />
+                          {/* collapsed rail: the count shows as a dot on the icon */}
+                          {badge ? <span className="sb-dot absolute -right-1.5 -top-1 hidden size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+                        </span>
+                        <span className="sb-label">{item.label}</span>
+                        <Badge n={badge} />
+                      </Link>
+                    </Tooltip>
+                  );
+                })}
+            </div>
           );
         })}
       </nav>

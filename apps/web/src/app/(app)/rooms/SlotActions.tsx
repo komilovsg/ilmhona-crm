@@ -113,7 +113,7 @@ export function SlotActions({ slot, onClose }: { slot: Slot; onClose: () => void
     <>
       <div aria-hidden className="fixed inset-0 z-40" onClick={onClose} />
       <div
-        className="fixed z-50 w-64 rounded-xl border border-divider bg-content1/80 p-2 shadow-xl backdrop-blur-md"
+        className="surface-card fixed z-50 w-64 bg-content1/85 p-1.5 shadow-xl backdrop-blur-md"
         role="menu"
         style={{ left: Math.min(slot.x, window.innerWidth - 272), top: Math.min(slot.y, window.innerHeight - 170) }}
       >
