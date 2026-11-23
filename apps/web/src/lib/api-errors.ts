@@ -88,6 +88,7 @@ export const apiErrors: Record<string, string> = {
   cert_field_unknown: "В шаблоне неизвестное поле «{field}».",
   cert_layout_invalid: "Макет шаблона заполнен неверно.",
   cert_asset_invalid: "Изображение не подходит: нужен PNG или JPEG до 8 МБ с заметной подписью или печатью.",
+  cert_asset_dimensions: "Изображение слишком большое: сторона не должна быть больше {side_px} px.",
   cert_asset_missing: "Изображение шаблона не найдено.",
   cert_gender_missing: "У студента не указан пол: шаблон требует его.",
   cert_text_overflow: "Текст не помещается в блок шаблона.",
