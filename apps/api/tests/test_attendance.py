@@ -11,11 +11,10 @@ import httpx
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.cli import daily
 from app.cohorts.status import today
 from app.metrics.grading import scaled_points
 from tests.conftest import SignedIn, branch_id, make_role, sql
-from tests.edu import C, body, make_cohort, make_course, make_room, make_student
+from tests.edu import C, body, finish_overdue, make_cohort, make_course, make_room, make_student
 
 L = "/api/v1/lessons"
 E = "/api/v1/enrollments"
@@ -278,11 +277,11 @@ async def test_closing_the_cohort_graduates_at_70_and_completes_the_rest(
     await admin.patch(f"{E}/{gone}", json={"status": "отчислен"})
     await admin.patch(f"{E}/{top}/grade", json={"scores": {"homework": 30, "final": 20}})  # 70
     await admin.patch(f"{E}/{edge}/grade", json={"scores": {"homework": 30, "final": 19}})  # 69
-    assert await daily() == 1
+    assert await finish_overdue() == 1
     status = {str(i): s for i, s in await sql("SELECT id, status FROM enrollment")}
     assert status == {top: "выпускник", edge: "завершил", none: "завершил", gone: "отчислен"}
-    log = (await admin.get("/api/v1/audit", params={"action": "cohort.close_enrollments"})).json()
-    assert "зачислений завершено: 3, из них выпускников: 1" in log["items"][0]["text"]
+    log = (await admin.get("/api/v1/audit", params={"action": "cohort.finish"})).json()
+    assert "выпускников 1, завершили 2" in log["items"][0]["text"]
     # a manager with the cohorts right may still correct a status by hand
     mgr = await login_as(
         "mgr", await make_role("Менеджер потоков", {"cohorts": "change"}), branch="Душанбе"
@@ -605,7 +604,7 @@ async def test_bug_21_finished_cohort_without_any_mark_is_listed(
     """The old system: a finished cohort with 0 of 14 marked and nobody noticed."""
     cohort, lessons = await past_cohort(admin)
     await enroll(admin, cohort, "Алиев")
-    assert await daily() == 1  # the cohort finished
+    assert await finish_overdue() == 1  # the cohort finished
     assert (await sql("SELECT status FROM cohort"))[0][0] == "завершён"
     data = (await admin.get("/api/v1/me/today")).json()
     assert {x["lesson_id"] for x in data["unfilled"]} == set(lessons)

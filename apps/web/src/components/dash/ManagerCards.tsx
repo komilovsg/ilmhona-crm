@@ -31,6 +31,13 @@ function viewOf(t: Tile): TileView {
       return { label: "Должники", hint: formatPrice(t.sum), href: "/payments?tab=debtors", accent: "border-t-danger" };
     case "pending":
       return { label: "Подтвердить оплаты", hint: formatPrice(t.sum), href: "/payments?status=ожидает", accent: "border-t-warning" };
+    case "overdue_cohorts":
+      return {
+        label: "Срок вышел",
+        hint: t.count ? "потоки не завершены" : "все потоки в срок",
+        href: "/cohorts?overdue=1",
+        accent: "border-t-warning",
+      };
     case "new_leads":
       return { label: "Новые лиды", hint: "за сегодня", href: "/leads", accent: "border-t-success" };
   }

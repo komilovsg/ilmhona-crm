@@ -247,6 +247,20 @@ async def unmarked_cohorts(
     return [{"cohort_id": i, "cohort_code": c} for i, c in sorted(seen.items(), key=lambda t: t[1])]
 
 
+async def overdue_cohorts(
+    db: AsyncSession, cohort_where: list[ColumnElement[bool]], on: date | None = None
+) -> list[dict[str, Any]]:
+    """«Срок вышел»: активный cohorts whose end date passed and nobody finished them. The same
+    rule as the cohorts list filter `overdue`. Oldest end first."""
+    on = on or today()
+    rows = await db.execute(
+        select(Cohort.id, Cohort.code, Cohort.end_date)
+        .where(*cohort_where, Cohort.status == ACTIVE, Cohort.end_date < on)
+        .order_by(Cohort.end_date, Cohort.code)
+    )
+    return [{"cohort_id": i, "cohort_code": c, "ended_days": (on - e).days} for i, c, e in rows]
+
+
 async def pending_payments(
     db: AsyncSession, cohort_where: list[ColumnElement[bool]], on: date | None = None
 ) -> dict[str, Any]:

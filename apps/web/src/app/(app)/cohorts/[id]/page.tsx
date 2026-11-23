@@ -9,6 +9,7 @@ import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 
 
+import { FinishModal, ReopenModal } from "./FinishModal";
 import { StudentsTab } from "./StudentsTab";
 
 import { ConfirmModal } from "@/components/ConfirmModal";
@@ -18,10 +19,11 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { DetailSkeleton, ListSkeleton } from "@/components/Skeletons";
-import { CohortStatus } from "@/components/StatusChip";
+import { CohortStatus, OverdueChip } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanIssueCerts } from "@/hooks/certs";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
+import { useIsSuperadmin } from "@/hooks/goals";
 import { api } from "@/lib/api";
 import { daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
@@ -52,7 +54,7 @@ const CONFIRM: Record<Action, { title: string; label: string; text: string; dang
   restore: {
     title: "Вернуть поток",
     label: "Вернуть",
-    text: "Статус снова определится по датам, будущие уроки создадутся заново по расписанию.",
+    text: "Статус снова определится по дате начала, будущие уроки создадутся заново по расписанию.",
     danger: false,
   },
   delete: {
@@ -83,6 +85,7 @@ export default function CohortPage() {
   const refresh = useRefreshEducation();
   const canChange = useCanChange("cohorts");
   const canMark = useCanMark();
+  const isSuperadmin = useIsSuperadmin();
   const seesAttendance = useCanSeeAttendance();
   const params = useSearchParams();
   const wanted = params.get("tab");
@@ -108,6 +111,7 @@ export default function CohortPage() {
   });
   const graduates = enrollments.data?.filter((e) => e.status === "выпускник").length ?? 0;
   const [action, setAction] = useState<Action | null>(null);
+  const [closing, setClosing] = useState<"finish" | "reopen" | null>(null);
 
   const cohort = useQuery({ queryKey: ["cohort", id], queryFn: () => api<CohortRow>(`/api/v1/cohorts/${id}`) });
 
@@ -175,6 +179,7 @@ export default function CohortPage() {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold">{c.code}</h1>
             <CohortStatus status={c.status} />
+            {c.overdue && <OverdueChip />}
             {!!c.instructor_conflicts && (
               <Chip
                 color="warning"
@@ -188,26 +193,43 @@ export default function CohortPage() {
           </div>
           <p className="text-default-600">{c.course_name}</p>
         </div>
-        {canIssue && (
-          <Button
-            className="shrink-0"
-            color="primary"
-            isDisabled={graduates === 0}
-            startContent={<Icon name="certificate" size={18} />}
-            title={graduates === 0 ? "В потоке нет выпускников" : undefined}
-            variant="flat"
-            onPress={() => setIssuingCerts(true)}
-          >
-            Выдать сертификаты
-          </Button>
-        )}
-        {menu.length > 0 && (
-          <RowMenu
-            actions={menu}
-            label="Действия с потоком"
-            onAction={(k) => (k === "edit" ? setEditing(true) : setAction(k as Action))}
-          />
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {canChange && c.status === "активный" && (
+            <Button
+              color={c.overdue ? "primary" : "default"}
+              startContent={<Icon name="check" size={18} />}
+              variant={c.overdue ? "solid" : "flat"}
+              onPress={() => setClosing("finish")}
+            >
+              Завершить поток
+            </Button>
+          )}
+          {isSuperadmin && c.status === "завершён" && !c.certificates_issued && (
+            <Button variant="flat" onPress={() => setClosing("reopen")}>
+              Вернуть в активные
+            </Button>
+          )}
+          {canIssue && (
+            <Button
+              className="shrink-0"
+              color="primary"
+              isDisabled={graduates === 0}
+              startContent={<Icon name="certificate" size={18} />}
+              title={graduates === 0 ? "В потоке нет выпускников" : undefined}
+              variant="flat"
+              onPress={() => setIssuingCerts(true)}
+            >
+              Выдать сертификаты
+            </Button>
+          )}
+          {menu.length > 0 && (
+            <RowMenu
+              actions={menu}
+              label="Действия с потоком"
+              onAction={(k) => (k === "edit" ? setEditing(true) : setAction(k as Action))}
+            />
+          )}
+        </div>
       </div>
 
       <section className="mb-5 grid gap-4 rounded-2xl bg-content1 p-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -261,6 +283,8 @@ export default function CohortPage() {
       {tab === "analytics" && seesAttendance && <AnalyticsTab cohortId={c.id} />}
 
       {issuingCerts && <IssueCertificatesModal cohortId={c.id} onClose={() => setIssuingCerts(false)} />}
+      {closing === "finish" && <FinishModal cohort={c} onClose={() => setClosing(null)} />}
+      {closing === "reopen" && <ReopenModal cohort={c} onClose={() => setClosing(null)} />}
       {editing && <CohortFormModal cohort={c} onClose={() => setEditing(false)} />}
       {action && (
         <ConfirmModal

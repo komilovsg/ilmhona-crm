@@ -564,6 +564,13 @@ def sentence(
             names,
             sections,
         )
+    if a == "cohort.finish":
+        grads = _pair(e.diff.get("graduates"))[1]
+        done = _pair(e.diff.get("completed"))[1]
+        return f"{who}: завершил поток {lab}: выпускников {grads}, завершили {done}"
+    if a == "cohort.reopen":
+        n = _pair(e.diff.get("restored"))[1]
+        return f"{who}: вернул поток {lab} в активные, статусов студентов восстановлено: {n}"
     if a == "cohort.close_enrollments":
         _, n = _pair(e.diff.get("enrollments_completed"))
         _, grads = _pair(e.diff.get("graduates"))

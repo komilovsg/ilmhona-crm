@@ -6,10 +6,9 @@ from typing import Any
 
 import httpx
 
-from app.cli import daily
 from app.cohorts.status import today
 from tests.conftest import make_user, sign_in, sql
-from tests.edu import C, make_cohort, make_course, make_room
+from tests.edu import C, finish_overdue, make_cohort, make_course, make_room
 from tests.money import enroll, make_payout, pay, running_cohort
 from tests.sales import CA, L, make_campaign, make_lead
 
@@ -28,13 +27,13 @@ async def grade(c: httpx.AsyncClient, enrollment: str, homework: int, final: int
 
 
 async def finish(cohort: dict[str, Any]) -> None:
-    """The cohort ended yesterday: the daily job closes it and its enrollments."""
+    """The cohort ended yesterday and is finished by hand: it and its enrollments close."""
     await sql(
         "UPDATE cohort SET end_date = :e WHERE id = :i",
         e=today() - timedelta(days=1),
         i=cohort["id"],
     )
-    await daily()
+    await finish_overdue()
 
 
 async def finished_cohort(
