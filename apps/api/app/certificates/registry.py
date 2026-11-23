@@ -1,7 +1,8 @@
 """Issue and registry of certificates (stage C2).
 
-Rights: check, issue, reissue and revoke need `certificates` change; the registry, a certificate
-and its PDF need `certificates` view. All of it is branch-scoped (a foreign branch is 404).
+Rights: check, issue, reissue and revoke need `certificates` change and never the instructor role
+(#24); the registry, a certificate and its PDF need `certificates` view. All of it is
+branch-scoped (a foreign branch is 404); an instructor sees only their own cohorts' certificates.
 A certificate keeps the exact template version and a snapshot of its values; its number is the
 enrollment's `certificate_no` (one numbering, see `app.graduates.numbering`).
 """
@@ -49,6 +50,7 @@ from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.search import search_clause
+from app.education.scope import is_instructor, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import NOT_GRADUATE
 from app.graduates.numbering import assign_number
@@ -72,7 +74,8 @@ router = APIRouter(
 )
 
 View = Annotated[Principal, require("certificates", "view")]
-Change = Annotated[Principal, require("certificates", "change")]
+# an instructor never issues, reissues or revokes (#24), whatever the rights matrix says
+Change = Annotated[Principal, writer("certificates")]
 Lang = Literal["ru", "en", "tg"]
 Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 Custom = dict[str, Annotated[str, Field(max_length=500)]]
@@ -588,6 +591,8 @@ async def registry(
     where: list[ColumnElement[bool]] = []
     if p.branch_id is not None:
         where.append(Certificate.branch_id == p.branch_id)
+    if is_instructor(p):  # only the certificates of their own cohorts
+        where.append(Cohort.instructor_id == p.id)
     for column, value in (
         (Certificate.status, status),
         (Certificate.course_id, course_id),
@@ -649,6 +654,12 @@ async def _one(db: AsyncSession, p: Principal, certificate_id: uuid.UUID) -> Any
     if row is None:
         raise DomainError(NOT_FOUND)
     p.check_scope(row.Certificate.branch_id)
+    if is_instructor(p):
+        owner = await db.scalar(
+            select(Cohort.instructor_id).where(Cohort.id == row.Certificate.cohort_id)
+        )
+        if owner != p.id:
+            raise DomainError(NOT_FOUND)
     return row
 
 

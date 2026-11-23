@@ -24,6 +24,7 @@ from app.certificates.errors import (
     CERT_DIRECTOR_OVERFLOW,
     CERT_NO_TEMPLATE,
     CERT_NOT_ISSUED,
+    CERT_NOT_VALID,
     CERT_TEXT_OVERFLOW,
 )
 from app.certificates.fields import (
@@ -210,6 +211,9 @@ async def certificate_pdf(
             media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
+    if await db.scalar(select(Certificate.id).where(Certificate.enrollment_id == enrollment_id)):
+        # issued once and no valid one left: revoked, never redrawn from live data
+        raise DomainError(CERT_NOT_VALID, status="revoked")
     pinned = (
         await db.get(CertTemplateVersion, enrollment.certificate_version_id)
         if enrollment.certificate_version_id
@@ -283,6 +287,10 @@ IMAGES = {"signature": "director_signature_asset_id", "seal": "seal_asset_id"}
 IMAGE_SENTENCE = {"signature": "подпись директора", "seal": "печать"}
 
 
+# a plain DNS name (an internationalised one in its xn-- form)
+HOST = re.compile(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*")
+
+
 class SettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     director_name: Text120 | None = None
@@ -321,6 +329,8 @@ class SettingsUpdate(BaseModel):
         if not ok or len(value) > 200:
             raise ValueError("an https address without a path is needed")
         host = url.hostname or ""
+        if not HOST.fullmatch(host):
+            raise ValueError("an https address without a path is needed")
         return f"https://{host}" + (f":{port}" if port else "")
 
 
