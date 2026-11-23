@@ -12,6 +12,7 @@ import { Icon } from "@/components/Icon";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { SelectField } from "@/components/SelectField";
+import { useCanChange } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { dayMonth, dayTitle, mondayOf, todayIso, weekOf } from "@/lib/education";
@@ -35,6 +36,8 @@ import {
 } from "@/lib/schedule-board";
 import type { GridLesson, ScheduleGrid } from "@/lib/types";
 
+import { type Slot, SlotActions } from "./SlotActions";
+
 const LINE_PX = 5; // one TICK of the board: a half-hour row is 30px
 const DAY_PX = 36; // the day row
 const ROOM_PX = 28; // the room row
@@ -44,13 +47,16 @@ function Block({ lesson, style }: { lesson: GridLesson; style: CSSProperties }) 
 
   return (
     <Link
-      className="z-10 m-px overflow-hidden rounded-md px-1.5 py-0.5 text-center text-[11px] leading-tight text-white hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-1"
+      className="z-10 m-px overflow-hidden rounded-md px-1.5 py-0.5 text-center text-[11px] leading-tight text-white shadow-sm ring-1 ring-inset ring-white/15 transition hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-1"
       href={`/cohorts/${lesson.cohort_id}`}
-      style={{ ...style, backgroundColor: `hsl(${hue} 55% 36%)` }}
+      style={{ ...style, backgroundImage: `linear-gradient(to bottom, hsl(${hue} 55% 41%), hsl(${hue} 58% 33%))` }}
       title={[`${lesson.start}–${lesson.end}`, lesson.course_name, lesson.cohort_code, lesson.instructor_name]
         .filter(Boolean)
         .join(" · ")}
     >
+      <div className="tabular-nums opacity-80">
+        {lesson.start}–{lesson.end}
+      </div>
       <div className="font-semibold [overflow-wrap:anywhere]">{lesson.course_name}</div>
       <div className="truncate opacity-90">{lesson.cohort_code}</div>
       {lesson.instructor_name && <div className="truncate opacity-90">{lesson.instructor_name}</div>}
@@ -64,11 +70,14 @@ function Board({
   days,
   today,
   hours,
+  onPick,
 }: {
   grid: ScheduleGrid;
   days: string[];
   today: string;
   hours: { from: number; to: number };
+  /** a click on a free cell; absent for a user who cannot change cohorts */
+  onPick?: (slot: Slot) => void;
 }) {
   const rooms = grid.rooms;
   const lessons = grid.lessons.filter((l) => days.includes(l.date));
@@ -79,6 +88,8 @@ function Board({
   const column = (day: number, room: number) => 1 + day * (rooms.length + 1) + room;
   const dayColumns = (day: number) => `${column(day, 0)} / span ${rooms.length}`;
   const HEAD = 2; // the day row and the room row
+  const now = minutesNow();
+  const nowLine = days.includes(today) && now >= from && now < to ? HEAD + Math.floor((now - from) / TICK) + 1 : null;
 
   return (
     <div className="flex overflow-hidden rounded-2xl bg-content1 text-xs">
@@ -87,7 +98,10 @@ function Board({
         {slots.map((slot) => (
           <div
             key={slot}
-            className="border-b border-divider pr-2 text-right tabular-nums text-default-500"
+            className={clsx(
+              "border-b pr-2 text-right tabular-nums",
+              slot % 60 === 0 ? "border-divider/50 text-default-600" : "border-divider text-[10px] text-default-400",
+            )}
             style={{ height: perSlot * LINE_PX }}
           >
             {clock(slot)}
@@ -107,7 +121,7 @@ function Board({
           <div
             key={d}
             className={clsx(
-              "flex items-center rounded-t-lg border border-divider bg-default-100 text-sm font-medium",
+              "flex items-center rounded-t-lg border border-divider bg-default-100/70 text-sm font-medium backdrop-blur",
               d === today && "bg-primary/10 text-brand-text",
             )}
             style={{ gridRow: 1, gridColumn: dayColumns(di) }}
@@ -137,7 +151,8 @@ function Board({
           slots.map((slot, si) => (
             <div
               key={`row-${d}-${slot}`}
-              className="border-b border-divider"
+              // the line under :00 is the half hour: lighter than the hour line
+              className={clsx("border-b", slot % 60 === 0 ? "border-dashed border-divider/50" : "border-divider")}
               style={{ gridColumn: dayColumns(di), gridRow: `${HEAD + 1 + si * perSlot} / span ${perSlot}` }}
             />
           )),
@@ -146,10 +161,32 @@ function Board({
           rooms.map((room, ri) => (
             <div
               key={`col-${d}-${room.id}`}
-              className={clsx("border-l border-divider", ri === rooms.length - 1 && "border-r", d === today && "bg-primary/5")}
+              className={clsx(
+                "border-l border-divider",
+                ri === rooms.length - 1 && "border-r",
+                d === today && "bg-primary/5",
+                onPick && "cursor-cell hover:bg-primary/10",
+              )}
               style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1} / -1` }}
+              title={onPick ? `${room.name}: свободно — нажмите, чтобы занять` : undefined}
+              onClick={
+                onPick &&
+                ((e) => {
+                  const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                  const start = from + Math.floor(y / (perSlot * LINE_PX)) * SLOT;
+
+                  onPick({ room, date: d, start: clock(Math.min(start, to - SLOT)), x: e.clientX, y: e.clientY });
+                })
+              }
             />
           )),
+        )}
+        {nowLine && (
+          <div
+            aria-hidden
+            className="pointer-events-none z-10 border-t-2 border-danger"
+            style={{ gridColumn: dayColumns(days.indexOf(today)), gridRow: nowLine }}
+          />
         )}
         {lessons.map((l) => {
           const ri = rooms.findIndex((r) => r.id === l.room_id);
@@ -171,11 +208,31 @@ function Board({
   );
 }
 
+/** Minutes since midnight in Dushanbe, whatever the browser's zone is. */
+function minutesNow(): number {
+  const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Dushanbe", hour: "2-digit", minute: "2-digit", hour12: false })
+    .format(new Date())
+    .split(":")
+    .map(Number);
+
+  return (h % 24) * 60 + m;
+}
+
 const skeleton = <Bone className="h-96 w-full rounded-2xl" />;
 const noRooms = <EmptyState title="Нет аудиторий" />;
 
 /** One month: its weeks one under another, each a board of its own. */
-function MonthBoards({ span, branch, today }: { span: MonthSpan; branch: string | null; today: string }) {
+function MonthBoards({
+  span,
+  branch,
+  today,
+  onPick,
+}: {
+  span: MonthSpan;
+  branch: string | null;
+  today: string;
+  onPick?: (slot: Slot) => void;
+}) {
   const grid = useQuery({
     queryKey: ["schedule", span.from, span.to, branch],
     queryFn: () =>
@@ -196,7 +253,7 @@ function MonthBoards({ span, branch, today }: { span: MonthSpan; branch: string 
               {weekBands(span.from, span.to).map((week) => (
                 // a year is some fifty boards: the ones off screen are not laid out
                 <div key={week[0]} style={{ contentVisibility: "auto", containIntrinsicSize: "auto 520px" }}>
-                  <Board days={boardDays(week, data.lessons)} grid={data} hours={hours} today={today} />
+                  <Board days={boardDays(week, data.lessons)} grid={data} hours={hours} today={today} onPick={onPick} />
                 </div>
               ))}
             </div>
@@ -216,6 +273,9 @@ export function ScheduleTab() {
   const [day, setDay] = useState(today);
   const [period, setPeriod] = useState<Period>("week");
   const [branch, setBranch] = useState<string | null>(null);
+  const canChange = useCanChange("cohorts");
+  const [slot, setSlot] = useState<Slot | null>(null);
+  const onPick = canChange ? setSlot : undefined;
   const monday = mondayOf(day);
   const days = weekOf(day);
   const oneDay = period === "day" || (phone && period === "week");
@@ -258,7 +318,7 @@ export function ScheduleTab() {
         <Button color="primary" variant="flat" onPress={() => setDay(today)}>
           Сегодня
         </Button>
-        <div aria-label="Период" className="flex rounded-xl bg-content1 p-1" role="group">
+        <div aria-label="Период" className="flex rounded-xl bg-content1/70 p-1 backdrop-blur" role="group">
           {PERIODS.map((p) => (
             <button
               key={p.key}
@@ -292,12 +352,13 @@ export function ScheduleTab() {
           {(data) => {
             const shown = oneDay ? [day] : boardDays(days, data.lessons);
 
-            return <Board days={shown} grid={data} hours={boardHours(data.lessons)} today={today} />;
+            return <Board days={shown} grid={data} hours={boardHours(data.lessons)} today={today} onPick={onPick} />;
           }}
         </QueryState>
       ) : (
-        months.map((span) => <MonthBoards key={span.from} branch={branch} span={span} today={today} />)
+        months.map((span) => <MonthBoards key={span.from} branch={branch} span={span} today={today} onPick={onPick} />)
       )}
+      {slot && <SlotActions key={`${slot.room.id}-${slot.date}-${slot.start}`} slot={slot} onClose={() => setSlot(null)} />}
     </>
   );
 }
