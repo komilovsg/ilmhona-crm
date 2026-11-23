@@ -275,6 +275,8 @@ class Enrollment(Versioned, Legacy, Base):
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     needs_review: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     review_reason: Mapped[str | None] = mapped_column(Text)
+    # the status the enrollment had when its cohort was finished (reopen restores it)
+    status_before_finish: Mapped[str | None] = mapped_column(Text)
     # the old system's total when it had no homework / final to go with it
     legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
     created_by: Mapped[UUID | None] = mapped_column(

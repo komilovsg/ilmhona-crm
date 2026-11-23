@@ -45,7 +45,8 @@ export type Tile =
   | { key: "callbacks"; count: number; overdue: number }
   | { key: "debtors"; count: number; sum: string }
   | { key: "pending"; count: number; sum: string }
-  | { key: "new_leads"; count: number };
+  | { key: "new_leads"; count: number }
+  | { key: "overdue_cohorts"; count: number };
 
 export type CallLead = {
   id: string;

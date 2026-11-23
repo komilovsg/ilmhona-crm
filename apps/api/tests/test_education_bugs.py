@@ -272,9 +272,15 @@ async def test_bug_11_finishing_a_cohort_completes_its_active_enrollments(
         )
         ids.append(r.json()["id"])
     await admin.patch(f"/api/v1/enrollments/{ids[2]}", json={"status": "отчислен"})
-    # the dates move into the past: the cohort is finished, active students are not
+    # finishing by hand: active students close, the expelled one stays
     r = await admin.patch(
         f"{C}/{cohort['id']}", json={"start_date": "2024-01-08", "end_date": "2024-03-08"}
+    )
+    assert r.status_code == 200 and r.json()["status"] == "активный"  # no finish by date
+    r = await admin.post(
+        f"{C}/{cohort['id']}/finish",
+        json={"graduates": 0, "completed": 2},
+        headers={"X-Record-Version": str(r.json()["version"])},
     )
     assert r.status_code == 200 and r.json()["status"] == "завершён"
     statuses = {
@@ -289,7 +295,7 @@ async def test_bug_11_finishing_a_cohort_completes_its_active_enrollments(
         f"{C}/{cohort['id']}/enrollments", json={"student_id": str(await make_student("D"))}
     )
     assert (r.status_code, r.json()["code"]) == (409, "cohort_closed")
-    audit = (await admin.get("/api/v1/audit", params={"action": "cohort.close_enrollments"})).json()
+    audit = (await admin.get("/api/v1/audit", params={"action": "cohort.finish"})).json()
     assert audit["total"] == 1
 
 
@@ -338,18 +344,17 @@ async def test_bug_20_daily_job_derives_status_from_dates(admin: httpx.AsyncClie
     student = await make_student()
     await sql("INSERT INTO enrollment (cohort_id, student_id) VALUES (:c, :s)", c=stale, s=student)
 
-    assert await daily() == 2
+    assert await daily() == 1  # only `started`: набор → активный; nothing finishes by date
     status = {i: s for i, s in await sql("SELECT id, status FROM cohort")}
-    assert status[stale] == "завершён"
+    assert status[stale] == "активный"  # overdue, not finished
     assert status[started] == "активный"
     assert status[upcoming] == "набор"
     assert status[cancelled] == "отменён"  # manual and sticky
-    assert (await sql("SELECT status FROM enrollment"))[0][0] == "завершил"  # #11 as well
+    assert (await sql("SELECT status FROM enrollment"))[0][0] == "активный"
     assert await daily() == 0  # idempotent
-    # a cohort whose last day is today is still active; the day after it is finished
-    assert await daily(t + timedelta(days=30)) == 1  # `upcoming` started; `started` ends today
-    assert await daily(t + timedelta(days=31)) == 1  # `started` ended yesterday
-    assert {i: s for i, s in await sql("SELECT id, status FROM cohort")}[started] == "завершён"
+    assert await daily(t + timedelta(days=30)) == 1  # `upcoming` started
+    assert await daily(t + timedelta(days=31)) == 0  # `started` ended yesterday: still активный
+    assert {i: s for i, s in await sql("SELECT id, status FROM cohort")}[started] == "активный"
     log = (await admin.get("/api/v1/audit", params={"action": "cohort.status"})).json()
     assert log["total"] >= 2 and log["items"][0]["user_id"] is None
 
@@ -386,7 +391,7 @@ async def test_bug_20_status_is_also_set_on_every_write(admin: httpx.AsyncClient
         s=t - timedelta(days=9),
     )
     assert await daily() == 0
-    assert (await admin.post(f"{C}/{cid}/restore")).json()["status"] == "завершён"
+    assert (await admin.post(f"{C}/{cid}/restore")).json()["status"] == "активный"
 
 
 # ---- #24 ---------------------------------------------------------------------------------
