@@ -303,8 +303,18 @@ async def _detail(db: AsyncSession, cohort_id: uuid.UUID) -> dict[str, Any]:
         .select_from(Lesson)
         .where(Lesson.cohort_id == cohort_id, Lesson.instructor_conflict)
     )
-    # lessons that came overlapping another lesson of the instructor (old data): to check
-    return {**(await _outs(db, rows))[0], "instructor_conflicts": conflicts or 0}
+    certificates = await db.scalar(
+        select(func.count())
+        .select_from(Enrollment)
+        .where(Enrollment.cohort_id == cohort_id, Enrollment.certificate_no.is_not(None))
+    )
+    # lessons that came overlapping another lesson of the instructor (old data): to check;
+    # issued certificates: while there are any, a finished cohort cannot be reopened
+    return {
+        **(await _outs(db, rows))[0],
+        "instructor_conflicts": conflicts or 0,
+        "certificates_issued": certificates or 0,
+    }
 
 
 async def _check_instructor(

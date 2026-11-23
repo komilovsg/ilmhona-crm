@@ -18,7 +18,7 @@ import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { CardGridSkeleton, PillsSkeleton } from "@/components/Skeletons";
-import { CohortStatus } from "@/components/StatusChip";
+import { CohortStatus, OverdueChip } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useSeesPayments } from "@/hooks/money";
 import { useBranches, useMe } from "@/hooks/queries";
@@ -31,7 +31,7 @@ import { lazyModal } from "@/lib/lazy-modal";
 const CohortFormModal = lazyModal(() => import("./CohortFormModal").then((m) => m.CohortFormModal));
 
 const PAGE_SIZE = 12;
-type Filters = { q: string; status: string | null; branch: string | null };
+type Filters = { q: string; status: string | null; branch: string | null; overdue: boolean };
 
 function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) => void }) {
   const { data: me } = useMe();
@@ -46,6 +46,14 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         options={COHORT_STATUSES.map((s) => ({ key: s, label: s }))}
         value={filters.status}
         onChange={(status) => set({ ...filters, status })}
+      />
+      <SelectField filter
+        allLabel="Любой срок"
+        className="md:w-56"
+        label="Срок"
+        options={[{ key: "1", label: "Срок вышел, не завершён" }]}
+        value={filters.overdue ? "1" : null}
+        onChange={(v) => set({ ...filters, overdue: v === "1" })}
       />
       {!me?.branch && (
         <SelectField filter
@@ -72,7 +80,10 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
           <div className="text-xs font-medium text-brand-text">{c.code}</div>
           <div className="break-words text-base font-semibold">{c.course_name}</div>
         </div>
-        <CohortStatus status={c.status} />
+        <div className="flex flex-col items-end gap-1">
+          <CohortStatus status={c.status} />
+          {c.overdue && <OverdueChip />}
+        </div>
       </div>
       <dl className="grid gap-1.5 text-sm">
         <div className="flex items-center gap-2 text-default-600">
@@ -113,7 +124,7 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
   );
 }
 
-const NO_FILTERS: Filters = { q: "", status: null, branch: null };
+const NO_FILTERS: Filters = { q: "", status: null, branch: null, overdue: false };
 
 export default function CohortsPage() {
   const overlayMotion = useOverlayMotion();
@@ -133,6 +144,7 @@ export default function CohortsPage() {
           q: filters.q.trim() || undefined,
           status: filters.status ?? undefined,
           branch_id: filters.branch ?? undefined,
+          overdue: filters.overdue ? "true" : undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
         },
@@ -145,7 +157,7 @@ export default function CohortsPage() {
     setPage(1);
   };
   const cohorts = list.data?.items ?? [];
-  const activeFilters = [filters.status, filters.branch].filter(Boolean).length;
+  const activeFilters = [filters.status, filters.branch, filters.overdue].filter(Boolean).length;
   const counts = summary.data?.cohorts;
 
   return (
@@ -154,7 +166,7 @@ export default function CohortsPage() {
         actions={
           <>
             <ExportButton
-              params={{ q: filters.q.trim(), status: filters.status, branch_id: filters.branch }}
+              params={{ q: filters.q.trim(), status: filters.status, branch_id: filters.branch, overdue: filters.overdue ? "true" : undefined }}
               path="/api/v1/cohorts/export"
             />
             {canChange && (
@@ -241,7 +253,7 @@ export default function CohortsPage() {
                 <FilterFields filters={filters} set={set} />
               </DrawerBody>
               <DrawerFooter>
-                <Button variant="light" onPress={() => set({ ...filters, status: null, branch: null })}>
+                <Button variant="light" onPress={() => set({ ...filters, status: null, branch: null, overdue: false })}>
                   Сбросить
                 </Button>
                 <Button color="primary" onPress={close}>

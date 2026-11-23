@@ -108,12 +108,29 @@ export type CohortRow = {
   capacity: number;
   price_month: string;
   status: string;
+  /** «Срок вышел»: активный after the end date, not finished by hand */
+  overdue: boolean;
   fill: Fill;
   /** list only, for those who see payments: confirmed payers and income (Decimal as string) */
   payers?: number;
   income?: string;
   /** detail only: lessons that came overlapping another lesson of the instructor (old data) */
   instructor_conflicts?: number;
+  /** detail only: enrollments with an issued certificate (a finished cohort with any cannot be reopened) */
+  certificates_issued?: number;
+};
+
+export type FinishItem = { enrollment_id: string; student_id: string; student_name: string };
+export type FinishPreview = {
+  graduates: number;
+  completed: number;
+  excluded_count: number;
+  overdue: boolean;
+  lists: {
+    graduates: FinishItem[];
+    completed: FinishItem[];
+    excluded: (FinishItem & { status: string })[];
+  };
 };
 
 export type LessonRow = {
