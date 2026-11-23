@@ -94,7 +94,13 @@ export function QueryState<T>({
 
   // keyed + fade-in: the skeleton gives way to the content with a short cross-fade (mount only, a refetch does not replay it)
   return (
-    <div key="ready" aria-busy={isFetching} className="fade-in">
+    // the rows of the previous filter stay while the new ones load, dimmed: no jump, and it is
+    // clear they are not the answer yet
+    <div
+      key="ready"
+      aria-busy={isFetching}
+      className={`fade-in transition-opacity duration-200 ${query.isPlaceholderData ? "pointer-events-none opacity-50" : ""}`}
+    >
       {isError && (
         <p className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-warning/10 px-4 py-2 text-sm" role="alert">
           Не удалось обновить данные.
