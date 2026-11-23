@@ -9,6 +9,48 @@
   },
   "layers": [
     {
+      "id": "logo_ministry",
+      "type": "image",
+      "x_mm": 83.22,
+      "y_mm": 23.89,
+      "w_mm": 25.65,
+      "h_mm": 13.31,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/jamshed_ministry.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_unicef",
+      "type": "image",
+      "x_mm": 145.46,
+      "y_mm": 26.54,
+      "w_mm": 20.63,
+      "h_mm": 9.08,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/jamshed_unicef.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_ilmhona",
+      "type": "image",
+      "x_mm": 201.97,
+      "y_mm": 23.63,
+      "w_mm": 12.52,
+      "h_mm": 13.58,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/jamshed_ilmhona.png"
+      },
+      "fit": "contain"
+    },
+    {
       "id": "number_date",
       "type": "text",
       "x_mm": 88.5,

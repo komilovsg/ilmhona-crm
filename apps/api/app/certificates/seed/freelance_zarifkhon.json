@@ -9,6 +9,62 @@
   },
   "layers": [
     {
+      "id": "logo_ministry",
+      "type": "image",
+      "x_mm": 67.39,
+      "y_mm": 23.2,
+      "w_mm": 26.75,
+      "h_mm": 14.56,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/newDf_ministry.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_eu",
+      "type": "image",
+      "x_mm": 122.59,
+      "y_mm": 23.71,
+      "w_mm": 16.59,
+      "h_mm": 14.56,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/newDf_eu.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_unicef",
+      "type": "image",
+      "x_mm": 167.13,
+      "y_mm": 25.91,
+      "w_mm": 21.84,
+      "h_mm": 10.16,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/newDf_unicef.png"
+      },
+      "fit": "contain"
+    },
+    {
+      "id": "logo_ilmhona",
+      "type": "image",
+      "x_mm": 217.75,
+      "y_mm": 24.72,
+      "w_mm": 11.51,
+      "h_mm": 12.53,
+      "rotation": 0,
+      "locked": false,
+      "source": {
+        "asset": "logos/newDf_ilmhona.png"
+      },
+      "fit": "contain"
+    },
+    {
       "id": "number_date",
       "type": "text",
       "x_mm": 88.5,
