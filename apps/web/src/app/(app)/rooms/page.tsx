@@ -213,7 +213,7 @@ export default function RoomsPage() {
             )}
           </>
         }
-        title="Аудитории"
+        title="Расписание"
       />
       <Segmented
         className="mb-4"

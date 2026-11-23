@@ -45,3 +45,45 @@ test("Sunday is printed only when it has lessons", () => {
   assert.equal(boardDays(week, [{ date: "2030-03-16" }]).length, 6);
   assert.equal(boardDays(week, [{ date: "2030-03-17" }]).length, 7);
 });
+
+test("the months of a period", async () => {
+  const { monthsOfPeriod, periodTitle } = await import("./schedule-board.ts");
+
+  assert.deepEqual(monthsOfPeriod("month", "2026-11-23"), [{ from: "2026-11-01", to: "2026-11-30", title: "Ноябрь 2026" }]);
+
+  const half = monthsOfPeriod("half", "2026-11-23");
+
+  assert.equal(half.length, 6);
+  assert.deepEqual(half[5], { from: "2027-04-01", to: "2027-04-30", title: "Апрель 2027" });
+  assert.equal(periodTitle("half", "2026-11-23"), "Ноябрь 2026 – Апрель 2027");
+
+  const year = monthsOfPeriod("year", "2028-07-10");
+
+  assert.equal(year.length, 12);
+  assert.equal(year[0].from, "2028-01-01");
+  assert.equal(year[1].to, "2028-02-29");
+  assert.equal(periodTitle("year", "2028-07-10"), "2028");
+});
+
+test("a month is printed week by week", async () => {
+  const { weekBands } = await import("./schedule-board.ts");
+  const bands = weekBands("2026-11-01", "2026-11-30");
+
+  // 1 November 2026 is a Sunday, the 30th a Monday
+  assert.deepEqual(bands[0], ["2026-11-01"]);
+  assert.equal(bands[1][0], "2026-11-02");
+  assert.equal(bands[1].length, 7);
+  assert.deepEqual(bands[bands.length - 1], ["2026-11-30"]);
+  assert.equal(bands.flat().length, 30);
+});
+
+test("a step moves by the period", async () => {
+  const { shiftDay } = await import("./schedule-board.ts");
+
+  assert.equal(shiftDay("day", "2026-12-31", 1), "2027-01-01");
+  assert.equal(shiftDay("week", "2026-12-28", 1), "2027-01-04");
+  assert.equal(shiftDay("month", "2026-01-31", 1), "2026-02-01");
+  assert.equal(shiftDay("month", "2026-01-15", -1), "2025-12-01");
+  assert.equal(shiftDay("half", "2026-11-23", 1), "2027-05-01");
+  assert.equal(shiftDay("year", "2026-11-23", -1), "2025-01-01");
+});

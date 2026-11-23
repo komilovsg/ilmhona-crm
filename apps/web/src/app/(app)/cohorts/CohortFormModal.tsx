@@ -23,16 +23,27 @@ import { LoadingButton } from "@/components/LoadingButton";
 
 const FIELDS = ["instructor_id", "room_id", "start_date", "end_date", "start_time", "end_time", "capacity", "price_month"];
 
-export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null; onClose: () => void }) {
+/** Where a new cohort starts when it is created from a free cell of the room board. */
+export type CohortPreset = { branch_id: string; room_id: string; start_date: string; weekday: number; start_time: string; end_time: string };
+
+export function CohortFormModal({
+  cohort,
+  preset,
+  onClose,
+}: {
+  cohort: CohortRow | null;
+  preset?: CohortPreset;
+  onClose: () => void;
+}) {
   const refresh = useRefreshEducation();
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
   const [courseId, setCourseId] = useState<string | null>(cohort?.course_id ?? null);
-  const [branchId, setBranchId] = useState<string | null>(cohort?.branch_id ?? me?.branch?.id ?? null);
+  const [branchId, setBranchId] = useState<string | null>(cohort?.branch_id ?? preset?.branch_id ?? me?.branch?.id ?? null);
   const [instructorId, setInstructorId] = useState<string | null>(cohort?.instructor_id ?? null);
-  const [roomId, setRoomId] = useState<string | null>(cohort?.room_id ?? null);
-  const [start, setStart] = useState(cohort?.start_date ?? "");
+  const [roomId, setRoomId] = useState<string | null>(cohort?.room_id ?? preset?.room_id ?? null);
+  const [start, setStart] = useState(cohort?.start_date ?? preset?.start_date ?? "");
   const [end, setEnd] = useState(cohort?.end_date ?? "");
   const [months, setMonths] = useState(cohort ? String(monthsOf(cohort.start_date, cohort.end_date) ?? "") : "");
   // the end follows the start and the length; a hand-typed end stays until one of them changes
@@ -41,9 +52,9 @@ export function CohortFormModal({ cohort, onClose }: { cohort: CohortRow | null;
 
     if (nextStart && Number.isInteger(n) && n >= 1 && n <= 36) setEnd(endDateOf(nextStart, n));
   };
-  const [weekdays, setWeekdays] = useState<number[]>(cohort?.weekdays ?? []);
-  const [startTime, setStartTime] = useState(cohort?.start_time ?? "10:00");
-  const [endTime, setEndTime] = useState(cohort?.end_time ?? "11:30");
+  const [weekdays, setWeekdays] = useState<number[]>(cohort?.weekdays ?? (preset ? [preset.weekday] : []));
+  const [startTime, setStartTime] = useState(cohort?.start_time ?? preset?.start_time ?? "10:00");
+  const [endTime, setEndTime] = useState(cohort?.end_time ?? preset?.end_time ?? "11:30");
   const [capacity, setCapacity] = useState(String(cohort?.capacity ?? 15));
   const [price, setPrice] = useState(cohort ? String(Number(cohort.price_month)) : "");
   const [failed, setFailed] = useState<{ error: unknown; sig: string } | null>(null);

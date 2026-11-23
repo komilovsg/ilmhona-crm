@@ -1,6 +1,7 @@
 "use client";
 
 import { useUrlPage, useUrlState } from "@/hooks/url-state";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useState } from "react";
@@ -8,11 +9,9 @@ import { useBrowserValue } from "@/lib/client-store";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
 import clsx from "clsx";
 
 
-import { SheetHandle } from "@/components/SheetHandle";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -42,7 +41,6 @@ import {
   whatsappHref,
 } from "@/lib/sales";
 import type { Duplicates, LeadFunnel, LeadRow } from "@/lib/sales-types";
-import { useOverlayMotion } from "@/lib/motion";
 import { notify, notifyError } from "@/lib/toast";
 import type { Paged } from "@/lib/types";
 import { lazyModal } from "@/lib/lazy-modal";
@@ -148,7 +146,6 @@ function NameCell({ lead }: { lead: LeadRow }) {
 }
 
 export default function LeadsPage() {
-  const overlayMotion = useOverlayMotion();
   const canChange = useCanChangeSales("leads");
   const canConvert = useCanChange("students"); // convert creates or links a student
   const { data: me } = useMe();
@@ -165,7 +162,6 @@ export default function LeadsPage() {
   const [converting, setConverting] = useState<LeadRow | null>(null);
   const [removing, setRemoving] = useState<LeadRow | null>(null);
   const [importing, setImporting] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [warn, setWarn] = useState<{ name: string; duplicates: Duplicates } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const callback = tab === "callback";
@@ -350,21 +346,13 @@ export default function LeadsPage() {
             onClear={() => set({ q: "" })}
             onValueChange={(q) => set({ q })}
           />
-          <Button
-            className="h-12 shrink-0 md:hidden"
-            startContent={<Icon name="filter" size={18} />}
-            color="primary" variant="flat"
-            onPress={() => setFiltersOpen(true)}
+          <FilterDrawer
+            count={sheetFilters}
+            onReset={() => set({ call: null, source: null, course: null, branch: null, from: "", to: "", review: false })}
           >
-            Фильтры
-            {sheetFilters > 0 && (
-              <span className="ml-1 inline-flex size-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
-                {sheetFilters}
-              </span>
-            )}
-          </Button>
+            {filterFields}
+          </FilterDrawer>
         </div>
-        <div className="hidden md:contents">{filterFields}</div>
 
       </div>
 
@@ -452,28 +440,6 @@ export default function LeadsPage() {
         </>
       </QueryState>
 
-      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
-        <DrawerContent>
-          {(close) => (
-            <>
-              <SheetHandle onBackdrop={close} onClose={close} />
-              <DrawerHeader>Фильтры</DrawerHeader>
-              <DrawerBody className="gap-3">{filterFields}</DrawerBody>
-              <DrawerFooter>
-                <Button
-                  variant="light"
-                  onPress={() => set({ call: null, source: null, course: null, branch: null, from: "", to: "", review: false })}
-                >
-                  Сбросить
-                </Button>
-                <Button color="primary" onPress={close}>
-                  Показать
-                </Button>
-              </DrawerFooter>
-            </>
-          )}
-        </DrawerContent>
-      </Drawer>
 
       {editing && (
         <LeadFormModal

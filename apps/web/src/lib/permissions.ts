@@ -18,40 +18,53 @@ export function can(
   return allows(permissions?.[section], need);
 }
 
+export type NavGroup = "main" | "sales" | "study" | "money" | "admin";
+
+/** The sidebar sections, top to bottom. «main» has no heading. */
+export const NAV_GROUPS: { key: NavGroup; label: string }[] = [
+  { key: "main", label: "" },
+  { key: "sales", label: "Продажи" },
+  { key: "study", label: "Обучение" },
+  { key: "money", label: "Финансы" },
+  { key: "admin", label: "Управление" },
+];
+
 export type NavItem = {
   /** Backend section key that must be at least `view`. */
   section: string;
   href: string;
   label: string;
   icon: string;
+  /** Where the item sits in the desktop sidebar (`NAV_GROUPS`). */
+  group: NavGroup;
   /** `own`: only for users who teach (any role); `staff`: only for everybody but the instructor role; default: all. */
   audience?: "own" | "staff";
 };
 
 // Order = order in the sidebar. `section` keys are the backend's (app/permissions.py).
 export const NAV_ITEMS: NavItem[] = [
-  { section: "dashboard", href: "/dashboard", label: "Дашборд", icon: "dashboard", audience: "staff" },
+  { section: "dashboard", group: "main", href: "/dashboard", label: "Дашборд", icon: "dashboard", audience: "staff" },
   // the instructor's home (a manager with the attendance right sees it too): today's lessons, «не заполнено»
-  { section: "attendance", href: "/today", label: "Сегодня", icon: "attendance" },
-  { section: "leads", href: "/leads", label: "Лиды", icon: "leads" },
-  { section: "students", href: "/students", label: "Студенты", icon: "students" },
-  { section: "cohorts", href: "/cohorts", label: "Потоки", icon: "cohorts" },
-  { section: "payments", href: "/payments", label: "Оплаты", icon: "payments" },
-  { section: "rooms", href: "/rooms", label: "Аудитории", icon: "rooms" },
-  { section: "graduates", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
-  { section: "master_list", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
-  { section: "marketing", href: "/marketing", label: "Маркетинг", icon: "marketing" },
+  { section: "attendance", group: "main", href: "/today", label: "Сегодня", icon: "attendance" },
+  { section: "leads", group: "sales", href: "/leads", label: "Лиды", icon: "leads" },
+  { section: "students", group: "study", href: "/students", label: "Студенты", icon: "students" },
+  { section: "cohorts", group: "study", href: "/cohorts", label: "Потоки", icon: "cohorts" },
+  { section: "payments", group: "money", href: "/payments", label: "Оплаты", icon: "payments" },
+  { section: "rooms", group: "study", href: "/rooms", label: "Расписание", icon: "rooms" },
+  { section: "graduates", group: "study", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
+  { section: "master_list", group: "money", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
+  { section: "marketing", group: "sales", href: "/marketing", label: "Маркетинг", icon: "marketing" },
   // the instructor sees only their own money: one page instead of the instructors and salaries tables
-  { section: "instructors", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
-  { section: "instructors", href: "/instructors", label: "Инструкторы", icon: "instructors", audience: "staff" },
-  { section: "instructors", href: "/salaries", label: "Зарплаты", icon: "payments", audience: "staff" },
-  { section: "users", href: "/users", label: "Пользователи", icon: "users" },
-  { section: "users", href: "/roles", label: "Роли и права", icon: "roles" },
-  { section: "audit", href: "/audit", label: "Журнал", icon: "audit" },
+  { section: "instructors", group: "money", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
+  { section: "instructors", group: "study", href: "/instructors", label: "Инструкторы", icon: "instructors", audience: "staff" },
+  { section: "instructors", group: "money", href: "/salaries", label: "Зарплаты", icon: "payments", audience: "staff" },
+  { section: "users", group: "admin", href: "/users", label: "Пользователи", icon: "users" },
+  { section: "users", group: "admin", href: "/roles", label: "Роли и права", icon: "roles" },
+  { section: "audit", group: "admin", href: "/audit", label: "Журнал", icon: "audit" },
   // «Настройки → Стандарты академии»: staff who grade read it, the superadmin changes it (an
   // instructor sees the scheme of their cohort on the cohort page)
-  { section: "cert_templates", href: "/settings/certificates", label: "Сертификаты", icon: "certificate" },
-  { section: "attendance", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
+  { section: "cert_templates", group: "study", href: "/settings/certificates", label: "Сертификаты", icon: "certificate" },
+  { section: "attendance", group: "admin", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
 ];
 
 function forRole(item: NavItem, roleCode: string | null | undefined, teaches?: boolean): boolean {
