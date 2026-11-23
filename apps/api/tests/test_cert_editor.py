@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 from PIL import Image
+from PIL.PngImagePlugin import PngInfo
 from pypdf import PdfReader
 
 from tests.certs import SVG, layout, make_template, png, text_layer
@@ -266,7 +267,7 @@ async def test_asset_upload_kinds_and_limits(admin: httpx.AsyncClient) -> None:
     assert (body["kind"], body["mime"], body["width_px"], body["height_px"]) == (
         "background", "image/png", 60, 40,
     )  # fmt: skip
-    assert set(body) == {"id", "kind", "mime", "width_px", "height_px", "size_bytes"}
+    assert set(body) == {"id", "kind", "mime", "width_px", "height_px", "size_bytes", "cut"}
     again = await admin.post(url, files=upload(png((1, 2, 3), (60, 40))), data={"kind": "image"})
     assert again.json()["id"] == body["id"]  # deduplicated
     buf = io.BytesIO()
@@ -302,12 +303,94 @@ async def test_asset_upload_kinds_and_limits(admin: httpx.AsyncClient) -> None:
     wide = io.BytesIO()
     Image.new("1", (8001, 2)).save(wide, format="PNG")
     w = await admin.post(url, files=upload(wide.getvalue()), data={"kind": "image"})
-    assert (w.status_code, w.json()["code"]) == (422, "cert_asset_invalid")
+    assert (w.status_code, w.json()["code"]) == (422, "cert_asset_dimensions")
     kind = await admin.post(url, files=upload(png()), data={"kind": "seal"})
     assert kind.status_code == 422
     assert (await admin.post(url, files=upload(png()))).status_code == 422
     texts = await log_texts(admin)
     assert any("загружено изображение для сертификатов" in t for t in texts)
+
+
+async def test_svg_over_the_side_limit_is_refused_422(admin: httpx.AsyncClient) -> None:
+    for attrs in (
+        'width="9000" height="10"',
+        'viewBox="0 0 10 9001"',
+        'width="5" height="5" viewBox="0 0 8001 5"',
+    ):
+        svg = f'<svg xmlns="http://www.w3.org/2000/svg" {attrs}><rect width="1" height="1"/></svg>'.encode()
+        r = await admin.post(
+            "/api/v1/cert-assets",
+            files=upload(svg, "a.svg", "image/svg+xml"),
+            data={"kind": "image"},
+        )
+        assert (r.status_code, r.json()["code"]) == (422, "cert_asset_dimensions"), attrs
+        assert r.json()["params"]["side_px"] == 8000
+    ok = b'<svg xmlns="http://www.w3.org/2000/svg" width="8000" height="10"><rect width="1" height="1"/></svg>'
+    assert (
+        await admin.post(
+            "/api/v1/cert-assets",
+            files=upload(ok, "a.svg", "image/svg+xml"),
+            data={"kind": "image"},
+        )
+    ).status_code == 200
+
+
+async def test_deeply_nested_svg_is_refused_422_not_500(admin: httpx.AsyncClient) -> None:
+    for depth in (65, 3000):
+        svg = (
+            b'<svg xmlns="http://www.w3.org/2000/svg" width="5" height="5">'
+            + b"<g>" * depth
+            + b'<rect width="1" height="1"/>'
+            + b"</g>" * depth
+            + b"</svg>"
+        )
+        r = await admin.post(
+            "/api/v1/cert-assets",
+            files=upload(svg, "a.svg", "image/svg+xml"),
+            data={"kind": "image"},
+        )
+        assert (r.status_code, r.json()["code"]) == (422, "cert_asset_invalid"), depth
+    shallow = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" width="5" height="5">'
+        + b"<g>" * 60
+        + b"</g>" * 60
+        + b"</svg>"
+    )
+    r = await admin.post(
+        "/api/v1/cert-assets",
+        files=upload(shallow, "a.svg", "image/svg+xml"),
+        data={"kind": "image"},
+    )
+    assert r.status_code == 200
+
+
+async def test_raster_upload_is_reencoded_without_trailing_bytes(admin: httpx.AsyncClient) -> None:
+    evil = png((10, 20, 30), (30, 20)) + b"<script>alert(1)</script>"
+    r = await admin.post("/api/v1/cert-assets", files=upload(evil), data={"kind": "image"})
+    assert r.status_code == 200, r.text
+    stored = (await sql("SELECT data FROM cert_asset WHERE id = :i", i=r.json()["id"]))[0][0]
+    assert b"script" not in bytes(stored) and bytes(stored).startswith(b"\x89PNG")
+    assert Image.open(io.BytesIO(bytes(stored))).size == (30, 20)
+    # a PNG carrying a text chunk and a JPEG with trailing bytes come out clean too
+    buf = io.BytesIO()
+    meta = PngInfo()
+    meta.add_text("note", "secret-marker")
+    Image.new("RGBA", (8, 8), (1, 2, 3, 100)).save(buf, format="PNG", pnginfo=meta)
+    t = await admin.post(
+        "/api/v1/cert-assets", files=upload(buf.getvalue()), data={"kind": "image"}
+    )
+    stored = bytes((await sql("SELECT data FROM cert_asset WHERE id = :i", i=t.json()["id"]))[0][0])
+    assert b"secret-marker" not in stored
+    assert Image.open(io.BytesIO(stored)).convert("RGBA").getpixel((0, 0)) == (1, 2, 3, 100)
+    jbuf = io.BytesIO()
+    Image.new("RGB", (16, 16), (9, 9, 9)).save(jbuf, format="JPEG")
+    j = await admin.post(
+        "/api/v1/cert-assets",
+        files=upload(jbuf.getvalue() + b"<script>x</script>", "a.jpg", "image/jpeg"),
+        data={"kind": "image"},
+    )
+    stored = bytes((await sql("SELECT data FROM cert_asset WHERE id = :i", i=j.json()["id"]))[0][0])
+    assert j.status_code == 200 and b"script" not in stored and stored.startswith(b"\xff\xd8")
 
 
 async def test_asset_get_headers_and_kinds(admin: httpx.AsyncClient) -> None:

@@ -19,8 +19,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
-from app.certificates.assets import MAX_BYTES, inspect, load_assets, store_asset
+from app.certificates.assets import MAX_BYTES, inspect, load_assets, store_asset, svg_sides
+from app.certificates.cutout import cut_background
 from app.certificates.errors import (
+    CERT_ASSET_DIMENSIONS,
     CERT_ASSET_INVALID,
     CERT_ASSET_MISSING,
     CERT_NOTHING_TO_PUBLISH,
@@ -419,9 +421,10 @@ def asset_out(a: CertAsset) -> dict[str, Any]:
 
 
 def _check_sides(data: bytes) -> None:
-    mime, w, h, _ = inspect(data)
-    if mime != "image/svg+xml" and ((w or 0) > MAX_SIDE_PX or (h or 0) > MAX_SIDE_PX):
-        raise DomainError(CERT_ASSET_INVALID, reason="dimensions")
+    mime, w, h, clean = inspect(data)
+    sides = svg_sides(clean) if mime == "image/svg+xml" else [w or 0, h or 0]
+    if any(side > MAX_SIDE_PX for side in sides):
+        raise DomainError(CERT_ASSET_DIMENSIONS, side_px=MAX_SIDE_PX)
 
 
 @router.post("/cert-assets")
@@ -430,17 +433,23 @@ async def upload_asset(
     db: DB,
     file: Annotated[UploadFile, File()],
     kind: Annotated[Literal["background", "image"], Form()],
+    cut: Annotated[bool, Form()] = False,
 ) -> dict[str, Any]:
+    """`cut`: a picture on a flat background (a logo on white) is stored without it."""
     data = await file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise DomainError(CERT_ASSET_INVALID, reason="too_large")
     await anyio.to_thread.run_sync(_check_sides, data)
+    cleared = (
+        await anyio.to_thread.run_sync(cut_background, data) if cut and kind == "image" else None
+    )
+    data = cleared or data
     asset, _ = await store_asset(db, data, kind, p.id)
     await record(
         db, p.id, "cert_asset.upload", "cert_asset", asset.id, {"kind": [None, kind]},
         label="изображение",
     )  # fmt: skip
-    return asset_out(asset)
+    return {**asset_out(asset), "cut": cleared is not None}
 
 
 @router.get("/cert-assets/{asset_id}")

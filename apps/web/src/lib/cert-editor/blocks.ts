@@ -73,7 +73,7 @@ export const BLOCKS: { key: BlockKey; label: string; icon: string; hint: string 
   { key: "sig_director", label: "Подпись директора", icon: "edit", hint: "Из настроек сертификатов" },
   { key: "seal", label: "Печать", icon: "roles", hint: "Из настроек сертификатов" },
   { key: "director", label: "Директор", icon: "users", hint: "Имя и должность" },
-  { key: "image", label: "Картинка", icon: "upload", hint: "Загрузить изображение" },
+  { key: "image", label: "Добавить изображение", icon: "upload", hint: "Загрузить PNG или SVG: логотип, иконка донора" },
   { key: "line", label: "Линия", icon: "grip", hint: "Разделитель" },
   { key: "rect", label: "Прямоугольник", icon: "rooms", hint: "Закрывает лишнее на фоне" },
 ];
