@@ -181,19 +181,24 @@ function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
           <UnfilledWidget data={data} />
         </div>
       </div>
-      {leads && <div className="grid gap-4 lg:grid-cols-2">
-        <div className="hidden md:block">
-          <CallbacksWidget data={data} />
-        </div>
-        <Widget count={data.recent_leads.length} empty="Лидов пока нет" title="Последние лиды">
-          <LeadList items={data.recent_leads} when="created" />
-        </Widget>
-      </div>}
-      {debts && (
-        <div className="mt-4 hidden md:block lg:w-1/2">
-          <DebtorsWidget />
-        </div>
-      )}
+      {/* newspaper columns: a short list does not leave a hole beside a long one */}
+      <div className="lg:columns-2 lg:gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
+        {leads && (
+          <div className="hidden md:block">
+            <CallbacksWidget data={data} />
+          </div>
+        )}
+        {leads && (
+          <Widget count={data.recent_leads.length} empty="Лидов пока нет" title="Последние лиды">
+            <LeadList items={data.recent_leads} when="created" />
+          </Widget>
+        )}
+        {debts && (
+          <div className="hidden md:block">
+            <DebtorsWidget />
+          </div>
+        )}
+      </div>
     </>
   );
 }

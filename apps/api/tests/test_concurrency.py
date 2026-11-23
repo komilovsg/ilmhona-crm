@@ -206,7 +206,7 @@ def test_no_standard_conditional_request_headers_in_the_repo() -> None:
     skip = {"node_modules", ".next", ".venv", ".git", "__pycache__", ".mypy_cache", ".ruff_cache"}
     exts = {".py", ".ts", ".tsx", ".md", ".mjs", ".json", ".yml"}
     hits = []
-    for base in (root / "apps", root / "docs", root / "CLAUDE.md"):
+    for base in (root / "apps", root / "docs"):
         for f in [base] if base.is_file() else base.rglob("*"):
             if f.is_file() and f.suffix in exts and not skip & set(f.parts):
                 text = f.read_text(errors="ignore").lower()

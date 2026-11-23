@@ -74,11 +74,19 @@ async def seed(admin: httpx.AsyncClient, **extra: Any) -> tuple[dict[str, Any], 
     return cohort, ids
 
 
+# noon in Dushanbe two days ahead: the lesson date is the local one, whatever hour the test runs at
+LOCAL_DAY = "((now() AT TIME ZONE 'Asia/Dushanbe')::date + 2)"
+IN_TWO_DAYS = (
+    f"lesson_date = {LOCAL_DAY}, "
+    f"starts_at = ({LOCAL_DAY} + time '12:00') AT TIME ZONE 'Asia/Dushanbe', "
+    f"ends_at = ({LOCAL_DAY} + time '13:00') AT TIME ZONE 'Asia/Dushanbe'"
+)
+
+
 async def ahead(cohort: dict[str, Any]) -> None:
     """Make the cancelled last lesson a real lesson still ahead: the course is running."""
     await sql(
-        "UPDATE lesson SET cancelled = false, starts_at = now() + interval '2 days', "
-        "ends_at = now() + interval '2 days 1 hour', lesson_date = CURRENT_DATE + 2 WHERE cohort_id = :c AND cancelled",
+        f"UPDATE lesson SET cancelled = false, {IN_TWO_DAYS} WHERE cohort_id = :c AND cancelled",
         c=cohort["id"],
     )
 
@@ -536,11 +544,7 @@ async def test_end_of_course_not_available_while_lessons_are_ahead(
 ) -> None:
     cohort, lessons = await past_cohort(admin)
     await enroll(admin, cohort, "Алиев")
-    await sql(
-        "UPDATE lesson SET starts_at = now() + interval '2 days', ends_at = now() + interval '2 days 1 hour', "
-        "lesson_date = (CURRENT_DATE + 2) WHERE id = :i",
-        i=lessons[-1],
-    )
+    await sql(f"UPDATE lesson SET {IN_TWO_DAYS} WHERE id = :i", i=lessons[-1])
     assert (await data(admin, cohort))["final"]["available"] is False
     r = await admin.get(f"{C}/{cohort['id']}/analytics/export")
     assert load_workbook(BytesIO(r.content)).sheetnames == ["В зоне риска", "Отличники"]

@@ -1,12 +1,11 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Button } from "@heroui/button";
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@heroui/drawer";
-import { SheetHandle } from "@/components/SheetHandle";
 import Link from "next/link";
 
 import { Icon } from "@/components/Icon";
@@ -20,7 +19,6 @@ import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { groupByDay, linkHref, timeOf } from "@/lib/audit";
 import type { AuditPage, AuditRow, Paged, UserRow } from "@/lib/types";
-import { useOverlayMotion } from "@/lib/motion";
 
 const PAGE_SIZE = 25;
 
@@ -171,10 +169,8 @@ function Entry({ row }: { row: AuditRow }) {
 }
 
 export default function AuditPage() {
-  const overlayMotion = useOverlayMotion();
-  const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [page, setPage] = useState(1);
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useUrlState(NO_FILTERS);
+  const [page, setPage] = useUrlPage();
   const q = useDeferredValue(filters.q.trim());
   const list = useQuery({
     queryKey: ["audit", { ...filters, q }, page],
@@ -232,17 +228,9 @@ export default function AuditPage() {
           onClear={() => set({ ...filters, q: "" })}
           onValueChange={(v) => set({ ...filters, q: v })}
         />
-        <Button className="h-12 md:hidden" startContent={<Icon name="filter" size={18} />} color="primary" variant="flat" onPress={() => setFiltersOpen(true)}>
-          Фильтры{activeFilters ? ` · ${activeFilters}` : ""}
-        </Button>
-      </div>
-      <div className="mb-4 hidden flex-wrap gap-3 md:flex">
-        <FilterFields filters={filters} set={set} sections={sections} />
-        {activeFilters > 0 && (
-          <Button variant="light" onPress={() => set({ ...NO_FILTERS, q: filters.q })}>
-            Сбросить
-          </Button>
-        )}
+        <FilterDrawer count={activeFilters} onReset={() => set({ ...NO_FILTERS, q: filters.q })}>
+          <FilterFields filters={filters} set={set} sections={sections} />
+        </FilterDrawer>
       </div>
 
       <QueryState
@@ -277,27 +265,6 @@ export default function AuditPage() {
         </>
       </QueryState>
 
-      <Drawer isOpen={filtersOpen} motionProps={overlayMotion} placement="bottom" onOpenChange={setFiltersOpen}>
-        <DrawerContent>
-          {(close) => (
-            <>
-              <SheetHandle onBackdrop={close} onClose={close} />
-              <DrawerHeader>Фильтры</DrawerHeader>
-              <DrawerBody className="gap-3">
-                <FilterFields filters={filters} set={set} sections={sections} />
-              </DrawerBody>
-              <DrawerFooter>
-                <Button variant="light" onPress={() => set({ ...NO_FILTERS, q: filters.q })}>
-                  Сбросить
-                </Button>
-                <Button color="primary" onPress={close}>
-                  Показать
-                </Button>
-              </DrawerFooter>
-            </>
-          )}
-        </DrawerContent>
-      </Drawer>
     </>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { useState } from "react";
 import Link from "next/link";
@@ -41,15 +42,18 @@ function Phone({ value }: { value: string | null }) {
   );
 }
 
+const NO_FILTERS: { q: string; status: string | null; branch: string | null } = { q: "", status: null, branch: null };
+
 export default function StudentsPage() {
   const canChange = useCanChange("students");
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const summary = useEducationSummary();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
-  const [branch, setBranch] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
+  const [{ q, status, branch }, setFilters] = useUrlState(NO_FILTERS);
+  const setQ = (next: string) => setFilters({ q: next });
+  const setStatus = (next: string | null) => setFilters({ status: next });
+  const setBranch = (next: string | null) => setFilters({ branch: next });
+  const [page, setPage] = useUrlPage();
   const [creating, setCreating] = useState(false);
   const [review, setReview] = useState(false);
   const queryClient = useQueryClient();

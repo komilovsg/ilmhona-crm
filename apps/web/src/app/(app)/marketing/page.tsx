@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlState } from "@/hooks/url-state";
+import { FilterDrawer } from "@/components/FilterDrawer";
 import { FilterInput } from "@/components/FilterInput";
 import { DateField } from "@/components/DateField";
 import { useState } from "react";
@@ -57,7 +59,7 @@ export default function MarketingPage() {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const refresh = useRefreshSales();
-  const [f, setF] = useState<Filters>(NO_FILTERS);
+  const [f, setF] = useUrlState(NO_FILTERS);
   const [editing, setEditing] = useState<CampaignRow | "new" | null>(null);
   const [removing, setRemoving] = useState<CampaignRow | null>(null);
   const filtered = JSON.stringify(f) !== JSON.stringify(NO_FILTERS);
@@ -115,7 +117,7 @@ export default function MarketingPage() {
         />
       )}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 flex flex-wrap items-start gap-3 [&>*:not(button)]:min-w-56 [&>*:not(button)]:flex-1 md:[&>*:not(button)]:max-w-xs">
         <FilterInput
           isClearable
           placeholder="Поиск по названию"
@@ -125,12 +127,17 @@ export default function MarketingPage() {
           onValueChange={(q) => setF({ ...f, q })}
         />
         <SelectField filter allLabel="Любой статус" label="Статус" options={CAMPAIGN_STATUSES.map((s) => ({ key: s, label: s }))} value={f.status} onChange={(status) => setF({ ...f, status })} />
-        <SelectField filter allLabel="Все платформы" label="Платформа" options={PLATFORMS.map((s) => ({ key: s, label: s }))} value={f.platform} onChange={(platform) => setF({ ...f, platform })} />
-        {!me?.branch && (
-          <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => setF({ ...f, branch })} />
-        )}
-        <DateField filter label="Старт с" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
-        <DateField filter label="Старт по" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
+        <FilterDrawer
+          count={[f.platform, f.branch, f.from, f.to].filter(Boolean).length}
+          onReset={() => setF({ platform: null, branch: null, from: "", to: "" })}
+        >
+          <SelectField filter allLabel="Все платформы" label="Платформа" options={PLATFORMS.map((s) => ({ key: s, label: s }))} value={f.platform} onChange={(platform) => setF({ ...f, platform })} />
+          {!me?.branch && (
+            <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => setF({ ...f, branch })} />
+          )}
+          <DateField filter label="Старт с" value={f.from} onValueChange={(from) => setF({ ...f, from })} />
+          <DateField filter label="Старт по" value={f.to} onValueChange={(to) => setF({ ...f, to })} />
+        </FilterDrawer>
       </div>
 
       <QueryState

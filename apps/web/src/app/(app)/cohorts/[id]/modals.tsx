@@ -30,18 +30,21 @@ import { LoadingButton } from "@/components/LoadingButton";
 export function LessonFormModal({
   cohort,
   lesson,
+  preset,
   onClose,
 }: {
   cohort: CohortRow;
   lesson: LessonRow | null;
+  /** a free cell of the room board: the new lesson starts there */
+  preset?: { date: string; start: string; end: string; room_id: string };
   onClose: () => void;
 }) {
   const refresh = useRefreshEducation();
   const { data: rooms = [] } = useRooms(cohort.branch_id);
-  const [date, setDate] = useState(lesson?.date ?? "");
-  const [start, setStart] = useState(lesson?.start ?? cohort.start_time);
-  const [end, setEnd] = useState(lesson?.end ?? cohort.end_time);
-  const [roomId, setRoomId] = useState<string | null>(lesson?.room_id ?? cohort.room_id);
+  const [date, setDate] = useState(lesson?.date ?? preset?.date ?? "");
+  const [start, setStart] = useState(lesson?.start ?? preset?.start ?? cohort.start_time);
+  const [end, setEnd] = useState(lesson?.end ?? preset?.end ?? cohort.end_time);
+  const [roomId, setRoomId] = useState<string | null>(lesson?.room_id ?? preset?.room_id ?? cohort.room_id);
   const problem = timeProblem(start, end);
   const valid = !!date && !!roomId && !problem && date >= MIN_DATE && date <= MAX_DATE;
 

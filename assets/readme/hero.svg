@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400" role="img" aria-labelledby="t d">
+<title id="t">ilmhona CRM</title>
+<desc id="d">ilmhona CRM: учёт студентов, потоков, посещаемости и оплат учебного центра. Справа сетка расписания потоков по дням недели.</desc>
+<rect width="1200" height="400" rx="20" fill="#101820"/>
+<rect x="0" y="0" width="12" height="400" rx="6" fill="#00A0DC"/>
+<g transform="translate(60 48) scale(0.07)" fill="#FFFFFF"><path d="M42 257H63A40 40 0 0 1 103 297V317A40 40 0 0 1 63 357H42A40 40 0 0 1 2 317V297A40 40 0 0 1 42 257ZM52 397A40 40 0 0 1 92 437V713A40 40 0 0 1 12 713V437A40 40 0 0 1 52 397ZM189 120A41 41 0 0 1 230 161V712A41 41 0 0 1 148 712V161A41 41 0 0 1 189 120ZM285 741V37Q285 7 312 3Q324 1 338 7L932 315Q958 328 958 357V730Q958 753 935 753H888V520C888 445 835 397 762 397C715 397 672 415 650 440C628 410 570 397 520 397C480 397 455 407 440 421Q435 427 435 436A39 39 0 0 0 357 436V753H297Q285 753 285 741ZM435 753V537A72.5 72.5 0 0 1 580 537V753ZM660 753V537A74 74 0 0 1 808 537V753Z"/></g>
+<text x="140" y="88" font-size="22" font-weight="600" letter-spacing="3" fill="#38BDF0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">CRM УЧЕБНОГО ЦЕНТРА</text>
+<text x="60" y="206" font-size="96" font-weight="800" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">ilmhona</text>
+<text x="60" y="262" font-size="32" font-weight="600" fill="#E6EDF3" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Студенты, потоки, посещаемость</text>
+<text x="60" y="304" font-size="32" font-weight="600" fill="#E6EDF3" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">и оплаты — в одной системе</text>
+<rect x="60" y="334" width="64" height="6" rx="3" fill="#D65A2F"/>
+<text x="60" y="372" font-size="22" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">FastAPI · Next.js · Postgres</text>
+<rect x="676" y="40" width="472" height="300" rx="16" fill="#0A0F14" stroke="#26313C"/>
+<text x="700" y="82" font-size="22" font-weight="600" fill="#E6EDF3" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Расписание потоков</text>
+<text x="736.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Пн</text>
+<rect x="700" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="700" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="700" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="700" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<text x="814.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Вт</text>
+<rect x="778" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="778" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="778" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="778" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<text x="892.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Ср</text>
+<rect x="856" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="856" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="856" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="856" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<text x="970.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Чт</text>
+<rect x="934" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="934" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="934" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="934" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<text x="1048.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Пт</text>
+<rect x="1012" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1012" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1012" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1012" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<text x="1126.0" y="114" text-anchor="middle" font-size="20" fill="#8B98A5" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">Сб</text>
+<rect x="1090" y="128" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1090" y="182" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1090" y="236" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="1090" y="290" width="72" height="50" rx="8" fill="#161E26" stroke="#26313C"/>
+<rect x="700" y="128" width="72" height="104" rx="8" fill="#00A0DC"/>
+<text x="736.0" y="187.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="778" y="182" width="72" height="104" rx="8" fill="#D65A2F"/>
+<text x="814.0" y="241.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="856" y="128" width="72" height="104" rx="8" fill="#00A0DC"/>
+<text x="892.0" y="187.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="934" y="236" width="72" height="104" rx="8" fill="#00A0DC"/>
+<text x="970.0" y="295.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="1012" y="128" width="72" height="104" rx="8" fill="#D65A2F"/>
+<text x="1048.0" y="187.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="1012" y="290" width="72" height="50" rx="8" fill="#00A0DC"/>
+<text x="1048.0" y="322.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="1090" y="182" width="72" height="104" rx="8" fill="#00A0DC"/>
+<text x="1126.0" y="241.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="700" y="290" width="72" height="50" rx="8" fill="#D65A2F"/>
+<text x="736.0" y="322.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+<rect x="856" y="290" width="72" height="50" rx="8" fill="#D65A2F"/>
+<text x="892.0" y="322.0" text-anchor="middle" font-size="20" font-weight="700" fill="#FFFFFF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">G-NNN</text>
+</svg>

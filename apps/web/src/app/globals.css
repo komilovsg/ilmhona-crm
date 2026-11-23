@@ -347,3 +347,71 @@ html[data-sidebar="collapsed"] .sb-dot {
   z-index: 5;
   pointer-events: none;
 }
+
+/* ---- Design rules (sample: sidebar + room board) -------------------------------------------
+   Type: 11 caption · 12 meta · 14 body · 16 · 20 · 28, hierarchy by weight and tone before size.
+   Space: 4 px grid. Radius: 6 control · 10 block · 14 card. Depth: one hairline ring + a soft
+   shadow in light, the ring alone in dark. One accent (the brand cyan); course colours are data. */
+:root {
+  --hairline: rgb(16 24 32 / 0.08);
+  --hairline-strong: rgb(16 24 32 / 0.14);
+  --lift: 0 0 0 1px var(--hairline), 0 1px 2px -1px rgb(16 24 32 / 0.08), 0 4px 12px -4px rgb(16 24 32 / 0.06);
+  --lesson-tint: 0.13;
+  --lesson-ink: 28%;
+  --lesson-spine: 45%;
+}
+
+.dark {
+  --hairline: rgb(255 255 255 / 0.07);
+  --hairline-strong: rgb(255 255 255 / 0.13);
+  --lift: 0 0 0 1px var(--hairline);
+  --lesson-tint: 0.22;
+  --lesson-ink: 86%;
+  --lesson-spine: 62%;
+}
+
+.surface-card {
+  border-radius: 14px;
+  box-shadow: var(--lift);
+}
+
+/* A lesson on the board: a timetable card. The course colour is a spine and a faint tint, the
+   text stays ink: twenty courses on one screen read as a schedule, not as a paint box. */
+.lesson {
+  border-radius: 6px;
+  background: hsl(var(--h) 70% 50% / var(--lesson-tint));
+  box-shadow: inset 3px 0 0 hsl(var(--h) 62% var(--lesson-spine));
+  color: hsl(var(--h) 45% var(--lesson-ink));
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.lesson:hover {
+  background: hsl(var(--h) 70% 50% / calc(var(--lesson-tint) + 0.09));
+}
+
+/* Sidebar: a quiet group heading, air between groups, the open page marked by a short accent bar. */
+.sb-group + .sb-group {
+  margin-top: 14px;
+}
+
+.sb-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: #38bdf0;
+}
+
+/* collapsed rail: no headings, a hairline where a group starts */
+html[data-sidebar="collapsed"] .sb-group + .sb-group {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+html[data-sidebar="collapsed"] .sb-group > button {
+  display: none;
+}
