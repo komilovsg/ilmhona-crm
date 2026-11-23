@@ -535,6 +535,7 @@ async def test_issued_certificate_keeps_its_version_and_new_ones_get_the_new_ico
     )  # fmt: skip
     after = await admin.get(f"{G}/{first}/certificate/pdf")
     explicit = await admin.get(f"{G}/{first}/certificate/pdf", params={"template_id": tid})
+    assert after.content == before.content == explicit.content
     for r in (before, after, explicit):
         assert r.status_code == 200, r.text
         assert "ПЕРВАЯ" in pdf_text(r.content) and "ВТОРАЯ" not in pdf_text(r.content)
