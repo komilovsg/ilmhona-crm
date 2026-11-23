@@ -18,3 +18,12 @@ export function CohortStatus({ status }: { status: string }) {
 export function PersonStatus({ status }: { status: string }) {
   return <Tinted label={status} tone={studentTone(status)} />;
 }
+
+/** «Срок вышел»: активный поток после даты конца, ещё не завершённый. */
+export function OverdueChip() {
+  return (
+    <Chip color="warning" size="sm" title="Дата конца прошла, поток ещё не завершён" variant="flat">
+      Срок вышел
+    </Chip>
+  );
+}

@@ -117,6 +117,20 @@ async def attention(p: Dashboard, db: DB, branch_id: uuid.UUID | None = None) ->
             alerts.append(
                 _alert("unmarked", "warning", title, codes + (" …" if n > 5 else ""), href)
             )
+    if _can(p, "cohorts"):
+        late = await dash.overdue_cohorts(db, scope.cohort)
+        if late:
+            n = len(late)
+            codes = ", ".join(c["cohort_code"] for c in late[:5])
+            alerts.append(
+                _alert(
+                    "overdue",
+                    "warning",
+                    f"{n} {plural(n, 'поток', 'потока', 'потоков')}: срок вышел, не завершён",
+                    codes + (" …" if n > 5 else ""),
+                    "/cohorts?overdue=1",
+                )
+            )
     if _can(p, "payments"):
         pending = await dash.pending_payments(db, scope.cohort)
         if pending["count"]:
@@ -199,6 +213,9 @@ async def queues(
         tiles.append({"key": "debtors", "count": debtors, "sum": debt})
         pending = await dash.pending_payments(db, scope.cohort)
         tiles.append({"key": "pending", "count": pending["count"], "sum": pending["sum"]})
+    if _can(p, "cohorts"):
+        late = await dash.overdue_cohorts(db, scope.cohort)
+        tiles.append({"key": "overdue_cohorts", "count": len(late)})
     if _can(p, "leads"):
         day = today()
         tiles.append(

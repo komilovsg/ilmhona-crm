@@ -1,10 +1,13 @@
-"""Cohort status by dates (#20) and the enrollment cascade (#11): the one code path.
+"""Cohort status (#20) and the enrollment cascade (#11): the one code path.
 
-набор before start, активный from start to end_date inclusive, завершён after. «отменён» is set
-by hand only and sticky. Every write of a cohort and the daily job (`python -m app.cli daily`)
-call `sync_status`; when a cohort becomes завершён its активный enrollments become выпускник
-(total ≥ the pass score of the cohort's grading scheme) or завершил. A scheme change of a
-finished cohort flips nothing by itself: `graduation_changes` previews, `apply_graduation` applies.
+набор before start, активный from start on. A cohort never finishes by date: after end_date it
+stays активный and shows «Срок вышел» (`is_overdue`) until someone finishes it by hand
+(`finish`). «отменён» is set by hand and sticky; «завершён» is left alone by `sync_status`. Every
+write of a cohort and the daily job (`python -m app.cli daily`) call `sync_status`. Finishing
+closes the активный enrollments as выпускник (total ≥ the pass score of the cohort's grading
+scheme) or завершил, remembering what they were so `reopen` restores them exactly. A scheme
+change of a finished cohort flips nothing by itself: `graduation_changes` previews,
+`apply_graduation` applies.
 """
 
 import uuid
@@ -36,6 +39,7 @@ def today() -> date:
 
 
 def status_for(start: date, end: date, on: date) -> str:
+    """The status of a cohort loaded from history (importer, demo): done after its end."""
     if on < start:
         return RECRUITING
     if on <= end:
@@ -43,24 +47,27 @@ def status_for(start: date, end: date, on: date) -> str:
     return DONE
 
 
+def open_status(start: date, on: date) -> str:
+    """The automatic part: набор until the start date, активный from then on."""
+    return RECRUITING if on < start else ACTIVE
+
+
+def is_overdue(cohort: Cohort, on: date | None = None) -> bool:
+    """«Срок вышел»: still активный after the end date."""
+    return cohort.status == ACTIVE and cohort.end_date < (on or today())
+
+
 async def sync_status(
     db: AsyncSession, cohort: Cohort, actor_id: object, on: date | None = None
 ) -> bool:
-    """Bring the status (and the enrollments of a finished cohort) in line with the dates.
-    True when the status changed. The caller audits the cohort itself; the cascade audits here."""
-    if cohort.status == CANCELLED:
+    """набор → активный by the start date (and back if the start moved). Cancelled and finished
+    cohorts stay as they are. True when the status changed; the caller audits the cohort."""
+    if cohort.status not in (RECRUITING, ACTIVE):
         return False
-    new = status_for(cohort.start_date, cohort.end_date, on or today())
+    new = open_status(cohort.start_date, on or today())
     changed = new != cohort.status
-    if changed:
-        cohort.status = new
-    if new == DONE:
-        await _close_enrollments(db, cohort, actor_id)
+    cohort.status = new
     return changed
-
-
-async def _close_enrollments(db: AsyncSession, cohort: Cohort, actor_id: object) -> None:
-    await close_enrollments(db, [cohort], actor_id)
 
 
 async def close_enrollments(db: AsyncSession, cohorts: list[Cohort], actor_id: object) -> None:
@@ -89,6 +96,7 @@ async def close_enrollments(db: AsyncSession, cohorts: list[Cohort], actor_id: o
         graduates = 0
         for enrollment in active.get(cohort.id, []):
             graduated = results[enrollment.id]["passed"]
+            enrollment.status_before_finish = ACTIVE
             enrollment.status = GRADUATE if graduated else COMPLETED
             graduates += graduated
         if cohort.id in active:
@@ -105,6 +113,115 @@ async def close_enrollments(db: AsyncSession, cohorts: list[Cohort], actor_id: o
             branch_id=cohort.branch_id,
             label=cohort.code,
         )
+
+
+async def finish_preview(db: AsyncSession, cohort: Cohort, *, lock: bool = False) -> dict[str, Any]:
+    """Who the manual finish would close, by the same pass rule as `close_enrollments` (the
+    totals come from `enrollment_results`). `graduates` / `completed`: the активный enrollments
+    that become выпускник / завершил; `excluded`: everybody else (expelled, set by hand).
+    `lock` takes row locks on the enrollments, for `finish`."""
+    query = (
+        select(Enrollment, Student.full_name)
+        .join(Student, Student.id == Enrollment.student_id)
+        .where(Enrollment.cohort_id == cohort.id)
+        .order_by(Student.full_name, Enrollment.id)
+    )
+    if lock:
+        query = query.with_for_update(of=Enrollment)
+    rows = (await db.execute(query)).all()
+    active = [e.id for e, _ in rows if e.status == ACTIVE]
+    results = await enrollment_results(db, None, enrollment_ids=active) if active else {}
+    out: dict[str, list[dict[str, Any]]] = {"graduates": [], "completed": [], "excluded": []}
+    for e, name in rows:
+        item = {"enrollment_id": e.id, "student_id": e.student_id, "student_name": name}
+        if e.status != ACTIVE:
+            out["excluded"].append({**item, "status": e.status})
+        elif results[e.id]["passed"]:
+            out["graduates"].append(item)
+        else:
+            out["completed"].append(item)
+    return {
+        "cohort_id": cohort.id,
+        "code": cohort.code,
+        "overdue": is_overdue(cohort),
+        **{k: len(v) for k, v in out.items() if k != "excluded"},
+        "excluded_count": len(out["excluded"]),
+        "lists": out,
+    }
+
+
+async def finish(
+    db: AsyncSession, cohort: Cohort, actor_id: object, preview: dict[str, Any]
+) -> None:
+    """Close the cohort and its активный enrollments as `preview` (taken under the row locks)
+    says: remember each one's status, then выпускник / завершил."""
+    lists = preview["lists"]
+    graduates = {i["enrollment_id"] for i in lists["graduates"]}
+    ids = graduates | {i["enrollment_id"] for i in lists["completed"]}
+    cohort.status = DONE
+    if ids:
+        for e in (await db.execute(select(Enrollment).where(Enrollment.id.in_(ids)))).scalars():
+            e.status_before_finish = e.status
+            e.status = GRADUATE if e.id in graduates else COMPLETED
+    await db.flush()
+    await record(
+        db,
+        actor_id,  # type: ignore[arg-type]
+        "cohort.finish",
+        "cohort",
+        cohort.id,
+        {
+            "status": [ACTIVE, DONE],
+            "graduates": [0, len(graduates)],
+            "completed": [0, len(ids) - len(graduates)],
+        },
+        branch_id=cohort.branch_id,
+        label=cohort.code,
+    )
+
+
+async def has_certificates(db: AsyncSession, cohort: Cohort) -> bool:
+    return bool(
+        await db.scalar(
+            select(Enrollment.id)
+            .where(Enrollment.cohort_id == cohort.id, Enrollment.certificate_no.is_not(None))
+            .limit(1)
+        )
+    )
+
+
+async def reopen(db: AsyncSession, cohort: Cohort, actor_id: object) -> int:
+    """Back to активный; every enrollment finish closed gets its old status. Returns how many."""
+    cohort.status = ACTIVE
+    restored = 0
+    for e in (
+        (
+            await db.execute(
+                select(Enrollment)
+                .where(
+                    Enrollment.cohort_id == cohort.id, Enrollment.status_before_finish.is_not(None)
+                )
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        e.status = e.status_before_finish  # type: ignore[assignment]
+        e.status_before_finish = None
+        restored += 1
+    await db.flush()
+    await record(
+        db,
+        actor_id,  # type: ignore[arg-type]
+        "cohort.reopen",
+        "cohort",
+        cohort.id,
+        {"status": [DONE, ACTIVE], "restored": [0, restored]},
+        branch_id=cohort.branch_id,
+        label=cohort.code,
+    )
+    return restored
 
 
 async def reevaluate(
