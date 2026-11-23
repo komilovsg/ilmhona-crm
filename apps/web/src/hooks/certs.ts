@@ -14,8 +14,9 @@ import { useMe } from "./queries";
 export const CERT_TEMPLATES_KEY = ["cert-templates"] as const;
 export const CERT_SETTINGS_KEY = ["cert-settings"] as const;
 
-export function useTemplates() {
+export function useTemplates(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: CERT_TEMPLATES_KEY,
     queryFn: () => api<{ items: TemplateListItem[] }>("/api/v1/cert-templates"),
   });

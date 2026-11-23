@@ -36,9 +36,9 @@ export function IssueCertificatesModal({ cohortId, onClose }: { cohortId: string
   const [problems, setProblems] = useState<NotReadyItem[] | null>(null);
   const [clash, setClash] = useState<string[] | null>(null);
   const [pack, setPack] = useState<{ ids: string[]; title: string; closeAfter: boolean } | null>(null);
-  const seesTemplates = !!me && can(me.permissions, "cert_templates", "view");
 
-  const templates = useTemplates();
+  const seesTemplates = !!me && can(me.permissions, "cert_templates", "view");
+  const templates = useTemplates(seesTemplates);
   const check = useQuery({
     queryKey: ["cert-check", cohortId, template, lang],
     queryFn: () =>
