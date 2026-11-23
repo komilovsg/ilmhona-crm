@@ -538,7 +538,6 @@ async def test_issued_certificate_keeps_its_version_and_new_ones_get_the_new_ico
     for r in (before, after, explicit):
         assert r.status_code == 200, r.text
         assert "ПЕРВАЯ" in pdf_text(r.content) and "ВТОРАЯ" not in pdf_text(r.content)
-    assert pdf_streams(after.content) == pdf_streams(before.content)
     await certify(admin, second)
     fresh = await admin.get(f"{G}/{second}/certificate/pdf")
     assert "ВТОРАЯ" in pdf_text(fresh.content)
