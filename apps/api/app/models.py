@@ -241,6 +241,8 @@ class Lesson(Versioned, Legacy, Base):
     # an overlap that came with old data (migration 0015, import): outside the constraint,
     # shown as «Проверить: конфликт инструктора» until resolved
     instructor_conflict: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # cancelled by a cohort finish (after the finish date, no marks): reopen brings it back
+    cancelled_by_finish: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
@@ -573,6 +575,19 @@ class CertSettings(Versioned, Base):
     seal_asset_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
     )
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class AcademySettings(Versioned, Base):
+    """The one row (id = 1): `stale_days`, the days without attendance marks after which the
+    nightly job closes an активный cohort."""
+
+    __tablename__ = "academy_settings"
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    stale_days: Mapped[int] = mapped_column(Integer, server_default=text("60"))
     updated_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )

@@ -15,13 +15,14 @@ from datetime import date
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import record
 from app.core import clock
-from app.metrics import enrollment_results
-from app.models import Cohort, Enrollment, Student
+from app.metrics import enrollment_results, has_marks
+from app.models import Cohort, Enrollment, Lesson, Room, Student
 
 TZ = ZoneInfo("Asia/Dushanbe")
 
@@ -144,17 +145,52 @@ async def finish_preview(db: AsyncSession, cohort: Cohort, *, lock: bool = False
         "cohort_id": cohort.id,
         "code": cohort.code,
         "overdue": is_overdue(cohort),
+        "lessons_to_free": await _count_ahead(db, cohort),
         **{k: len(v) for k, v in out.items() if k != "excluded"},
         "excluded_count": len(out["excluded"]),
         "lists": out,
     }
 
 
+def _ahead(cohort: Cohort, on: date) -> list[Any]:
+    """The lessons a finish frees: after the finish date, not cancelled, nobody marked."""
+    return [
+        Lesson.cohort_id == cohort.id,
+        ~Lesson.cancelled,
+        Lesson.lesson_date > on,
+        ~has_marks(),
+    ]
+
+
+async def _count_ahead(db: AsyncSession, cohort: Cohort) -> int:
+    return int(
+        await db.scalar(select(func.count()).select_from(Lesson).where(*_ahead(cohort, today())))
+        or 0
+    )
+
+
+async def release_lessons(db: AsyncSession, cohort: Cohort, on: date | None = None) -> int:
+    """Cancel the lessons ahead (see `_ahead`) so the room and the instructor are free again;
+    they are flagged `cancelled_by_finish` for `reopen`. Returns how many."""
+    result = await db.execute(
+        update(Lesson)
+        .where(*_ahead(cohort, on or today()))
+        .values(cancelled=True, cancelled_by_finish=True)
+    )
+    return int(result.rowcount or 0)  # type: ignore[attr-defined]
+
+
 async def finish(
-    db: AsyncSession, cohort: Cohort, actor_id: object, preview: dict[str, Any]
+    db: AsyncSession,
+    cohort: Cohort,
+    actor_id: object,
+    preview: dict[str, Any],
+    *,
+    auto_days: int | None = None,
 ) -> None:
     """Close the cohort and its активный enrollments as `preview` (taken under the row locks)
-    says: remember each one's status, then выпускник / завершил."""
+    says: remember each one's status, then выпускник / завершил; free the lessons ahead. The
+    nightly job passes `auto_days` (the idle days that closed the cohort) for its audit entry."""
     lists = preview["lists"]
     graduates = {i["enrollment_id"] for i in lists["graduates"]}
     ids = graduates | {i["enrollment_id"] for i in lists["completed"]}
@@ -163,21 +199,49 @@ async def finish(
         for e in (await db.execute(select(Enrollment).where(Enrollment.id.in_(ids)))).scalars():
             e.status_before_finish = e.status
             e.status = GRADUATE if e.id in graduates else COMPLETED
+    freed = await release_lessons(db, cohort)
     await db.flush()
+    diff: dict[str, Any] = {
+        "status": [ACTIVE, DONE],
+        "graduates": [0, len(graduates)],
+        "completed": [0, len(ids) - len(graduates)],
+        "lessons_cancelled": [0, freed],
+    }
+    if auto_days is not None:
+        diff["idle_days"] = [None, auto_days]
     await record(
         db,
         actor_id,  # type: ignore[arg-type]
-        "cohort.finish",
+        "cohort.finish" if auto_days is None else "cohort.auto_close",
         "cohort",
         cohort.id,
-        {
-            "status": [ACTIVE, DONE],
-            "graduates": [0, len(graduates)],
-            "completed": [0, len(ids) - len(graduates)],
-        },
+        diff,
         branch_id=cohort.branch_id,
         label=cohort.code,
     )
+
+
+async def auto_close_stale(db: AsyncSession, on: date | None = None) -> int:
+    """The nightly job: close every активный cohort with no attendance marks for `stale_days`
+    (`app.metrics.stale`) by the same finish as the manual one. Returns how many it closed; a
+    second run finds nothing left."""
+    from app.metrics.stale import due_clause, due_cohorts
+
+    on = on or today()
+    days, due = await due_cohorts(db, on)
+    closed = 0
+    for found in due:
+        # re-read under a row lock: a cohort finished or marked meanwhile is left alone
+        cohort = (
+            await db.execute(
+                select(Cohort).where(Cohort.id == found.id, due_clause(days, on)).with_for_update()
+            )
+        ).scalar_one_or_none()
+        if cohort is None:
+            continue
+        await finish(db, cohort, None, await finish_preview(db, cohort, lock=True), auto_days=days)
+        closed += 1
+    return closed
 
 
 async def has_certificates(db: AsyncSession, cohort: Cohort) -> bool:
@@ -190,8 +254,12 @@ async def has_certificates(db: AsyncSession, cohort: Cohort) -> bool:
     )
 
 
-async def reopen(db: AsyncSession, cohort: Cohort, actor_id: object) -> int:
-    """Back to активный; every enrollment finish closed gets its old status. Returns how many."""
+async def reopen(
+    db: AsyncSession, cohort: Cohort, actor_id: object
+) -> tuple[int, list[dict[str, Any]]]:
+    """Back to активный; every enrollment finish closed gets its old status, every lesson it
+    cancelled comes back. Returns (statuses restored, lessons that stay cancelled): a slot taken
+    meanwhile by another cohort keeps its lesson cancelled, the reopen itself still succeeds."""
     cohort.status = ACTIVE
     restored = 0
     for e in (
@@ -210,18 +278,54 @@ async def reopen(db: AsyncSession, cohort: Cohort, actor_id: object) -> int:
         e.status = e.status_before_finish  # type: ignore[assignment]
         e.status_before_finish = None
         restored += 1
+    back, busy = 0, []
+    rows = (
+        await db.execute(
+            select(Lesson, Room.name)
+            .join(Room, Room.id == Lesson.room_id)
+            .where(Lesson.cohort_id == cohort.id, Lesson.cancelled_by_finish)
+            .order_by(Lesson.starts_at)
+            .with_for_update(of=Lesson)
+        )
+    ).all()
     await db.flush()
+    for lesson, room in rows:
+        try:
+            async with db.begin_nested():
+                lesson.cancelled = False
+                lesson.cancelled_by_finish = False
+                await db.flush()
+            back += 1
+        except IntegrityError:  # the room or the instructor is taken at that time now
+            await db.refresh(lesson)
+            lesson.cancelled_by_finish = False  # an ordinary cancelled lesson from now on
+            busy.append(
+                {
+                    "lesson_id": lesson.id,
+                    "date": lesson.lesson_date,
+                    "start": lesson.starts_at.astimezone(TZ).strftime("%H:%M"),
+                    "end": lesson.ends_at.astimezone(TZ).strftime("%H:%M"),
+                    "room_name": room,
+                    "reason": "аудитория занята",
+                }
+            )
+    await db.flush()
+    diff: dict[str, Any] = {"status": [DONE, ACTIVE], "restored": [0, restored]}
+    if back or busy:
+        diff["lessons_restored"] = [0, back]
+    if busy:
+        diff["lessons_busy"] = [0, len(busy)]
     await record(
         db,
         actor_id,  # type: ignore[arg-type]
         "cohort.reopen",
         "cohort",
         cohort.id,
-        {"status": [DONE, ACTIVE], "restored": [0, restored]},
+        diff,
         branch_id=cohort.branch_id,
         label=cohort.code,
     )
-    return restored
+    return restored, busy
 
 
 async def reevaluate(

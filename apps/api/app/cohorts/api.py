@@ -62,6 +62,7 @@ from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks, over_capacity_of
 from app.metrics.money import cohort_income, cohort_payers
+from app.metrics.stale import DAYS, warning_clause, warnings_for
 from app.models import (
     AppUser,
     Attendance,
@@ -242,6 +243,7 @@ def _out(
     instructor: str | None,
     room: str,
     fill: dict[str, Any],
+    stale: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": c.id,
@@ -264,6 +266,7 @@ def _out(
         "price_month": c.price_month,
         "status": c.status,
         "overdue": st.is_overdue(c),
+        "stale": stale,
         "fill": fill,
     }
 
@@ -280,7 +283,11 @@ def _select() -> Any:
 
 async def _outs(db: AsyncSession, rows: Sequence[Any]) -> list[dict[str, Any]]:
     fill = await cohort_fill(db, [r[0] for r in rows])
-    return [_out(c, course, branch, ins, room, fill[c.id]) for c, course, branch, ins, room in rows]
+    stale = await warnings_for(db, [r[0].id for r in rows])
+    return [
+        _out(c, course, branch, ins, room, fill[c.id], stale.get(c.id))
+        for c, course, branch, ins, room in rows
+    ]
 
 
 async def _load(
@@ -370,12 +377,15 @@ def _cohort_where(
     branch_id: uuid.UUID | None,
     q: str | None,
     overdue: bool = False,
+    closing: bool = False,
 ) -> list[Any]:
     where: list[Any] = list(cohort_filters(p))
     if status:
         where.append(Cohort.status == status)
     if overdue:  # «Срок вышел, не завершён»
         where += [Cohort.status == st.ACTIVE, Cohort.end_date < st.today()]
+    if closing:  # «Скоро закроется»: the last 15 days before the automatic close
+        where.append(warning_clause(DAYS, st.today()))
     if branch_id:
         where.append(Cohort.branch_id == branch_id)
     if q and q.strip():
@@ -395,10 +405,11 @@ async def list_cohorts(
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
     overdue: bool = False,
+    closing: bool = False,
     page: Page = 1,
     page_size: PageSize = 24,
 ) -> dict[str, Any]:
-    where = _cohort_where(p, status, branch_id, q, overdue)
+    where = _cohort_where(p, status, branch_id, q, overdue, closing)
     total = (
         await db.execute(
             select(func.count())
@@ -467,8 +478,9 @@ async def export_cohorts(
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
     overdue: bool = False,
+    closing: bool = False,
 ) -> Response:
-    where = _cohort_where(p, status, branch_id, q, overdue)
+    where = _cohort_where(p, status, branch_id, q, overdue, closing)
     rows = (await db.execute(_cohort_ordered(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     columns = [*COHORT_COLUMNS, *PAID_COLUMNS] if can_view_payments(p) else COHORT_COLUMNS
@@ -480,7 +492,13 @@ async def export_cohorts(
         title="Потоки",
         columns=columns,
         rows=await _with_paid(db, p, await _outs(db, list(rows))),
-        filters={"status": status, "branch_id": branch_id, "q": q, "overdue": overdue or None},
+        filters={
+            "status": status,
+            "branch_id": branch_id,
+            "q": q,
+            "overdue": overdue or None,
+            "closing": closing or None,
+        },
     )
 
 
@@ -740,9 +758,9 @@ async def reopen_cohort(
         raise DomainError(COHORT_NOT_DONE)
     if await st.has_certificates(db, cohort):
         raise DomainError(CERTIFICATE_ISSUED)
-    await st.reopen(db, cohort, p.id)
+    _, busy = await st.reopen(db, cohort, p.id)
     cohort.updated_at = _now()
-    return await _detail(db, cohort.id)
+    return {**await _detail(db, cohort.id), "lessons_busy": busy}
 
 
 @router.delete("/cohorts/{cohort_id}", status_code=204)

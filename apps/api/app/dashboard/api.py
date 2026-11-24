@@ -18,6 +18,7 @@ from app.metrics import dash
 from app.metrics.money import debt_summary, today
 from app.metrics.reports import callback_leads, hidden_money, hide_money
 from app.metrics.sales import callbacks_today
+from app.metrics.stale import closing_soon
 from app.permissions import allows
 from app.reports.api import scope_of
 
@@ -131,6 +132,30 @@ async def attention(p: Dashboard, db: DB, branch_id: uuid.UUID | None = None) ->
                     "/cohorts?overdue=1",
                 )
             )
+    if _can(p, "cohorts"):
+        closing = await closing_soon(db, scope.cohort)
+        if closing:
+            n = len(closing)
+            first = closing[0]
+            when = first["closes_on"].strftime("%d.%m")
+            title = (
+                f"{first['cohort_code']}: нет отметок {first['idle_days']} "
+                f"{plural(first['idle_days'], 'день', 'дня', 'дней')} — закроется {when}"
+                if n == 1
+                else f"{n} {plural(n, 'поток', 'потока', 'потоков')} скоро закроются: нет отметок"
+            )
+            codes = ", ".join(c["cohort_code"] for c in closing[:5])
+            alerts.append(
+                _alert(
+                    "closing",
+                    "warning",
+                    title,
+                    "Отметьте посещаемость, иначе поток закроется автоматически"
+                    if n == 1
+                    else codes + (" …" if n > 5 else ""),
+                    f"/cohorts/{first['cohort_id']}" if n == 1 else "/cohorts?closing=1",
+                )
+            )
     if _can(p, "payments"):
         pending = await dash.pending_payments(db, scope.cohort)
         if pending["count"]:
@@ -216,6 +241,7 @@ async def queues(
     if _can(p, "cohorts"):
         late = await dash.overdue_cohorts(db, scope.cohort)
         tiles.append({"key": "overdue_cohorts", "count": len(late)})
+        tiles.append({"key": "closing_cohorts", "count": len(await closing_soon(db, scope.cohort))})
     if _can(p, "leads"):
         day = today()
         tiles.append(

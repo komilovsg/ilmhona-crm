@@ -258,6 +258,7 @@ async def test_an_overdue_cohort_adds_no_debt_beyond_its_months(admin: httpx.Asy
     await enroll(admin, cohort, "Должник")
     assert (await sql("SELECT status FROM cohort"))[0][0] == "активный"
     assert date.fromisoformat(cohort["end_date"]) < today()  # overdue, not finished
+    await sql("UPDATE academy_settings SET stale_days = 730")  # the stale close is not this test
     assert await daily() == 0
     rows = (await admin.get("/api/v1/payments/debtors")).json()
     assert rows["total"] == 1
