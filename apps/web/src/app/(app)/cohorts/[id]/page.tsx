@@ -19,7 +19,7 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { DetailSkeleton, ListSkeleton } from "@/components/Skeletons";
-import { CohortStatus, OverdueChip } from "@/components/StatusChip";
+import { CohortStatus, OverdueChip, StaleChip } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { useIsSuperadmin } from "@/hooks/goals";
@@ -170,6 +170,7 @@ export default function CohortPage() {
             <h1 className="text-2xl font-semibold">{c.code}</h1>
             <CohortStatus status={c.status} />
             {c.overdue && <OverdueChip />}
+            {c.stale && <StaleChip stale={c.stale} />}
             {!!c.instructor_conflicts && (
               <Chip
                 color="warning"

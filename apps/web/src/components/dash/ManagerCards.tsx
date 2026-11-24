@@ -38,6 +38,13 @@ function viewOf(t: Tile): TileView {
         href: "/cohorts?overdue=1",
         accent: "border-t-warning",
       };
+    case "closing_cohorts":
+      return {
+        label: "Скоро закроются",
+        hint: t.count ? "нет отметок — отметьте посещаемость" : "все потоки с отметками",
+        href: "/cohorts?closing=1",
+        accent: "border-t-warning",
+      };
     case "new_leads":
       return { label: "Новые лиды", hint: "за сегодня", href: "/leads", accent: "border-t-success" };
   }
