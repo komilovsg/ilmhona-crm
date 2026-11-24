@@ -24,7 +24,9 @@ async def test_certificate_batch_issue_needs_a_finished_cohort(admin: httpx.Asyn
     r = await issue(admin, cohort, tid, [eid])
     assert r.status_code == 409 and r.json()["code"] == "cohort_not_finished", r.text
     assert (await sql("SELECT count(*) FROM certificate"))[0][0] == 0
-    assert (await sql("SELECT count(*) FROM enrollment WHERE certificate_no IS NOT NULL"))[0][0] == 0
+    assert (await sql("SELECT count(*) FROM enrollment WHERE certificate_no IS NOT NULL"))[0][
+        0
+    ] == 0
 
 
 async def test_certificate_single_issue_needs_a_finished_cohort(admin: httpx.AsyncClient) -> None:
