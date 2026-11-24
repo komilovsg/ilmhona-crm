@@ -210,17 +210,20 @@ export default function CohortPage() {
             </Button>
           )}
           {canIssue && (
-            <Button
+            <span
               className="shrink-0"
-              color="primary"
-              isDisabled={graduates === 0}
-              startContent={<Icon name="certificate" size={18} />}
-              title={graduates === 0 ? "В потоке нет выпускников" : undefined}
-              variant="flat"
-              onPress={() => setIssuingCerts(true)}
+              title={c.status !== "завершён" ? "Сначала завершите поток" : graduates === 0 ? "В потоке нет выпускников" : undefined}
             >
-              Выдать сертификаты
-            </Button>
+              <Button
+                color="primary"
+                isDisabled={c.status !== "завершён" || graduates === 0}
+                startContent={<Icon name="certificate" size={18} />}
+                variant="flat"
+                onPress={() => setIssuingCerts(true)}
+              >
+                Выдать сертификаты
+              </Button>
+            </span>
           )}
           {menu.length > 0 && (
             <RowMenu

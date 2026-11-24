@@ -103,6 +103,7 @@ export const apiErrors: Record<string, string> = {
   cert_already_issued: "Сертификат этому студенту уже выдан.",
   cert_not_ready: "Часть студентов не готова к выдаче сертификата.",
   cert_not_valid: "Сертификат уже заменён или отозван.",
+  cohort_not_finished: "Сертификаты выдаются только после завершения потока.",
   cert_comment_required: "Укажите комментарий.",
   cert_custom_invalid: "Значение поля сертификата заполнено неверно.",
   cert_director_overflow: "Имя или должность директора не помещаются в шаблон.",

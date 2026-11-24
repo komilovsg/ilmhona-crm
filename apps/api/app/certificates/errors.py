@@ -38,3 +38,6 @@ CERT_CUSTOM_INVALID = errors.define("cert_custom_invalid", 422, "A custom value 
 CERT_DIRECTOR_OVERFLOW = errors.define(
     "cert_director_overflow", 422, "The director's name or title does not fit a template"
 )
+COHORT_NOT_FINISHED = errors.define(
+    "cohort_not_finished", 409, "Certificates are issued only for a finished cohort"
+)

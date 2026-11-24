@@ -25,6 +25,7 @@ from app.certificates.errors import (
     CERT_COMMENT_REQUIRED,
     CERT_NOT_READY,
     CERT_NOT_VALID,
+    COHORT_NOT_FINISHED,
 )
 from app.certificates.fields import load_settings
 from app.certificates.issuing import (
@@ -44,7 +45,7 @@ from app.certificates.issuing import (
 )
 from app.certificates.render import render_pdf
 from app.certificates.stored import render_certificate
-from app.cohorts.status import GRADUATE
+from app.cohorts.status import DONE, GRADUATE
 from app.core import clock
 from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
@@ -120,6 +121,16 @@ async def _cohort(db: AsyncSession, p: Principal, cohort_id: uuid.UUID) -> tuple
         raise DomainError(NOT_FOUND)
     p.check_scope(row[0].branch_id)
     return row[0], row[1]
+
+
+def _gone() -> Cohort:
+    raise DomainError(NOT_FOUND)
+
+
+def _finished(cohort: Cohort) -> None:
+    """Certificates are issued, and reissued, only once the cohort is finished."""
+    if cohort.status != DONE:
+        raise DomainError(COHORT_NOT_FINISHED, status=cohort.status)
 
 
 def _fix_item(enrollment_id: uuid.UUID, name: str, fix: Fix) -> dict[str, Any]:
@@ -352,6 +363,7 @@ async def _already_issued(db: AsyncSession, ids: list[uuid.UUID]) -> list[uuid.U
 async def issue_batch(cohort_id: uuid.UUID, body: IssueBatch, p: Change, db: DB) -> dict[str, Any]:
     """One transaction for the whole batch: every id is ready or nothing is issued."""
     cohort, _ = await _cohort(db, p, cohort_id)
+    _finished(cohort)
     template = await chosen_template(db, body.template_id)
     version = await published_version(db, template)
     layout = layout_of(version)
@@ -406,6 +418,7 @@ async def issue_one(enrollment_id: uuid.UUID, body: IssueOne, p: Change, db: DB)
         raise DomainError(NOT_FOUND)
     cohort, course = found
     p.check_scope(cohort.branch_id)
+    _finished(cohort)
     if body.template_id is not None:
         template = await chosen_template(db, body.template_id)
     else:
@@ -458,6 +471,7 @@ async def _locked_valid(
 async def reissue(certificate_id: uuid.UUID, body: Reissue, p: Change, db: DB) -> dict[str, Any]:
     """A new certificate with fresh data and the same number; the old one becomes `replaced`."""
     old, _ = await _locked_valid(db, p, certificate_id)
+    _finished((await db.get(Cohort, old.cohort_id)) or _gone())
     template = await chosen_template(db, body.template_id or old.template_id)
     version = await published_version(db, template)
     layout = layout_of(version)
