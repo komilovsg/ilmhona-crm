@@ -108,6 +108,9 @@ export type CertSettings = {
   director_title_tg: string;
   signature_asset_id: string | null;
   seal_asset_id: string | null;
+  /** superadmin-only fields: https origin of the QR check page (null = none) and the non-graduate switch */
+  verify_base_url: string | null;
+  allow_non_graduate: boolean;
   version: number;
   updated_at: string;
   updated_by: string | null;

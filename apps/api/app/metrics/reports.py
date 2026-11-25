@@ -65,6 +65,7 @@ from app.models import (
     AppUser,
     Branch,
     Campaign,
+    Certificate,
     Cohort,
     Course,
     Employment,
@@ -233,6 +234,19 @@ async def graduate_rows(
     # one query for the enrollments of every cohort together, not one per cohort
     results = await enrollment_results(db, None, enrollment_ids=[e.id for e, *_ in found])
     paid = await enrollment_money(db, [(e, c) for e, _, c, *_ in found])
+    valid_certs: dict[uuid.UUID, uuid.UUID] = {}
+    if found:
+        valid_certs = {
+            eid: cid
+            for eid, cid in (
+                await db.execute(
+                    select(Certificate.enrollment_id, Certificate.id).where(
+                        Certificate.enrollment_id.in_([e.id for e, *_ in found]),
+                        Certificate.status == "valid",
+                    )
+                )
+            ).all()
+        }
     students = list({s.id for _, s, *_ in found})
     jobs: dict[uuid.UUID, list[Employment]] = {}
     if students:
@@ -272,6 +286,7 @@ async def graduate_rows(
                 "score_legacy": res["legacy"],
                 "paid": paid[e.id]["paid"],
                 "certificate_no": e.certificate_no,
+                "certificate_id": valid_certs.get(e.id),
                 "certificate_issued_at": e.certificate_issued_at,
                 "employed": bool(own),
                 "organization": own[0].organization if own else None,
