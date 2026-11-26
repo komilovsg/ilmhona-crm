@@ -13,8 +13,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.cohorts.schedule import local_dt
+from app.core import clock
 from app.demo import seed_demo
-from app.metrics import enrollment_attendance, enrollment_results
+from app.metrics import enrollment_results
 from app.metrics.reports import graduate_count, graduate_rows, master_rows, master_select
 from app.models import Enrollment
 from tests.conftest import SERVER_URL, TEST_DB
@@ -108,7 +109,23 @@ async def imported_like(db: AsyncSession) -> None:
 
 async def totals_at_0016(db: AsyncSession) -> dict[uuid.UUID, int]:
     ids = list((await db.execute(select(Enrollment.id))).scalars())
-    stats = await enrollment_attendance(db, None, enrollment_ids=ids)
+    # plain SQL: the ORM already knows columns that do not exist yet at 0016
+    stats = {
+        i: {"held": h, "present": p}
+        for i, h, p in (
+            await db.execute(
+                text(
+                    "SELECT e.id, count(l.id), count(a.lesson_id) FILTER (WHERE a.present) "
+                    "FROM enrollment e LEFT JOIN lesson l ON l.cohort_id = e.cohort_id "
+                    "AND NOT l.cancelled AND l.starts_at <= :now "
+                    "AND timezone('Asia/Dushanbe', e.enrolled_at)::date <= l.lesson_date "
+                    "LEFT JOIN attendance a ON a.lesson_id = l.id AND a.enrollment_id = e.id "
+                    "GROUP BY e.id"
+                ),
+                {"now": clock.now()},
+            )
+        ).all()
+    }
     grades = {
         e: (h, f)
         for e, h, f in (
