@@ -108,7 +108,6 @@ async def imported_like(db: AsyncSession) -> None:
 
 
 async def totals_at_0016(db: AsyncSession) -> dict[uuid.UUID, int]:
-    ids = list((await db.execute(select(Enrollment.id))).scalars())
     # plain SQL: the ORM already knows columns that do not exist yet at 0016
     stats = {
         i: {"held": h, "present": p}
