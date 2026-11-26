@@ -535,7 +535,6 @@ function Grid({
                 aria-label="Уважительная"
                 className="h-11 min-w-28 text-base font-medium"
                 color="warning"
-                startContent={<span aria-hidden className="font-semibold">У</span>}
                 variant={menuCurrent === "excused" ? "solid" : "flat"}
                 onPress={() => choose("excused")}
               >
