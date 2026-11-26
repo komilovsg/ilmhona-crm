@@ -211,7 +211,7 @@ async def next_lesson(
             .limit(1)
         )
     ).first()
-    return tuple(row) if row else None  # type: ignore[return-value]
+    return tuple(row) if row else None
 
 
 def _unfilled_query(cohort_where: list[ColumnElement[bool]], now: datetime) -> Any:
