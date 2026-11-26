@@ -241,6 +241,12 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-default-600">
           Студентов: <b>{cohort.fill.enrolled}</b> из {cohort.fill.capacity}
+          {withDonors(cohort.funding) && (
+            <>
+              {" "}
+              · за счёт доноров: <b>{cohort.seats.donor}</b>
+            </>
+          )}
           {money.data && (
             <>
               {" "}
