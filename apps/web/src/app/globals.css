@@ -471,9 +471,19 @@ html[data-sidebar="collapsed"] .sb-group > button {
   background-color: hsl(var(--heroui-default-100));
 }
 
-.ilm-tour .driver-popover-next-btn {
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn {
   color: #fff;
-  background-color: hsl(var(--heroui-primary));
+  background-color: #0a7fb0;
+}
+
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn:hover,
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn:focus-visible {
+  background-color: #086a94;
+}
+
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-prev-btn:hover,
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-prev-btn:focus-visible {
+  background-color: hsl(var(--heroui-default-200));
 }
 
 .ilm-tour-skip {

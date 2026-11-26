@@ -21,7 +21,7 @@ const lesson = (start: string, end: string, date = "2026-11-26"): LessonItem => 
 
 test("phases: past, now, next, later", () => {
   const ls = [lesson("08:00", "09:00"), lesson("10:00", "11:00"), lesson("12:00", "13:00"), lesson("14:00", "15:00")];
-  assert.deepEqual(lessonPhases(ls, minutesOf("10:30")), ["past", "now", "next", "later"]);
+  assert.deepEqual(lessonPhases(ls, minutesOf("10:30")), ["past", "now", "later", "later"]);
   assert.deepEqual(lessonPhases(ls, minutesOf("07:00")), ["next", "later", "later", "later"]);
   assert.deepEqual(lessonPhases(ls, minutesOf("15:00")), ["past", "past", "past", "past"]);
   assert.deepEqual(lessonPhases(ls, minutesOf("09:00")), ["past", "next", "later", "later"]);

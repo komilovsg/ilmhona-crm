@@ -45,7 +45,7 @@ function LessonCard({ lesson, phase }: { lesson: LessonItem; phase: LessonPhase 
   const label = PHASE_LABEL[phase];
 
   return (
-    <li className="relative grid grid-cols-[3.25rem_1fr] gap-x-3 sm:grid-cols-[4rem_1fr] sm:gap-x-4">
+    <li className="relative grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[4rem_minmax(0,1fr)] sm:gap-x-4">
       {/* time column + rail: the dot marks the lesson, the line runs to the next one */}
       <div className="flex flex-col items-end pt-4 text-right tabular-nums">
         <span className={clsx("leading-none", focal ? "text-xl font-semibold" : "text-base font-medium text-default-700")}>
@@ -81,16 +81,16 @@ function LessonCard({ lesson, phase }: { lesson: LessonItem; phase: LessonPhase 
               {label}
             </div>
           )}
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
             <div className="min-w-0">
-              <div className={clsx("truncate font-semibold", focal ? "text-lg" : "text-base")}>{lesson.course_name}</div>
+              <div className={clsx("font-semibold sm:truncate", focal ? "text-lg" : "text-base")}>{lesson.course_name}</div>
               <div className="mt-0.5 text-sm text-default-600">
                 {lesson.cohort_code} · {lesson.room_name} · {studentsWord(lesson.total)}
               </div>
             </div>
             <span
               className={clsx(
-                "shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
+                "w-fit shrink-0 rounded-full px-2.5 py-1 text-xs font-medium",
                 state === "done" && "bg-success/15 text-success-700 dark:text-success",
                 state === "partial" && "bg-warning/20 text-warning-700 dark:text-warning",
                 state === "none" && "bg-default-100 text-default-600",
@@ -101,12 +101,12 @@ function LessonCard({ lesson, phase }: { lesson: LessonItem; phase: LessonPhase 
           </div>
           <Button
             as={Link}
-            className="mt-3 h-12 w-full text-base font-medium"
+            className="mt-3 h-12 w-full px-3 text-base font-medium"
             color="primary"
             data-tour={focal ? "mark" : undefined}
             href={`/lessons/${lesson.lesson_id}`}
             radius="lg"
-            startContent={<Icon name="attendance" size={20} />}
+            startContent={<Icon className="shrink-0" name="attendance" size={20} />}
             variant={focal ? "solid" : "flat"}
           >
             Отметить посещаемость
@@ -234,7 +234,7 @@ export function InstructorTodaySkeleton() {
     <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div>
         {[0, 1].map((i) => (
-          <div key={i} className="grid grid-cols-[3.25rem_1fr] gap-x-3 sm:grid-cols-[4rem_1fr] sm:gap-x-4">
+          <div key={i} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[4rem_minmax(0,1fr)] sm:gap-x-4">
             <div className="flex flex-col items-end pt-4">
               <Bone className="h-5 w-10" />
               <Bone className="mt-1 h-3 w-8" />

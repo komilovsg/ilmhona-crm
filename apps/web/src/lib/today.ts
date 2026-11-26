@@ -24,14 +24,18 @@ export function dushanbeMinutes(now: Date): number {
 
 /**
  * Phase of each of today's lessons (time order): finished, in progress, the first one still to come
- * («next» — the focal one when nothing is running), the rest «later».
+ * («next» — the focal one only when nothing is running), the rest «later».
  */
 export function lessonPhases(lessons: LessonItem[], nowMin: number): LessonPhase[] {
   let nextTaken = false;
 
   return lessons.map((l) => {
     if (nowMin >= minutesOf(l.end)) return "past";
-    if (nowMin >= minutesOf(l.start)) return "now";
+    if (nowMin >= minutesOf(l.start)) {
+      nextTaken = true; // a running lesson is the focus; the rest just wait
+
+      return "now";
+    }
     if (!nextTaken) {
       nextTaken = true;
 
