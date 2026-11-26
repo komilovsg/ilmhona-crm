@@ -64,7 +64,7 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "audit", group: "admin", href: "/audit", label: "Журнал", icon: "audit" },
   // «Настройки → Стандарты академии»: staff who grade read it, the superadmin changes it (an
   // instructor sees the scheme of their cohort on the cohort page)
-  { section: "cert_templates", group: "study", href: "/settings/certificates", label: "Сертификаты", icon: "certificate" },
+  { section: "cert_templates", group: "study", href: "/settings/certificates", label: "Шаблоны сертификатов", icon: "certificate" },
   { section: "attendance", group: "admin", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
 ];
 
