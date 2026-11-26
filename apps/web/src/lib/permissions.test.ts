@@ -76,7 +76,7 @@ test("users section opens both Пользователи and Роли, audit is s
 
 test("every backend section has a nav item", () => {
   const sections = new Set(NAV_ITEMS.map((i) => i.section));
-  assert.equal(sections.size, 15);
+  assert.equal(sections.size, 16);
 });
 
 test("phone: four main items, the rest goes to «Ещё»", () => {

@@ -20,6 +20,7 @@ import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
 import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
+import { withDonors } from "@/lib/funding";
 import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
@@ -142,6 +143,12 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<string | null>(null);
+  const activeDonors = cohort.donors.filter((d) => !d.archived);
+  // «за счёт донора»: the one donor of a donor cohort is the default; a mixed cohort starts with «платит сам»
+  const [donorId, setDonorId] = useState<string | null>(
+    cohort.funding === "донор" && activeDonors.length === 1 ? activeDonors[0].id : null,
+  );
+  const funded = withDonors(cohort.funding) ? { donor_id: donorId } : {};
   const term = q.trim();
 
   const found = useQuery({
@@ -152,7 +159,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const enroll = useMutation({
     mutationFn: (body: { student_id: string } | { new_student: { full_name: string; phone: string | null; gender: string | null } }) =>
-      api<EnrollmentRow>(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body }),
+      api<EnrollmentRow>(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body: { ...body, ...funded } }),
     onSuccess: (row) => {
       void refresh();
       notify(`Студент зачислен${overToast(row.over_capacity)}`);
@@ -162,7 +169,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const exceeds = wouldExceed(cohort.fill);
   const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
-  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender"]);
+  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender", "donor_id"]);
   const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
 
   const modes = [
@@ -200,6 +207,20 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
     >
       <div className="space-y-4">
         <OverCapacityNotice fill={cohort.fill} />
+        {withDonors(cohort.funding) && (
+          <SelectField
+            allLabel={cohort.funding === "смешанный" ? "Платит сам" : undefined}
+            isRequired={cohort.funding === "донор"}
+            label="Кто платит"
+            options={activeDonors.map((d) => ({ key: d.id, label: `Донор: ${d.name}` }))}
+            value={donorId}
+            {...fe.hint("donor_id")}
+            onChange={(v) => {
+              fe.clear("donor_id");
+              setDonorId(v);
+            }}
+          />
+        )}
         {modes.length > 1 && <Segmented label="Способ" options={modes} value={mode} onChange={setMode} />}
         {mode === "existing" ? (
           <>
