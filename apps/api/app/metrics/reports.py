@@ -8,7 +8,8 @@ The dashboard, the lists and the Excel files take their numbers from here and fr
 - Period (`since` / `until`) cuts what has a date of its own: leads by creation day, income and
   payroll by payment day, ads by campaign start, graduates by the end of their cohort. «Now»
   numbers (active students, students in the base, active cohorts, на наборе) ignore it.
-- Overview: leads + conversion, students (active / in the base), cohorts (active / на наборе),
+- Overview: leads + conversion, students (active / in the base; enrolled split into paying /
+  donor / free), cohorts (active / на наборе),
   income / payroll / ads / profit, campaigns, graduates, CAC = ads ÷ converted leads (None when
   there are none: «—»).
 - By month: the last 12 calendar months, this one included; every figure is the sum of the same
@@ -18,8 +19,10 @@ The dashboard, the lists and the Excel files take their numbers from here and fr
 - By course: cohorts, income, students (not expelled, distinct), graduates.
 - Master list (per cohort): leads = leads of the cohort's course and branch created from 45 days
   before the start through the start day; zero lesson = those with status «нулевой урок» or later
-  («записан»); enrolled = not expelled; paid month 1/2/3 = enrollments with a confirmed payment of
-  that month; LTV/чел = income ÷ enrolled; graduates = enrollments «выпускник»; employed =
+  («записан»); enrolled = not expelled, split into paying / donor / free
+  (`app.metrics.donors`); paid month 1/2/3 = enrollments with a confirmed payment of that month;
+  LTV/чел = income ÷ paying enrolled (seats paid for by donors or free do not lower it);
+  graduates = enrollments «выпускник»; employed =
   graduates whose student has an employment record.
 - Graduates: enrollments «выпускник». Score = the total on the cohort's scheme
   (`enrollment_results`),
@@ -43,6 +46,7 @@ from app.export import Col
 from app.leads.query import lead_where
 from app.leads.scope import campaign_filters
 from app.metrics import cohort_counts, cohort_enrolled, enrollment_results, student_counts
+from app.metrics.donors import cohort_funding_counts, funding_counts
 from app.metrics.money import (
     CONFIRMED,
     EXPELLED,
@@ -174,6 +178,7 @@ def graduate_where(
     employed: bool | None = None,
     certificate: bool | None = None,
     q: str | None = None,
+    donor_id: uuid.UUID | None = None,
 ) -> list[ColumnElement[bool]]:
     """The one `where` of graduates: the dashboard count, both lists and the Excel files."""
     where: list[ColumnElement[bool]] = [
@@ -193,6 +198,8 @@ def graduate_where(
             if certificate
             else Enrollment.certificate_no.is_(None)
         )
+    if donor_id:
+        where.append(Enrollment.donor_id == donor_id)
     if q and q.strip():
         where.append(search_clause(q, (Student.full_name,), (Student.phone,)))
     return where
@@ -363,6 +370,7 @@ async def overview(
         "converted": converted,
         "cac": ratio(fin["ads"], converted),
         "debt": await total_debt(db, scope.cohort),
+        "funding": await funding_counts(db, scope.cohort),
     }
 
 
@@ -636,6 +644,7 @@ async def master_rows(
     ).all()
     graduates = {c: (n, e) for c, n, e in grads}
     enrolled = await cohort_enrolled(db, ids)
+    seats = await cohort_funding_counts(db, ids)
     income = await cohort_income(db, ids)
     rows = []
     for c, course, fmt, branch in found:
@@ -657,11 +666,15 @@ async def master_rows(
                 "leads": n_leads,
                 "zero_lesson": n_zero,
                 "enrolled": enrolled[c.id],
+                "funding": c.funding,
+                "paying": seats[c.id]["paying"],
+                "by_donor": seats[c.id]["donor"],
+                "free": seats[c.id]["free"],
                 "paid_1": paid.get((c.id, 1), 0),
                 "paid_2": paid.get((c.id, 2), 0),
                 "paid_3": paid.get((c.id, 3), 0),
                 "income": income[c.id],
-                "ltv": ratio(income[c.id], enrolled[c.id]),
+                "ltv": ratio(income[c.id], seats[c.id]["paying"]),
                 "graduates": g,
                 "employed": employed,
             }

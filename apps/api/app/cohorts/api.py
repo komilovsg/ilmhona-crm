@@ -10,7 +10,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import date, datetime, time
 from decimal import Decimal
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -35,6 +35,17 @@ from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
 from app.core.search import search_clause
 from app.core.versioning import Version, check_version
+from app.donors.errors import DONOR_REQUIRED, FUNDING_DONORS_INVALID
+from app.donors.funding import (
+    DONOR,
+    FREE,
+    WITH_DONORS,
+    cohort_donors,
+    donor_names,
+    enrollment_donor,
+    funding_label,
+    set_cohort_funding,
+)
 from app.education.errors import (
     COHORT_CLOSED,
     COHORT_IN_USE,
@@ -61,12 +72,14 @@ from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks, over_capacity_of
+from app.metrics.donors import cohort_funding_counts
 from app.metrics.money import cohort_income, cohort_payers
 from app.models import (
     AppUser,
     Attendance,
     Branch,
     Cohort,
+    CohortDonor,
     Course,
     Employment,
     Enrollment,
@@ -91,6 +104,8 @@ OPEN_FROM, OPEN_TO = time(7, 0), time(22, 0)
 Day = Annotated[date, Field(ge=MIN_DATE, le=MAX_DATE)]
 Capacity = Annotated[int, Field(ge=1, le=100)]
 Price = Annotated[Decimal, Field(ge=0, max_digits=12, decimal_places=2)]
+Funding = Literal["платный", "бесплатный", "донор", "смешанный"]
+DonorIds = Annotated[list[uuid.UUID], Field(max_length=20)]
 WEEKDAY_NAMES = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
 ENROLLMENT_STATUSES = ("активный", "завершил", "выпускник", "отчислен")
 ENROLLED = ENROLLMENT_STATUSES[0]
@@ -136,6 +151,8 @@ class CohortCreate(Strict):
     end_time: time
     capacity: Capacity
     price_month: Price | None = None  # default: the course's price
+    funding: Funding = "платный"
+    donor_ids: DonorIds = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check(self) -> Self:
@@ -163,6 +180,9 @@ class CohortUpdate(Strict):
     end_time: time | None = None
     capacity: Capacity | None = None
     price_month: Price | None = None
+    # sent together or alone: the funding with the cohort's donors (all of them, not a delta)
+    funding: Funding | None = None
+    donor_ids: DonorIds | None = None
 
 
 class LessonIn(Strict):
@@ -198,6 +218,8 @@ class NewStudent(Strict):
 class EnrollIn(Strict):
     student_id: uuid.UUID | None = None
     new_student: NewStudent | None = None
+    # «за счёт донора»: one of the cohort's donors (a «донор» cohort with one donor sets it itself)
+    donor_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
     def _one(self) -> Self:
@@ -208,6 +230,12 @@ class EnrollIn(Strict):
 
 class EnrollmentReview(Strict):
     needs_review: bool
+
+
+class EnrollmentFunding(Strict):
+    """`donor_id` null = the student pays themself (a «смешанный» cohort only)."""
+
+    donor_id: uuid.UUID | None
 
 
 class EnrollmentStatus(Strict):
@@ -231,6 +259,7 @@ def _snapshot(c: Cohort) -> dict[str, Any]:
         "end_time": _hm(c.end_time),
         "capacity": c.capacity,
         "price_month": str(c.price_month),
+        "funding": c.funding,
         "status": c.status,
     }
 
@@ -242,6 +271,8 @@ def _out(
     instructor: str | None,
     room: str,
     fill: dict[str, Any],
+    donors: list[dict[str, Any]],
+    seats: dict[str, int],
 ) -> dict[str, Any]:
     return {
         "id": c.id,
@@ -262,6 +293,10 @@ def _out(
         "end_time": _hm(c.end_time),
         "capacity": c.capacity,
         "price_month": c.price_month,
+        "funding": c.funding,
+        "donors": donors,
+        # enrolled students who pay / are paid for by a donor / study free
+        "seats": seats,
         "status": c.status,
         "overdue": st.is_overdue(c),
         "fill": fill,
@@ -280,7 +315,12 @@ def _select() -> Any:
 
 async def _outs(db: AsyncSession, rows: Sequence[Any]) -> list[dict[str, Any]]:
     fill = await cohort_fill(db, [r[0] for r in rows])
-    return [_out(c, course, branch, ins, room, fill[c.id]) for c, course, branch, ins, room in rows]
+    ids = [r[0].id for r in rows]
+    donors, seats = await cohort_donors(db, ids), await cohort_funding_counts(db, ids)
+    return [
+        _out(c, course, branch, ins, room, fill[c.id], donors[c.id], seats[c.id])
+        for c, course, branch, ins, room in rows
+    ]
 
 
 async def _load(
@@ -370,8 +410,16 @@ def _cohort_where(
     branch_id: uuid.UUID | None,
     q: str | None,
     overdue: bool = False,
+    donor_id: uuid.UUID | None = None,
+    funding: str | None = None,
 ) -> list[Any]:
     where: list[Any] = list(cohort_filters(p))
+    if donor_id:
+        where.append(
+            exists().where(CohortDonor.cohort_id == Cohort.id, CohortDonor.donor_id == donor_id)
+        )
+    if funding:
+        where.append(Cohort.funding == funding)
     if status:
         where.append(Cohort.status == status)
     if overdue:  # «Срок вышел, не завершён»
@@ -395,10 +443,12 @@ async def list_cohorts(
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
     overdue: bool = False,
+    donor_id: uuid.UUID | None = None,
+    funding: str | None = None,
     page: Page = 1,
     page_size: PageSize = 24,
 ) -> dict[str, Any]:
-    where = _cohort_where(p, status, branch_id, q, overdue)
+    where = _cohort_where(p, status, branch_id, q, overdue, donor_id, funding)
     total = (
         await db.execute(
             select(func.count())
@@ -437,6 +487,11 @@ COHORT_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Студентов", lambda c: c["fill"]["enrolled"], "int"),
     Col("Мест", lambda c: c["fill"]["capacity"], "int"),
     Col("Цена за месяц", lambda c: c["price_month"], "money"),
+    Col("Финансирование", lambda c: c["funding"]),
+    Col("Доноры", lambda c: ", ".join(d["name"] for d in c["donors"])),
+    Col("Платников", lambda c: c["seats"]["paying"], "int"),
+    Col("За счёт доноров", lambda c: c["seats"]["donor"], "int"),
+    Col("Бесплатно", lambda c: c["seats"]["free"], "int"),
     Col("Статус", lambda c: c["status"]),
 ]
 
@@ -467,8 +522,10 @@ async def export_cohorts(
     branch_id: uuid.UUID | None = None,
     q: str | None = None,
     overdue: bool = False,
+    donor_id: uuid.UUID | None = None,
+    funding: str | None = None,
 ) -> Response:
-    where = _cohort_where(p, status, branch_id, q, overdue)
+    where = _cohort_where(p, status, branch_id, q, overdue, donor_id, funding)
     rows = (await db.execute(_cohort_ordered(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     columns = [*COHORT_COLUMNS, *PAID_COLUMNS] if can_view_payments(p) else COHORT_COLUMNS
@@ -480,7 +537,14 @@ async def export_cohorts(
         title="Потоки",
         columns=columns,
         rows=await _with_paid(db, p, await _outs(db, list(rows))),
-        filters={"status": status, "branch_id": branch_id, "q": q, "overdue": overdue or None},
+        filters={
+            "status": status,
+            "branch_id": branch_id,
+            "q": q,
+            "overdue": overdue or None,
+            "donor_id": donor_id,
+            "funding": funding,
+        },
     )
 
 
@@ -528,8 +592,12 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
         instructor_rate=await _default_rate(db, body.instructor_id),
         status=st.open_status(body.start_date, st.today()),
     )
+    if body.funding == FREE:
+        cohort.price_month = Decimal("0.00")
     db.add(cohort)
     await db.flush()
+    await set_cohort_funding(db, cohort, body.funding, body.donor_ids)
+    donors = [d["name"] for d in (await cohort_donors(db, [cohort.id]))[cohort.id]]
     await st.sync_status(db, cohort, p.id)
     count = await generate_lessons(db, cohort)
     await record(
@@ -542,6 +610,7 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
             **diff_of({}, _snapshot(cohort)),
             "instructor_rate": [None, str(cohort.instructor_rate)],
             "lessons": [0, count],
+            **({"donors": [None, donors]} if donors else {}),
         },
         branch_id=cohort.branch_id,
     )
@@ -587,6 +656,24 @@ async def update_cohort(
         cohort.end_time = _minute(body.end_time)
     if "price_month" in sent and body.price_month is not None:
         cohort.price_month = body.price_month
+    funding_note: dict[str, Any] = {}
+    donors_before = [d["name"] for d in (await cohort_donors(db, [cohort.id]))[cohort.id]]
+    if sent & {"funding", "donor_ids"}:
+        current = [
+            d
+            for (d,) in (
+                await db.execute(
+                    select(CohortDonor.donor_id).where(CohortDonor.cohort_id == cohort.id)
+                )
+            ).all()
+        ]
+        funding = body.funding or cohort.funding
+        donor_ids = body.donor_ids if body.donor_ids is not None else current
+        if funding not in WITH_DONORS and body.donor_ids is None:
+            donor_ids = []  # «платный» / «бесплатный» drop the donors (refused while in use)
+        funding_note = await set_cohort_funding(db, cohort, funding, donor_ids)
+    if cohort.funding == FREE and cohort.price_month > 0:
+        raise DomainError(FUNDING_DONORS_INVALID).for_field("price_month", "free_has_price")
     if schedule_problem(
         cohort.start_date, cohort.end_date, cohort.weekdays, cohort.start_time, cohort.end_time
     ):
@@ -625,6 +712,11 @@ async def update_cohort(
     cohort.updated_at = _now()
     await db.flush()
     diff = diff_of(before, _snapshot(cohort))
+    donors_after = [d["name"] for d in (await cohort_donors(db, [cohort.id]))[cohort.id]]
+    if donors_after != donors_before:
+        diff["donors"] = [donors_before, donors_after]
+    if funding_note.get("auto"):
+        diff["donors_assigned"] = [None, funding_note["auto"]]
     if rate_before != cohort.instructor_rate:
         diff["instructor_rate"] = [str(rate_before), str(cohort.instructor_rate)]
     if lessons_note:
@@ -982,6 +1074,9 @@ def _enrollment_out(
         "enrolled_at": e.enrolled_at,
         "needs_review": e.needs_review,
         "review_reason": e.review_reason,
+        # None: pays themself (or a free cohort); `pays_from`: moved from a donor to paying then
+        "donor_id": e.donor_id,
+        "pays_from": e.pays_from,
         "created_by_me": mine,
         "deletable": mine and not records and e.status == ENROLLED,
     }
@@ -1021,6 +1116,7 @@ ENROLLMENT_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Студент", lambda r: r["student_name"]),
     Col("Телефон", lambda r: r["phone"]),
     Col("Статус", lambda r: r["status"]),
+    Col("Финансирование", lambda r: r["funding_label"]),
     Col("Зачислен", lambda r: r["enrolled_at"], "date"),
 ]
 
@@ -1030,6 +1126,7 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
     cohort = await _load(db, p, cohort_id)
     rows = (await db.execute(_enrollment_select(cohort.id).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
+    names = await donor_names(db, [e.donor_id for e, _ in rows])
     return await xlsx_response(
         db,
         p,
@@ -1037,7 +1134,13 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         slug=f"studenty_{cohort.code}",
         title="Студенты потока",
         columns=ENROLLMENT_COLUMNS,
-        rows=[_enrollment_out(e, s) for e, s in rows],
+        rows=[
+            {
+                **_enrollment_out(e, s),
+                "funding_label": funding_label(cohort.funding, names.get(e.donor_id)),
+            }
+            for e, s in rows
+        ],
         filters={"cohort": cohort.code},
     )
 
@@ -1057,6 +1160,7 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
     over = over_capacity_of(
         (await cohort_enrolled(db, [cohort.id]))[cohort.id] + 1, cohort.capacity
     )
+    donor_id = await enrollment_donor(db, cohort, body.donor_id)
     if body.new_student is not None:
         student = Student(
             full_name=body.new_student.full_name,
@@ -1086,9 +1190,12 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
         if found.branch_id != cohort.branch_id:
             raise DomainError(STUDENT_BRANCH_MISMATCH)
         student = found
-    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
+    enrollment = Enrollment(
+        cohort_id=cohort.id, student_id=student.id, created_by=p.id, donor_id=donor_id
+    )
     db.add(enrollment)
     await db.flush()  # unique(cohort_id, student_id): a second enrollment is a 409 (#4)
+    donor = (await donor_names(db, [donor_id])).get(donor_id) if donor_id else None
     await record(
         db,
         p.id,
@@ -1100,6 +1207,7 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
             "student": [None, student.full_name],
             "status": [None, enrollment.status],
             **({"over_capacity": [None, over]} if over else {}),
+            **({"donor": [None, donor]} if donor else {}),
         },
         branch_id=cohort.branch_id,
     )
@@ -1152,6 +1260,47 @@ async def set_enrollment_status(
         "enrollment",
         enrollment.id,
         {"status": [before, body.status], "cohort": [None, cohort.code]},
+        branch_id=cohort.branch_id,
+    )
+    return _enrollment_out(enrollment, student)
+
+
+@router.patch("/enrollments/{enrollment_id}/funding")
+async def set_enrollment_funding(
+    enrollment_id: uuid.UUID, body: EnrollmentFunding, version: Version, p: Change, db: DB
+) -> dict[str, Any]:
+    """«Платит сам» ↔ «за счёт донора X» (a «смешанный» cohort; in a «донор» cohort only another
+    donor). Moving to paying themself starts the debt from this month (`pays_from`)."""
+    enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
+    await check_version(
+        db,
+        enrollment,
+        version,
+        "enrollment",
+        lambda: _enrollment_out(enrollment, student),
+        changes=body.model_dump(exclude_unset=True),
+    )
+    if body.donor_id == enrollment.donor_id:
+        return _enrollment_out(enrollment, student)
+    if body.donor_id is None:
+        if cohort.funding == DONOR:
+            raise DomainError(DONOR_REQUIRED).for_field("donor_id", "donor_required")
+        if enrollment.donor_id is not None:
+            enrollment.pays_from = _now()
+    else:
+        await enrollment_donor(db, cohort, body.donor_id)
+    names = await donor_names(db, [enrollment.donor_id, body.donor_id])
+    before = funding_label(cohort.funding, names.get(enrollment.donor_id))  # type: ignore[arg-type]
+    after = funding_label(cohort.funding, names.get(body.donor_id))  # type: ignore[arg-type]
+    enrollment.donor_id = body.donor_id
+    await db.flush()
+    await record(
+        db,
+        p.id,
+        "enrollment.funding",
+        "enrollment",
+        enrollment.id,
+        {"funding": [before, after], "cohort": [None, cohort.code]},
         branch_id=cohort.branch_id,
     )
     return _enrollment_out(enrollment, student)

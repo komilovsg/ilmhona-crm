@@ -17,13 +17,13 @@ from tests.reports import finished_cohort, world
 # name -> (url builder, budget: the most statements one request may run)
 ENDPOINTS: dict[str, tuple[Callable[[dict[str, str]], str], int]] = {
     "auth/me": (lambda w: "/api/v1/auth/me", 2),
-    "dashboard/overview": (lambda w: "/api/v1/dashboard/overview", 12),
+    "dashboard/overview": (lambda w: "/api/v1/dashboard/overview", 13),
     "graduates/students": (lambda w: "/api/v1/graduates/students", 9),
     "graduates/courses": (lambda w: "/api/v1/graduates/courses", 8),
     "students list": (lambda w: "/api/v1/students", 5),
     "payments list": (lambda w: "/api/v1/payments", 4),
     "payments debtors": (lambda w: "/api/v1/payments/debtors", 4),
-    "cohorts list": (lambda w: "/api/v1/cohorts", 7),
+    "cohorts list": (lambda w: "/api/v1/cohorts", 8),
     "attendance grid": (lambda w: f"/api/v1/cohorts/{w['cohort']}/attendance", 7),
     "me/today": (lambda w: "/api/v1/me/today", 6),
     "master-list": (lambda w: "/api/v1/master-list", 9),
