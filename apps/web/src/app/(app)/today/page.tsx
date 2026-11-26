@@ -10,11 +10,30 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { UnfilledPanel } from "@/components/UnfilledPanel";
 import { ExportButton } from "@/components/ExportButton";
+import { InstructorToday } from "@/components/today/InstructorToday";
+import { TodayTour } from "@/components/today/TodayTour";
 import { useToday } from "@/hooks/attendance";
+import { useMe } from "@/hooks/queries";
 import { markedLabel, markState } from "@/lib/attendance";
 import { dayTitle } from "@/lib/education";
 
 export default function TodayPage() {
+  const { data: me } = useMe();
+
+  if (me?.role.code === "instructor") {
+    return (
+      <>
+        <PageHeader actions={<ExportButton path="/api/v1/me/today/export" />} title="Сегодня" />
+        <InstructorToday />
+        <TodayTour userId={me.id} />
+      </>
+    );
+  }
+
+  return <StaffToday />;
+}
+
+function StaffToday() {
   const today = useToday();
 
   return (

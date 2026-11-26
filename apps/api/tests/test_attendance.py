@@ -680,3 +680,30 @@ async def test_grid_has_students_by_lessons_and_leaves_out_expelled(
     assert "enrolled_on" in first
     assert all(le["writable"] == (le["date"] <= str(today())) for le in grid["lessons"])
     _ = branch_id, body, uuid
+
+
+async def test_today_next_lesson_is_scoped_to_own_cohorts(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    """An empty day names the next lesson, and an instructor never gets another one's."""
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    t = today()
+    mine, _ = await past_cohort(admin, instructor_id=me)
+    other, _ = await past_cohort(admin, name="B")
+    for cohort, days in ((mine, 5), (other, 2)):  # the other one is sooner
+        r = await admin.post(
+            f"{C}/{cohort['id']}/lessons",
+            json={
+                "date": (t + timedelta(days=days)).isoformat(),
+                "start_time": "10:00",
+                "end_time": "11:00",
+            },
+        )
+        assert r.status_code == 201, r.text
+    nxt = (await ins.get("/api/v1/me/today")).json()["next_lesson"]
+    assert nxt["cohort_code"] == mine["code"]
+    assert nxt["date"] == (t + timedelta(days=5)).isoformat()
+    assert other["code"] not in str(nxt)
+    first = (await admin.get("/api/v1/me/today")).json()["next_lesson"]
+    assert first["cohort_code"] == other["code"]
