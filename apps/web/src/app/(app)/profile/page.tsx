@@ -189,10 +189,14 @@ export default function ProfilePage() {
       <PageHeader title="Профиль" />
       {me && (
         <div className="grid gap-5 md:grid-cols-2">
+          {me.role.code === "instructor" && (
+            <div className="md:col-span-2">
+              <TourReplay userId={me.id} />
+            </div>
+          )}
           <ProfileForm key={me.id} me={me} />
           <PasswordForm login={me.login} />
           <SessionsCard />
-          {me.role.code === "instructor" && <TourReplay userId={me.id} />}
         </div>
       )}
     </>
