@@ -80,7 +80,7 @@ function Toggle({
       aria-label={label}
       aria-pressed={active}
       className={clsx(
-        "flex h-12 w-12 items-center justify-center rounded-xl border-2 transition-colors disabled:opacity-60 sm:w-16",
+        "flex h-12 w-full items-center justify-center rounded-xl border-2 transition-colors disabled:opacity-60",
         active
           ? yes
             ? "border-success bg-success text-white"
@@ -144,15 +144,15 @@ function StudentRow({
 
   return (
     <li className="rounded-2xl bg-content1 p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3">
         <div className="min-w-0">
-          <div className="truncate text-base font-medium">
+          <div className="break-words text-base font-medium">
             <span className="mr-2 text-sm font-normal tabular-nums text-default-500">{n}.</span>
             {row.student_name}
           </div>
           <Indicator cell={cell} onRetry={() => onMark(present ?? true, reason, excused)} />
         </div>
-        <div className="flex shrink-0 gap-2" role="group" aria-label={`Отметка: ${row.student_name}`}>
+        <div className="grid grid-cols-3 gap-2" role="group" aria-label={`Отметка: ${row.student_name}`}>
           <Toggle
             active={present === true}
             disabled={!canMark || disabled}
