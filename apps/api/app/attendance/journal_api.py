@@ -483,6 +483,7 @@ async def import_apply(
             "lesson_id": c.date_plan.lesson.id,
             "enrollment_id": c.enrollment_id,
             "present": present,
+            "excused": c.kind == jr.EXCUSED,
             "reason": reason,
             "marked_by": p.id,
         }
@@ -508,7 +509,12 @@ async def import_apply(
                 .values(**v)
                 .on_conflict_do_update(
                     index_elements=[Attendance.lesson_id, Attendance.enrollment_id],
-                    set_={"present": v["present"], "reason": v["reason"], "marked_by": p.id},
+                    set_={
+                        "present": v["present"],
+                        "excused": v["excused"],
+                        "reason": v["reason"],
+                        "marked_by": p.id,
+                    },
                 )
             )
             overwritten += 1

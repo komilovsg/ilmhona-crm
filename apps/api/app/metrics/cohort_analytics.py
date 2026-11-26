@@ -193,22 +193,32 @@ async def cohort_analytics(
             .order_by(Student.full_name, Enrollment.id)
         )
     ).all()
+    # excused lessons are left out everywhere (not an absence, not in the denominator)
     marked: dict[tuple[uuid.UUID, uuid.UUID], bool] = {
         (lesson_id, enrollment_id): present
         for lesson_id, enrollment_id, present in (
             await db.execute(
                 select(Attendance.lesson_id, Attendance.enrollment_id, Attendance.present)
                 .join(Lesson, Lesson.id == Attendance.lesson_id)
-                .where(Lesson.cohort_id == cohort.id)
+                .where(Lesson.cohort_id == cohort.id, ~Attendance.excused)
             )
         ).all()
     }
+    excused = set(
+        (
+            await db.execute(
+                select(Attendance.lesson_id, Attendance.enrollment_id)
+                .join(Lesson, Lesson.id == Attendance.lesson_id)
+                .where(Lesson.cohort_id == cohort.id, Attendance.excused)
+            )
+        ).tuples()
+    )
     results = await enrollment_results(db, cohort.id, now=now)
 
     students: list[_Student] = []
     for e, s in rows:
         on = e.enrolled_at.astimezone(st.TZ).date()
-        mine = [le for le in held if le.lesson_date >= on]
+        mine = [le for le in held if le.lesson_date >= on and (le.id, e.id) not in excused]
         students.append(
             _Student(
                 e,
