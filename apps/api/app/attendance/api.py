@@ -13,7 +13,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
@@ -78,7 +78,7 @@ class Mark(Strict):
     reason: Reason | None = None  # only an absence has one
 
     @model_validator(mode="after")
-    def _excused_is_absence(self) -> "Mark":
+    def _excused_is_absence(self) -> Self:
         if self.excused and self.present:
             raise ValueError("excused mark cannot be present")
         return self
@@ -421,8 +421,9 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
 
 @router.get("/cohorts/{cohort_id}/attendance/export")
 async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
-    """The табель: one row per student, one column per lesson («П» present, «У» excused, «Н» absent with the
-    reason, empty = not marked), then the same held / present / unmarked / percent as the screen."""
+    """The табель: one row per student, one column per lesson («П» present, «У» excused,
+    «Н» absent with the reason, empty = not marked), then the same held / present / unmarked /
+    percent as the screen."""
     cohort = await _cohort(db, p, cohort_id)
     grid = await grid_of(db, cohort)
     check_cap(grid["students"])

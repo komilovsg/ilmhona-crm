@@ -14,8 +14,7 @@ down_revision = "0027"
 def upgrade() -> None:
     op.execute("ALTER TABLE attendance ADD COLUMN excused boolean NOT NULL DEFAULT false")
     op.execute(
-        "UPDATE attendance SET excused = true "
-        "WHERE NOT present AND reason = 'уважительная причина'"
+        "UPDATE attendance SET excused = true WHERE NOT present AND reason = 'уважительная причина'"
     )
     op.execute(
         "ALTER TABLE attendance ADD CONSTRAINT attendance_excused_absent_check "

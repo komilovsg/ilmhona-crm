@@ -4,8 +4,9 @@
   has not happened yet, or was cancelled, is neither a presence nor an absence.
 - A student's lessons start at their enrollment: held lessons dated on or after the local date of
   `enrolled_at`, minus the ones marked «уважительная» (excused is not an absence: it leaves the
-  denominator, so `held` here is the effective count). Attendance % = present / held. `unmarked` = held lessons without a mark, shown
-  next to the percentage so «100 % of 1 marked lesson out of 13» can never pass as 100 % (#12).
+  denominator, so `held` here is the effective count). Attendance % = present / held.
+  `unmarked` = held lessons without a mark, shown next to the percentage so
+  «100 % of 1 marked lesson out of 13» can never pass as 100 % (#12).
 - Points, totals and pass come from the cohort's grading scheme (`app.metrics.grading`); the
   default academy standard is attendance 20 + homework 40 + final 40, pass 70. A passed total
   graduates a student when the cohort closes.
