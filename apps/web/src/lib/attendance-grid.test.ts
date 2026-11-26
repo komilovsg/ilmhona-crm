@@ -24,9 +24,10 @@ test("default month: today's, else latest held, else all", () => {
 });
 
 test("keys 1 and 2 map to was / was not, others to nothing", () => {
-  assert.equal(keyMark("1"), true);
-  assert.equal(keyMark("2"), false);
-  assert.equal(keyMark("3"), undefined);
+  assert.equal(keyMark("1"), "present");
+  assert.equal(keyMark("2"), "absent");
+  assert.equal(keyMark("3"), "excused");
+  assert.equal(keyMark("4"), undefined);
   assert.equal(keyMark("Enter"), undefined);
 });
 

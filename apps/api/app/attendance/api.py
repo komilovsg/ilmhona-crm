@@ -404,6 +404,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
         ],
         "students": [
             {
+                "n": n,
                 "enrollment_id": e.id,
                 "student_id": s.id,
                 "student_name": s.full_name,
@@ -413,7 +414,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "marks": cells.get(e.id, {}),
                 **stats[e.id],
             }
-            for e, s in rows
+            for n, (e, s) in enumerate(rows, 1)
         ],
     }
 
@@ -440,6 +441,7 @@ async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         return value
 
     columns: list[Col[dict[str, Any]]] = [
+        Col("№", lambda s: s["n"], "int"),
         Col("Студент", lambda s: s["student_name"]),
         Col("Статус", lambda s: s["status"]),
         Col("Проведено уроков", lambda s: s["held"], "int"),

@@ -255,6 +255,7 @@ export type MarkRow = {
   status: string;
   /** null = not marked yet */
   present: boolean | null;
+  excused?: boolean;
   reason: string | null;
   marked_at: string | null;
   marked_by: string | null;
@@ -283,9 +284,11 @@ export type LessonAttendance = {
 };
 
 export type AttendanceStats = {
+  /** lessons held minus the excused ones */
   held: number;
   present: number;
   absent: number;
+  excused: number;
   unmarked: number;
   /** present / held, null while nothing is held yet */
   percent: number | null;
@@ -302,7 +305,7 @@ export type GridStudent = AttendanceStats & {
   status: string;
   enrolled_at: string;
   enrolled_on: string;
-  marks: Record<string, { present: boolean; reason: string | null }>;
+  marks: Record<string, { present: boolean; excused?: boolean; reason: string | null }>;
 };
 
 export type AttendanceGrid = { cohort_id: string; cohort_code: string; lessons: GridLessonCol[]; students: GridStudent[] };

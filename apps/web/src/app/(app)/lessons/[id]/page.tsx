@@ -108,12 +108,14 @@ function Toggle({
 
 function StudentRow({
   row,
+  n,
   cell,
   canMark,
   disabled,
   onMark,
 }: {
   row: MarkRow;
+  n: number;
   cell: Cell | undefined;
   canMark: boolean;
   disabled: boolean;
@@ -134,7 +136,11 @@ function StudentRow({
     <li className="rounded-2xl bg-content1 p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-base font-medium">{row.student_name}</div>
+          <div className="truncate text-base font-medium">
+            <span className="mr-2 text-sm font-normal tabular-nums text-default-500">{n}.</span>
+            {row.student_name}
+          </div>
+          {row.excused && !cell && <div className="text-xs text-warning-700 dark:text-warning">Уважительная причина</div>}
           <Indicator cell={cell} onRetry={() => onMark(present ?? true, reason)} />
         </div>
         <div className="flex shrink-0 gap-2" role="group" aria-label={`Отметка: ${row.student_name}`}>
@@ -352,9 +358,10 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">На этом уроке нет студентов.</p>
       ) : (
         <ul data-rows className="space-y-2">
-          {data.students.map((s) => (
+          {data.students.map((s, i) => (
             <StudentRow
               key={s.enrollment_id}
+              n={i + 1}
               canMark={canMark}
               cell={cells[s.enrollment_id]}
               disabled={disabled}
