@@ -328,6 +328,8 @@ class Attendance(Base):
         PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
     )
     present: Mapped[bool] = mapped_column(Boolean)
+    # «уважительная»: an absence that is left out of the held count (never together with present)
+    excused: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     reason: Mapped[str | None] = mapped_column(Text)
     marked_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")

@@ -28,8 +28,10 @@ import {
   markLabel,
   monthLabel,
   monthsOf,
+  statusOf,
   withMark,
   type Mark,
+  type Status,
 } from "@/lib/attendance-grid";
 import { useBrowserValue } from "@/lib/client-store";
 import { dayMonth, dayTitle, fullDate, todayIso } from "@/lib/education";
@@ -54,6 +56,17 @@ function Cell({ student, lesson }: { student: GridStudent; lesson: AttendanceGri
     return (
       <span aria-label="присутствовал" className={clsx(base, "bg-success/15 text-success-700 dark:text-success")} role="img">
         <Icon name="check" size={16} strokeWidth={2.6} />
+      </span>
+    );
+  if (mark?.excused)
+    return (
+      <span
+        aria-label={mark.reason ? `уважительная: ${mark.reason}` : "уважительная"}
+        className={clsx(base, "bg-warning/20 text-warning-700 dark:text-warning")}
+        role="img"
+        title={mark.reason ?? "уважительная"}
+      >
+        У
       </span>
     );
   if (mark?.present === false)
@@ -98,7 +111,7 @@ function MarkCell({
   row: number;
   col: number;
   onOpen: (el: HTMLButtonElement) => void;
-  onMark: (present: boolean) => void;
+  onMark: (status: Status) => void;
 }) {
   const mark = student.marks[lesson.id];
 
@@ -138,13 +151,14 @@ function MarkCell({
       aria-busy={busy}
       aria-haspopup="dialog"
       data-cell={`${row}:${col}`}
-      aria-label={`${student.student_name}, ${fullDate(lesson.date)}: ${markLabel(mark?.present)}`}
+      aria-label={`${student.student_name}, ${fullDate(lesson.date)}: ${markLabel(statusOf(mark))}`}
       className={clsx(
         CELL,
         "transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         busy && "opacity-60",
         mark?.present === true && "bg-success/15 text-success-700 dark:text-success",
-        mark?.present === false && "bg-danger/15 text-danger",
+        mark?.present === false && !mark.excused && "bg-danger/15 text-danger",
+        mark?.excused && "bg-warning/20 text-warning-700 dark:text-warning",
         mark === undefined && "border border-dashed border-default-400 text-default-400 hover:bg-default-100",
       )}
       title={mark?.present === false ? (mark.reason ?? undefined) : undefined}
@@ -153,7 +167,8 @@ function MarkCell({
       onKeyDown={onKeyDown}
     >
       {mark?.present === true && <Icon name="check" size={16} strokeWidth={2.6} />}
-      {mark?.present === false && <Icon name="x" size={16} strokeWidth={2.6} />}
+      {mark?.present === false && !mark.excused && <Icon name="x" size={16} strokeWidth={2.6} />}
+      {mark?.excused && "У"}
       {mark === undefined && "·"}
     </button>
   );
@@ -281,7 +296,9 @@ function Grid({
         : old,
     );
 
-  const setMark = async (student: GridStudent, lesson: Col, present: boolean) => {
+  const setMark = async (student: GridStudent, lesson: Col, status: Status) => {
+    const present = status === "present";
+    const excused = status === "excused";
     const key = `${lesson.id}:${student.enrollment_id}`;
 
     if (inflight.current.has(key)) return;
@@ -290,11 +307,11 @@ function Grid({
     const prev = student.marks[lesson.id];
 
     await queryClient.cancelQueries({ queryKey: gridKey });
-    patch(student.enrollment_id, lesson.id, { present, reason: null });
+    patch(student.enrollment_id, lesson.id, { present, excused, reason: null });
     try {
       await api(`/api/v1/lessons/${lesson.id}/attendance/${student.enrollment_id}`, {
         method: "PUT",
-        body: { present, reason: null },
+        body: { present, excused, reason: null },
       });
     } catch (e) {
       patch(student.enrollment_id, lesson.id, prev);
@@ -308,19 +325,19 @@ function Grid({
 
   const menuStudent = menu && students.find((s) => s.enrollment_id === menu.enrollmentId);
   const menuLesson = menu && grid.lessons.find((l) => l.id === menu.lessonId);
-  const menuCurrent = menuStudent && menuLesson ? menuStudent.marks[menuLesson.id]?.present : undefined;
+  const menuCurrent = menuStudent && menuLesson ? statusOf(menuStudent.marks[menuLesson.id]) : undefined;
 
   const closeMenu = () => {
     menu?.el.focus();
     setMenu(null);
   };
 
-  const choose = (present: boolean) => {
+  const choose = (status: Status) => {
     if (!menuStudent || !menuLesson) return;
     const [s, l] = [menuStudent, menuLesson];
 
     closeMenu();
-    if (s.marks[l.id]?.present !== present) void setMark(s, l, present);
+    if (statusOf(s.marks[l.id]) !== status) void setMark(s, l, status);
   };
 
   const allPresent = async (lesson: Col) => {
@@ -350,7 +367,7 @@ function Grid({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-default-500">
           <b className="text-default-700">%</b> считается от проведённых уроков, пока студент в потоке; неотмеченные
-          уроки показаны отдельно.
+          уроки показаны отдельно. Уважительная причина (У) не считается пропуском и не входит в проведённые.
         </p>
         <div className="flex flex-wrap gap-2">
           {onImport && <ImportButton onPress={onImport} />}
@@ -360,7 +377,7 @@ function Grid({
 
       {marking && (
         <p className="mb-3 hidden text-xs text-default-500 md:block">
-          Нажмите на ячейку и выберите «Был» или «Не был». «Все ✓» в шапке урока — отметить всех присутствующими.
+          Нажмите на ячейку и выберите «Был», «Не был» или «Уважительная» (клавиши 1, 2, 3). «Все ✓» в шапке урока — отметить всех присутствующими.
         </p>
       )}
 
@@ -388,7 +405,8 @@ function Grid({
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
           <thead className="text-xs text-default-500">
             <tr>
-              <th className="sticky left-0 z-10 min-w-48 border-b border-divider bg-content1 px-4 py-3 font-medium">Студент</th>
+              <th className="sticky left-0 z-10 w-10 min-w-10 border-b border-divider bg-content1 px-2 py-3 text-center font-medium">№</th>
+              <th className="sticky left-10 z-10 min-w-48 border-b border-divider bg-content1 px-4 py-3 font-medium">Студент</th>
               <th className="min-w-28 whitespace-nowrap border-b border-divider px-3 py-3 text-right font-medium">Посещ.</th>
               <th className="min-w-40 whitespace-nowrap border-b border-divider px-3 py-3 font-medium">Не отмечено</th>
               {lessons.map((l) => (
@@ -436,8 +454,11 @@ function Grid({
                 className={clsx("group", s.enrollment_id === focusEnrollment && "outline outline-2 -outline-offset-2 outline-primary")}
                 data-enrollment={s.enrollment_id}
               >
+                <td className="sticky left-0 z-10 w-10 min-w-10 border-b border-divider bg-content1 px-2 py-2 text-center text-xs tabular-nums text-default-500 group-hover:bg-default-50">
+                  {row + 1}
+                </td>
                 <th
-                  className="sticky left-0 z-10 border-b border-divider bg-content1 px-4 py-2 font-medium group-hover:bg-default-50"
+                  className="sticky left-10 z-10 border-b border-divider bg-content1 px-4 py-2 font-medium group-hover:bg-default-50"
                   scope="row"
                 >
                   <div className="truncate">{s.student_name}</div>
@@ -447,6 +468,7 @@ function Grid({
                   <div className="font-medium">{percentLabel(s.percent)}</div>
                   <div className="text-xs text-default-500">
                     {s.present} из {s.held}
+                    {s.excused > 0 && <span className="ml-1 text-warning-700 dark:text-warning">· ув. {s.excused}</span>}
                   </div>
                 </td>
                 <td className="min-w-40 whitespace-nowrap border-b border-divider px-3 py-2">
@@ -487,15 +509,15 @@ function Grid({
           {/* the anchor is the clicked cell (triggerRef); Popover wants a trigger slot first */}
           <></>
           <PopoverContent>
-            <div aria-label={`${menuStudent.student_name}, ${fullDate(menuLesson.date)}`} className="flex gap-2 p-2" role="group">
+            <div aria-label={`${menuStudent.student_name}, ${fullDate(menuLesson.date)}`} className="flex flex-wrap gap-2 p-2" role="group">
               <Button
                 aria-label="Был"
                 className="h-11 min-w-28 text-base font-medium"
                 color="success"
                 data-autofocus
                 startContent={<Icon name="check" size={18} strokeWidth={2.6} />}
-                variant={menuCurrent === true ? "solid" : "flat"}
-                onPress={() => choose(true)}
+                variant={menuCurrent === "present" ? "solid" : "flat"}
+                onPress={() => choose("present")}
               >
                 Был
               </Button>
@@ -504,10 +526,20 @@ function Grid({
                 className="h-11 min-w-28 text-base font-medium"
                 color="danger"
                 startContent={<Icon name="x" size={18} strokeWidth={2.6} />}
-                variant={menuCurrent === false ? "solid" : "flat"}
-                onPress={() => choose(false)}
+                variant={menuCurrent === "absent" ? "solid" : "flat"}
+                onPress={() => choose("absent")}
               >
                 Не был
+              </Button>
+              <Button
+                aria-label="Уважительная"
+                className="h-11 min-w-28 text-base font-medium"
+                color="warning"
+                startContent={<span aria-hidden className="font-semibold">У</span>}
+                variant={menuCurrent === "excused" ? "solid" : "flat"}
+                onPress={() => choose("excused")}
+              >
+                Уважительная
               </Button>
             </div>
           </PopoverContent>

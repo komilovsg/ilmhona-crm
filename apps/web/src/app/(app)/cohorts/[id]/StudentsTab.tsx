@@ -286,6 +286,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
+                  <th className="w-10 px-2 py-3 text-center font-medium">№</th>
                   <th className="px-4 py-3 font-medium">Студент</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Статус</th>
@@ -304,12 +305,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   <Fragment key={r.id}>
                   {i === firstExpelled && (
                     <tr className="border-y-2 border-divider bg-default-50 text-xs text-default-500">
-                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 7 : 4} scope="colgroup">
+                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 8 : 5} scope="colgroup">
                         {expelledTitle}
                       </th>
                     </tr>
                   )}
                   <tr className={clsx("border-b border-divider last:border-0 hover:bg-default-50", r.status === EXPELLED && "text-default-500")}>
+                    <td className="px-2 py-3 text-center text-xs tabular-nums text-default-500">{i + 1}</td>
                     <td className="px-4 py-3 font-medium">
                       <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
                         {r.student_name}
@@ -341,6 +343,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
               <li className={clsx("rounded-2xl bg-content1 p-4", r.status === EXPELLED && "text-default-500")}>
                 <div className="flex items-start justify-between gap-2">
                   <Link className="min-w-0 truncate font-medium" href={`/students/${r.student_id}`}>
+                    <span className="mr-2 text-xs font-normal tabular-nums text-default-500">{i + 1}.</span>
                     {r.student_name}
                   </Link>
                   {trash(r)}

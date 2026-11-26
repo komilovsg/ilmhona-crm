@@ -13,7 +13,7 @@ Section `donors` in the rights matrix.
 from alembic import op
 
 revision = "0031"
-down_revision = "0028"
+down_revision = "0029"
 
 OLD_SECTIONS = (
     "dashboard", "leads", "students", "cohorts", "attendance", "payments", "rooms", "graduates",
