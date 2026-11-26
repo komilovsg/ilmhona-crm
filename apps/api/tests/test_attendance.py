@@ -675,7 +675,7 @@ async def test_grid_has_students_by_lessons_and_leaves_out_expelled(
     assert [le["id"] for le in grid["lessons"]] == lessons
     assert [s["student_name"] for s in grid["students"]] == ["Алиев", "Бобоев", "Вафоев"]
     first = grid["students"][0]
-    assert first["marks"] == {lessons[2]: {"present": False, "reason": "работа"}}
+    assert first["marks"] == {lessons[2]: {"present": False, "excused": False, "reason": "работа"}}
     assert (first["held"], first["unmarked"]) == (9, 8)
     assert "enrolled_on" in first
     assert all(le["writable"] == (le["date"] <= str(today())) for le in grid["lessons"])

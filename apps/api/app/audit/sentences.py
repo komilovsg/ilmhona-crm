@@ -621,6 +621,10 @@ def sentence(
         student = _pair(e.diff.get("student"))[1]
         old, new = _pair(e.diff.get("present"))
         _, reason = _pair(e.diff.get("reason"))
+        _, excused = _pair(e.diff.get("excused"))
+        if excused:
+            tail = f", причина: {reason}" if reason else ""
+            return f"{who}: отметил уважительную причину {student} ({code}, {day}){tail}"
         head = (
             f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
         )

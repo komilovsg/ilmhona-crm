@@ -1044,8 +1044,21 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
 
 @router.post("/cohorts/{cohort_id}/enrollments", status_code=201)
 async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> dict[str, Any]:
-    """A manager enrolls an existing student or creates one; an instructor only creates a new
-    student, and only in their own cohort (another one is 404 via `_load`)."""
+    return await enroll_into(db, p, cohort_id, body)
+
+
+async def enroll_into(
+    db: AsyncSession,
+    p: Principal,
+    cohort_id: uuid.UUID,
+    body: EnrollIn,
+    *,
+    enrolled_on: date | None = None,
+) -> dict[str, Any]:
+    """The one enrollment path (cohort page and journal import). A manager enrolls an existing
+    student or creates one; an instructor only creates a new student, and only in their own
+    cohort (another one is 404 via `_load`). `enrolled_on` back-dates the enrollment to a past
+    day (the first lesson the journal has a mark for), so earlier marks are not before it."""
     if is_instructor(p):
         if body.student_id is not None:
             raise DomainError(FORBIDDEN, section="students", level="view")
@@ -1087,6 +1100,8 @@ async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> d
             raise DomainError(STUDENT_BRANCH_MISMATCH)
         student = found
     enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
+    if enrolled_on is not None and enrolled_on < st.today():
+        enrollment.enrolled_at = local_dt(max(enrolled_on, cohort.start_date), time(0, 0))
     db.add(enrollment)
     await db.flush()  # unique(cohort_id, student_id): a second enrollment is a 409 (#4)
     await record(
