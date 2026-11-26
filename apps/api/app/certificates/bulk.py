@@ -32,8 +32,14 @@ from app.certificates.errors import (
     CERT_BULK_EMPTY,
     CERT_BULK_FILE,
 )
-from app.certificates.fields import Context, apply_settings, image_refs, load_settings, split_name
-from app.certificates.fields import snapshot_of
+from app.certificates.fields import (
+    Context,
+    apply_settings,
+    image_refs,
+    load_settings,
+    snapshot_of,
+    split_name,
+)
 from app.certificates.issuing import (
     PLACEHOLDER_NUMBER,
     AssetCache,
@@ -120,7 +126,7 @@ def _header_key(value: Any) -> str:
     return "".join(str(value or "").lower().replace("*", "").split())
 
 
-def _parse_date(value: Any) -> date | None:
+def _parse_date(value: Any) -> date:
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
@@ -185,13 +191,14 @@ def _row_of(number: int, item: dict[str, Any], today: date) -> Row:
         row.issued = today
     else:
         try:
-            row.issued = _parse_date(raw_date)
+            parsed = _parse_date(raw_date)
         except ValueError:
             row.fail("Дата выдачи не распознана: нужен формат ДД.ММ.ГГГГ")
         else:
-            if row.issued > today:
+            row.issued = parsed
+            if parsed > today:
                 row.fail("Дата выдачи в будущем")
-            elif row.issued < EARLIEST:
+            elif parsed < EARLIEST:
                 row.fail("Дата выдачи слишком ранняя")
     raw_gender, _ = _clean(item.get("gender"), 20)
     if raw_gender:

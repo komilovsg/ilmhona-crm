@@ -242,7 +242,7 @@ async def test_cells_are_plain_text_and_a_name_that_does_not_fit_is_a_reason(
     branch = str((await sql("SELECT id FROM branch LIMIT 1"))[0][0])
     data = sheet(
         ["@Иванов Иван", "-cmd|' /C calc'!A0", None, None, None],
-        ["=HYPERLINK(\"http://x\")", "Веб", None, None, None],  # a formula is never evaluated
+        ['=HYPERLINK("http://x")', "Веб", None, None, None],  # a formula is never evaluated
         ["А" * 151, "Веб", None, None, None],
     )
     r = await post(admin, "issue", data, tid, branch_id=branch)

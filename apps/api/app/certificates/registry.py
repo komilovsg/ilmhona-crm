@@ -22,12 +22,12 @@ from app.auth.deps import Principal, require, require_csrf_header
 from app.certificates.api import file_name, pick_template
 from app.certificates.errors import (
     CERT_ALREADY_ISSUED,
+    CERT_BATCH_FIXED,
     CERT_COMMENT_REQUIRED,
     CERT_NOT_READY,
     CERT_NOT_VALID,
     COHORT_NOT_FINISHED,
 )
-from app.certificates.errors import CERT_BATCH_FIXED
 from app.certificates.fields import load_settings
 from app.certificates.issuing import (
     FIX_TEXTS,
@@ -350,15 +350,14 @@ async def _lock(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, Enrol
 
 
 async def _already_issued(db: AsyncSession, ids: list[uuid.UUID]) -> list[uuid.UUID]:
-    return list(
-        (
-            await db.execute(
-                select(Certificate.enrollment_id).where(
-                    Certificate.enrollment_id.in_(ids), Certificate.status == "valid"
-                )
+    found = (
+        await db.execute(
+            select(Certificate.enrollment_id).where(
+                Certificate.enrollment_id.in_(ids), Certificate.status == "valid"
             )
-        ).scalars()
-    )
+        )
+    ).scalars()
+    return [e for e in found if e is not None]
 
 
 @router.post("/cohorts/{cohort_id}/certificates/issue", status_code=201)
@@ -457,7 +456,7 @@ async def issue_one(enrollment_id: uuid.UUID, body: IssueOne, p: Change, db: DB)
 async def _locked_valid(
     db: AsyncSession, p: Principal, certificate_id: uuid.UUID
 ) -> tuple[Certificate, Enrollment | None]:
-    """The certificate and its enrollment (none for a batch one), locked (enrollment first, like the issue does)."""
+    """The certificate and its enrollment (none for a batch one), locked, the enrollment first."""
     cert = await db.get(Certificate, certificate_id)
     if cert is None:
         raise DomainError(NOT_FOUND)
@@ -657,7 +656,8 @@ async def registry(
             filters={
                 "status": status, "course_id": course_id, "cohort_id": cohort_id,
                 "instructor_id": instructor_id, "branch_id": branch_id,
-                "template_id": template_id, "batch_id": batch_id, "date_from": date_from, "date_to": date_to, "q": q,
+                "template_id": template_id, "batch_id": batch_id, "date_from": date_from,
+                "date_to": date_to, "q": q,
             },
         )  # fmt: skip
     total = (
