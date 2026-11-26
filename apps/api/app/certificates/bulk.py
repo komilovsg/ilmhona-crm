@@ -52,7 +52,7 @@ from app.education.scope import is_instructor, writer
 from app.export import XLSX
 from app.graduates.numbering import new_number
 from app.leads.hygiene import normalise_phone
-from app.models import Branch, Certificate, Student
+from app.models import Branch, Certificate, CertTemplate, CertTemplateVersion, Student
 
 router = APIRouter(
     prefix="/api/v1", tags=["certificates"], dependencies=[Depends(require_csrf_header)]
@@ -342,6 +342,25 @@ def _item(r: Row) -> dict[str, Any]:
 
 def _counts(rows: list[Row]) -> dict[str, int]:
     return {s: sum(1 for r in rows if r.status == s) for s in ("ok", "error", "duplicate")}
+
+
+@router.get("/certificates/bulk/templates")
+async def templates(p: Change, db: DB) -> dict[str, Any]:
+    """Templates the issuer may choose from (active, with a published version): id, name, language.
+    The issue right is enough; the template editor's right is not needed."""
+    rows = (
+        await db.execute(
+            select(CertTemplate.id, CertTemplate.name, CertTemplate.lang)
+            .where(
+                CertTemplate.status == "active",
+                select(CertTemplateVersion.id)
+                .where(CertTemplateVersion.template_id == CertTemplate.id)
+                .exists(),
+            )
+            .order_by(CertTemplate.name)
+        )
+    ).all()
+    return {"items": [{"id": r.id, "name": r.name, "lang": r.lang} for r in rows]}
 
 
 @router.get("/certificates/bulk/template")

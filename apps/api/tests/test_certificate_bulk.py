@@ -50,6 +50,17 @@ async def count_certs() -> int:
     return int((await sql("SELECT count(*) FROM certificate"))[0][0])
 
 
+async def test_issuer_lists_templates_without_the_editor_right(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    tid = await make_template()
+    issuer = await login_as("iss", await make_role("Выдача", {"certificates": "change"}))
+    r = await issuer.get(f"{BULK}/templates")
+    assert r.status_code == 200 and [i["id"] for i in r.json()["items"]] == [tid]
+    view = await login_as("vw", await make_role("Вид", {"certificates": "view"}))
+    assert (await view.get(f"{BULK}/templates")).status_code == 403
+
+
 async def test_template_has_russian_headers(admin: httpx.AsyncClient) -> None:
     r = await admin.get(f"{BULK}/template")
     assert r.status_code == 200
