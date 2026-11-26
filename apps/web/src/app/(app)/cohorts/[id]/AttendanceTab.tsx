@@ -535,7 +535,7 @@ function Grid({
                 aria-label="Уважительная"
                 className="h-11 min-w-28 text-base font-medium"
                 color="warning"
-                startContent={<Icon name="file-check" size={18} strokeWidth={2.4} />}
+                startContent={<Icon name="check" size={18} strokeWidth={2.6} />}
                 variant={menuCurrent === "excused" ? "solid" : "flat"}
                 onPress={() => choose("excused")}
               >
