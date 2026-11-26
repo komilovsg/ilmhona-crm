@@ -3,8 +3,10 @@
 - Held lesson (#12) = not cancelled and already started. Only held lessons count; a lesson that
   has not happened yet, or was cancelled, is neither a presence nor an absence.
 - A student's lessons start at their enrollment: held lessons dated on or after the local date of
-  `enrolled_at`. Attendance % = present / held. `unmarked` = held lessons without a mark, shown
-  next to the percentage so «100 % of 1 marked lesson out of 13» can never pass as 100 % (#12).
+  `enrolled_at`, minus the ones marked «уважительная» (excused is not an absence: it leaves the
+  denominator, so `held` here is the effective count). Attendance % = present / held.
+  `unmarked` = held lessons without a mark, shown next to the percentage so
+  «100 % of 1 marked lesson out of 13» can never pass as 100 % (#12).
 - Points, totals and pass come from the cohort's grading scheme (`app.metrics.grading`); the
   default academy standard is attendance 20 + homework 40 + final 40, pass 70. A passed total
   graduates a student when the cohort closes.
@@ -57,9 +59,11 @@ def enrolled_by(lesson_date: Any = None) -> ColumnElement[bool]:
     )
 
 
-def stats_of(held: int, present: int, marked: int) -> dict[str, Any]:
+def stats_of(held: int, present: int, marked: int, excused: int = 0) -> dict[str, Any]:
+    """`held` / `marked` already leave the excused lessons out."""
     return {
         "held": held,
+        "excused": excused,
         "present": present,
         "absent": marked - present,
         "unmarked": held - marked,
@@ -81,9 +85,10 @@ async def enrollment_attendance(
     query = (
         select(
             Enrollment.id,
-            func.count(Lesson.id),
-            func.count(Attendance.lesson_id),
+            func.count(Lesson.id).filter(Attendance.excused.is_not(True)),
+            func.count(Attendance.lesson_id).filter(Attendance.excused.is_(False)),
             func.count(Attendance.lesson_id).filter(Attendance.present),
+            func.count(Attendance.lesson_id).filter(Attendance.excused),
         )
         .select_from(Enrollment)
         .outerjoin(Lesson, held)
@@ -98,7 +103,7 @@ async def enrollment_attendance(
     if enrollment_ids is not None:
         query = query.where(Enrollment.id.in_(enrollment_ids))
     rows = await db.execute(query)
-    return {i: stats_of(h, p, m) for i, h, m, p in rows.all()}
+    return {i: stats_of(h, p, m, x) for i, h, m, p, x in rows.all()}
 
 
 async def enrollment_results(

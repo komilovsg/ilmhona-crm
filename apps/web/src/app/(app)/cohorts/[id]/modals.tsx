@@ -146,7 +146,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const found = useQuery({
     queryKey: ["students", "pick", term],
-    queryFn: () => api<Paged<StudentRow>>("/api/v1/students", { params: { q: term, page_size: "8" } }),
+    queryFn: () => api<Paged<StudentRow>>("/api/v1/students", { params: { q: term, page_size: "20" } }),
     enabled: mode === "existing" && canSearch && term.length >= 2,
   });
 
