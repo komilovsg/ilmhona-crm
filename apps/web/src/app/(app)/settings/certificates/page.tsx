@@ -19,7 +19,7 @@ export default function CertificatesSettingsPage() {
   return (
     <>
       <p className="mb-1 text-sm text-default-500">Настройки</p>
-      <PageHeader title="Сертификаты" />
+      <PageHeader title="Шаблоны сертификатов" />
       <Segmented
         className="mb-5"
         label="Раздел"
