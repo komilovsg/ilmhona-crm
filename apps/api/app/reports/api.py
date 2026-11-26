@@ -101,13 +101,20 @@ async def dashboard_by_month(
 MONTH_COLUMNS: list[Col[dict[str, Any]]] = [
     Col("Месяц", lambda r: r["month"], "date"),
     Col("Доход", lambda r: r["income"], "money"),
+    Col("Скидки", lambda r: r["discounts"], "money"),
     Col("Зарплата", lambda r: r["payroll"], "money"),
     Col("Реклама", lambda r: r["ads"], "money"),
     Col("Прибыль", lambda r: r["profit"], "money"),
     Col("Новых студентов", lambda r: r["new_students"], "int"),
     Col("Лидов", lambda r: r["leads"], "int"),
 ]
-MONTH_MONEY = {"Доход": "income", "Зарплата": "payroll", "Реклама": "ads", "Прибыль": "profit"}
+MONTH_MONEY = {
+    "Доход": "income",
+    "Скидки": "discounts",
+    "Зарплата": "payroll",
+    "Реклама": "ads",
+    "Прибыль": "profit",
+}
 
 
 @router.get("/dashboard/by-month/export")

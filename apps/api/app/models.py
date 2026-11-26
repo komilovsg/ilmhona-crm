@@ -388,6 +388,9 @@ class Payment(Versioned, Legacy, Base):
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(Text)
+    # a discount of the month's price (1–100 %) and what it takes off, computed by the server
+    discount_percent: Mapped[int | None] = mapped_column(SmallInteger)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
     idempotency_key: Mapped[UUID] = mapped_column(PG_UUID, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 

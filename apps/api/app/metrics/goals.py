@@ -60,8 +60,9 @@ REACHED, ON_TRACK, BEHIND, OVERDUE = "достигнута", "по график�
 async def collection_month(
     db: AsyncSession, cohort_where: list[ColumnElement[bool]], on: date | None = None
 ) -> tuple[Decimal, Decimal]:
-    """(collected, expected) of the month of `on` (today): expected = the month's price for every
-    enrollment that owes it, collected = the confirmed part of it, capped at the price."""
+    """(collected, expected) of the month of `on` (today): expected = the month's price less its
+    confirmed discount for every enrollment that owes it, collected = the confirmed money of it,
+    capped at that."""
     on = on or today()
     rows = (
         await db.execute(
@@ -85,8 +86,9 @@ async def collection_month(
         info = next((m for m in by[eid]["month_states"] if m["month_no"] == month_no), None)
         if info is None or not info["started"]:
             continue
-        expected += price
-        collected += min(info["confirmed"], price)
+        owed = max(price - info["confirmed_discount"], ZERO)
+        expected += owed
+        collected += min(info["confirmed"] - info["confirmed_discount"], owed)
     return collected, expected
 
 
