@@ -16,6 +16,7 @@ import { messageOf, uploadCsv } from "@/lib/api";
 import { fullDate } from "@/lib/education";
 import { dateStatusLabel, marksToWrite, resultText, skippedChips, type JournalPreview, type JournalResult } from "@/lib/journal-import";
 import { useSubmit } from "@/lib/submit";
+import { JournalUnmatched } from "./JournalUnmatched";
 import { notify } from "@/lib/toast";
 
 const MAX_BYTES = 2 * 1024 * 1024;
@@ -217,17 +218,12 @@ export function ImportJournal({ cohortId, onClose }: { cohortId: string; onClose
             </div>
 
             {preview.unmatched.length > 0 && (
-              <List title={`Не нашли в потоке: ${preview.unmatched.length}`}>
-                {preview.unmatched.map((u) => (
-                  <li key={u.line} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                    <span className={u.struck ? "line-through" : undefined}>{u.name}</span>
-                    <span className="text-xs text-default-500">
-                      {u.struck && "вычеркнут · "}
-                      {u.candidates.length > 0 ? `похожи: ${u.candidates.join(", ")}` : `отметок: ${u.marks}`}
-                    </span>
-                  </li>
-                ))}
-              </List>
+              <JournalUnmatched
+                canEnroll={preview.can_enroll}
+                cohortId={cohortId}
+                rows={preview.unmatched}
+                onChanged={() => again(settings)}
+              />
             )}
             {preview.missing.length > 0 && (
               <List title={`В потоке, но нет в файле: ${preview.missing.length}`}>
