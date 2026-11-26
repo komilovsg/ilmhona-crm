@@ -204,15 +204,16 @@ async def cohort_analytics(
             )
         ).all()
     }
-    excused = set(
-        (
+    excused = {
+        (r[0], r[1])
+        for r in (
             await db.execute(
                 select(Attendance.lesson_id, Attendance.enrollment_id)
                 .join(Lesson, Lesson.id == Attendance.lesson_id)
                 .where(Lesson.cohort_id == cohort.id, Attendance.excused)
             )
-        ).tuples()
-    )
+        ).all()
+    }
     results = await enrollment_results(db, cohort.id, now=now)
 
     students: list[_Student] = []
