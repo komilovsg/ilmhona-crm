@@ -24,6 +24,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -33,9 +34,10 @@ from app.attendance import journal as jr
 from app.audit.log import record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts import status as st
+from app.cohorts.api import EnrollIn, NewStudent, enroll_into
 from app.cohorts.schedule import check_instructor_free, check_room_free, local_dt
 from app.core.db import DB
-from app.core.errors import NOT_FOUND, DomainError
+from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.education.errors import COHORT_CLOSED, ROOM_BUSY
 from app.education.scope import check_cohort_visible, is_instructor
 from app.export import neutralise
@@ -51,6 +53,7 @@ Change = Annotated[Principal, require("attendance", "change")]
 
 MAX_CELLS = 4000  # cells listed in the preview answer; the counts always cover all of them
 MAX_DIFFER = 300
+MAX_POOL = 5000  # students of the branch searched for a journal name
 # a lesson the database refuses at insert (a race past the plan's check, or the instructor
 # double-booking rule): that day is skipped with the reason instead of failing the import
 REFUSED = {
@@ -149,8 +152,25 @@ def may_add_lessons(p: Principal) -> bool:
     return allows(p.level("cohorts"), "change") and not is_instructor(p)
 
 
+def may_enroll(p: Principal) -> bool:
+    """Who writes a journal's missing names into the cohort: the rule of the cohort page's
+    enrollment of an existing student (cohorts `change`), never an instructor (owner rule)."""
+    return allows(p.level("cohorts"), "change") and not is_instructor(p)
+
+
+def _suggest_all(names: list[str], people: list[jr.Person]) -> list[list[tuple[Any, str, str]]]:
+    return [jr.suggest(n, people) for n in names]
+
+
 async def build_plan(
-    db: AsyncSession, cohort: Cohort, data: bytes, opts: Options, *, may_add: bool
+    db: AsyncSession,
+    cohort: Cohort,
+    data: bytes,
+    opts: Options,
+    *,
+    may_add: bool,
+    suggest: bool = False,
+    phones: bool = False,
 ) -> Plan:
     enrollments = (
         await db.execute(
@@ -230,6 +250,7 @@ async def build_plan(
     for r, m in zip(jrows, matches, strict=True):
         shown = neutralise(r.name)
         if m.person is None:
+            days = [date_of[c].day for c in r.marks if c in date_of and date_of[c].day <= today]
             plan.unmatched.append(
                 {
                     "line": r.line,
@@ -237,6 +258,8 @@ async def build_plan(
                     "struck": r.struck,
                     "marks": len(r.marks),
                     "candidates": list(m.candidates),
+                    "first_date": min(days) if days else None,
+                    "options": [],
                 }
             )
             continue
@@ -308,7 +331,46 @@ async def build_plan(
     for e, name in enrollments:
         if e.id not in matched_ids:
             plan.missing.append({"enrollment_id": e.id, "student_name": name, "status": e.status})
+    if suggest and plan.unmatched:
+        await _fill_options(db, cohort, plan, phones=phones)
     return plan
+
+
+async def _fill_options(db: AsyncSession, cohort: Cohort, plan: Plan, *, phones: bool) -> None:
+    """For each name nobody in the cohort fits: the students of the same branch who are not in
+    it yet and may be that person (the other branches are never offered)."""
+    rows = (
+        await db.execute(
+            select(Student.id, Student.full_name, Student.phone)
+            .where(
+                Student.branch_id == cohort.branch_id,
+                ~select(Enrollment.id)
+                .where(Enrollment.cohort_id == cohort.id, Enrollment.student_id == Student.id)
+                .exists(),
+            )
+            .order_by(Student.full_name, Student.id)
+            .limit(MAX_POOL)
+        )
+    ).all()
+    phone_of = {r[0]: r[2] for r in rows}
+    people = [jr.Person(r[0], r[1]) for r in rows]
+    names = [u["name"] for u in plan.unmatched]
+    try:
+        found = await asyncio.wait_for(
+            run_in_threadpool(_suggest_all, names, people), jr.PARSE_SECONDS
+        )
+    except TimeoutError:
+        raise DomainError(IMPORT_UNREADABLE) from None
+    for u, options in zip(plan.unmatched, found, strict=True):
+        u["options"] = [
+            {
+                "student_id": key,
+                "student_name": name,
+                "tier": tier,
+                "phone": phone_of[key] if phones else None,
+            }
+            for key, name, tier in options
+        ]
 
 
 def _counts(plan: Plan) -> dict[str, int]:
@@ -368,6 +430,8 @@ async def import_preview(
         await _read_body(request),
         _opts(sheet, row, col, create_lessons, overwrite),
         may_add=may_add_lessons(p),
+        suggest=may_enroll(p),
+        phones=allows(p.level("students"), "view"),
     )
     j = plan.journal
     names = {r["enrollment_id"]: r["student_name"] for r in plan.rows}
@@ -396,6 +460,7 @@ async def import_preview(
         ],
         "rows": plan.rows,
         "unmatched": plan.unmatched,
+        "can_enroll": may_enroll(p),
         "missing": plan.missing,
         "unknown": plan.unknown[:MAX_DIFFER],
         "counts": _counts(plan),
@@ -543,3 +608,30 @@ async def import_apply(
             if d.status in ("conflict", "outside", "cancelled", "no_lesson", "duplicate")
         ],
     }
+
+
+class EnrollName(BaseModel):
+    """One name of the journal that is not in the cohort: enroll an existing student or create
+    one. `first_date` back-dates the enrollment to the first day the journal has a mark for."""
+
+    model_config = ConfigDict(extra="forbid")
+    student_id: uuid.UUID | None = None
+    new_student: NewStudent | None = None
+    first_date: date | None = None
+
+
+@router.post("/cohorts/{cohort_id}/attendance/import/enroll", status_code=201)
+async def import_enroll(
+    cohort_id: uuid.UUID, body: EnrollName, p: Change, db: DB
+) -> dict[str, Any]:
+    """Writes one missing journal name into the cohort through the cohort page's enrollment (over
+    capacity allowed and reported, audited). Managers only: an instructor asks a manager."""
+    if not may_enroll(p):
+        raise DomainError(FORBIDDEN, section="cohorts", level="change")
+    return await enroll_into(
+        db,
+        p,
+        cohort_id,
+        EnrollIn(student_id=body.student_id, new_student=body.new_student),
+        enrolled_on=body.first_date,
+    )
