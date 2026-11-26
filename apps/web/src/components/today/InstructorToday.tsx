@@ -85,7 +85,7 @@ function LessonCard({ lesson, phase }: { lesson: LessonItem; phase: LessonPhase 
             <div className="min-w-0">
               <div className={clsx("font-semibold sm:truncate", focal ? "text-lg" : "text-base")}>{lesson.course_name}</div>
               <div className="mt-0.5 text-sm text-default-600">
-                {lesson.cohort_code} · {lesson.room_name} · {studentsWord(lesson.total)}
+                {lesson.cohort_code} · {lesson.room_name}
               </div>
             </div>
             <span
@@ -264,16 +264,14 @@ export function InstructorToday() {
         {data ? dayTitle(data.date) : ""}
         {n > 0 ? ` · ${lessonsWord(n)}, ${studentsWord(students)}` : ""}
       </p>
-    <QueryState errorText="Не удалось загрузить уроки" query={today} skeleton={<InstructorTodaySkeleton />}>
-      {(data) => (
-        <>
-          <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <QueryState errorText="Не удалось загрузить уроки" query={today} skeleton={<InstructorTodaySkeleton />}>
+        {(data) => (
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
             <Schedule data={data} />
             <Undone data={data} />
           </div>
-        </>
-      )}
-    </QueryState>
+        )}
+      </QueryState>
     </>
   );
 }

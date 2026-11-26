@@ -25,3 +25,17 @@ export function resetTour(userId: string): void {
     /* nothing stored, nothing to reset */
   }
 }
+
+/** Destroy handler for the tour: Skip, close and finish mark it seen; leaving the page mid-tour does not. */
+export function tourEnd(userId: string) {
+  let leaving = false;
+
+  return {
+    leave: () => {
+      leaving = true;
+    },
+    onDestroyed: () => {
+      if (!leaving) markTourSeen(userId);
+    },
+  };
+}

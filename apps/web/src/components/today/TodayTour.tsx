@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
 
-import { markTourSeen, tourSeen } from "@/lib/tour";
+import { tourEnd, tourSeen } from "@/lib/tour";
 
 const STEPS: DriveStep[] = [
   {
@@ -55,7 +55,17 @@ const STEPS: DriveStep[] = [
 
 /** Steps whose target is on the screen (a step with no element is a centred card). */
 function visibleSteps(): DriveStep[] {
-  return STEPS.filter((s) => {
+  // on a phone the whole schedule is as tall as the screen, so the popover would cover it:
+  // point at the first lesson and put the card below it
+  const phone = window.matchMedia("(max-width: 639px)").matches;
+  const first = document.querySelector('[data-tour="timeline"] > ol > li');
+  const steps = STEPS.map((s) =>
+    phone && first && s.element === '[data-tour="timeline"]'
+      ? { ...s, element: '[data-tour="timeline"] > ol > li', popover: { ...s.popover, side: "bottom" as const, align: "center" as const } }
+      : s,
+  );
+
+  return steps.filter((s) => {
     if (typeof s.element !== "string") return true;
     const el = document.querySelector<HTMLElement>(s.element);
 
@@ -72,6 +82,7 @@ export function TodayTour({ userId }: { userId: string }) {
     if (tourSeen(userId)) return;
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let tour: ReturnType<typeof driver> | undefined;
+    const end = tourEnd(userId);
     // let the schedule paint first; the target elements must exist
     const timer = window.setTimeout(() => {
       const steps = visibleSteps();
@@ -98,13 +109,14 @@ export function TodayTour({ userId }: { userId: string }) {
           skip.addEventListener("click", () => tour?.destroy());
           popover.footer.insertBefore(skip, popover.footerButtons);
         },
-        onDestroyed: () => markTourSeen(userId),
+        onDestroyed: end.onDestroyed,
       });
       tour.drive();
     }, 600);
 
     return () => {
       window.clearTimeout(timer);
+      end.leave(); // leaving the page mid-tour is not «seen»
       tour?.destroy();
     };
   }, [userId]);
