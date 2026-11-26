@@ -28,6 +28,7 @@ from app.metrics import cohort_enrolled, fill_percent, over_capacity_of, unfille
 from app.metrics.goals import _new_enrollments, collection_month, pct
 from app.metrics.money import (
     CONFIRMED,
+    COVERED,
     PENDING,
     TZ,
     ZERO,
@@ -190,8 +191,9 @@ async def open_cohorts(
 async def overpaid_months(
     db: AsyncSession, cohort_where: list[ColumnElement[bool]]
 ) -> list[dict[str, Any]]:
-    """Enrollment-months where pending + confirmed payments exceed the price, biggest first."""
-    entered = func.sum(Payment.amount)
+    """Enrollment-months where pending + confirmed payments (with their discounts) exceed the
+    price, biggest first."""
+    entered = func.sum(COVERED)
     rows = (
         await db.execute(
             select(

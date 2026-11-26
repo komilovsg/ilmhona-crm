@@ -3,16 +3,21 @@
 - A cohort runs over calendar months: `cohort_months` = months from the start month to the end
   month, inclusive. Payment `month_no` is 1..cohort_months; the salary period is the first day of
   the month.
-- Only a confirmed payment counts. Per enrollment: paid = confirmed sum, paid months = months
-  whose pending + confirmed payments reach the price (the payment cap's «full»), expected =
+- Only a confirmed payment counts. Per enrollment: paid = confirmed sum (money received),
+  discount = discounts of the confirmed payments, paid months = months whose pending + confirmed
+  payments and their discounts reach the price (the payment cap's «full»), expected =
   price_month × months started since enrollment (from the later of the enrollment month and the
   cohort start month, to the earlier of this month and the cohort's last month),
-  debt = max(expected − paid, 0). An expelled student owes nothing more: debt 0.
+  debt = max(expected − paid − discount, 0). An expelled student owes nothing more: debt 0.
+- Discount: a payment may take `discount_percent` of the month's price off (`discount_amount`,
+  rounded to the cent, half up; one discount per enrollment month). A month is covered by what is
+  paid plus the discount (`COVERED`); income stays the money received, discounts are their own sum.
 - «Оплатили» (#5) = enrollments with ≥ 1 confirmed payment among the enrolled (not expelled), so
   it can never exceed «записались».
 - Income = confirmed payments; payroll (расходы ЗП, #9) = the sum of instructor payouts, never the
   schedule; ads = budgets of the campaigns that started in the period (stage 3); profit = income −
   ads − payroll. With a period: income by payment date, payroll by payout date, ads by start date.
+  Discounts (confirmed payments, by payment date) are reported next to income, never inside it.
 - Salary schedule: every month a cohort (not cancelled, with an instructor) runs × the cohort's
   rate. Paid = payouts actually made; due = max(rate − paid, 0).
 - Instructor card (#17): cohorts, students, income from own cohorts, payouts. No «efficiency %».
@@ -21,7 +26,7 @@
 import uuid
 from collections.abc import Sequence
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -47,6 +52,13 @@ EXPELLED = "отчислен"
 CANCELLED = "отменён"
 ZERO = Decimal("0.00")
 CENT = Decimal("0.01")
+# what a payment covers of its month: the money plus the discount
+COVERED = Payment.amount + Payment.discount_amount
+
+
+def discount_of(price: Decimal, percent: int) -> Decimal:
+    """The discount `percent` takes off the month's `price` (cents, half up): 20 % of 500 = 100."""
+    return (price * percent / 100).quantize(CENT, rounding=ROUND_HALF_UP)
 
 
 def money(value: Any) -> Decimal:
@@ -142,19 +154,27 @@ def payment_joined(query: Any) -> Any:
 
 
 async def payment_totals(db: AsyncSession, where: Sequence[ColumnElement[bool]]) -> dict[str, Any]:
-    """Confirmed / pending sums and counts of the payments matching `where`."""
+    """Confirmed / pending sums (money received) and counts of the payments matching `where`,
+    with the discounts of each."""
     rows = await db.execute(
         payment_joined(
-            select(Payment.status, func.count(), func.coalesce(func.sum(Payment.amount), 0))
+            select(
+                Payment.status,
+                func.count(),
+                func.coalesce(func.sum(Payment.amount), 0),
+                func.coalesce(func.sum(Payment.discount_amount), 0),
+            )
         )
         .where(*where)
         .group_by(Payment.status)
     )
-    by = {s: (n, money(total)) for s, n, total in rows.all()}
-    confirmed, pending = by.get(CONFIRMED, (0, ZERO)), by.get(PENDING, (0, ZERO))
+    by = {s: (n, money(total), money(off)) for s, n, total, off in rows.all()}
+    confirmed, pending = by.get(CONFIRMED, (0, ZERO, ZERO)), by.get(PENDING, (0, ZERO, ZERO))
     return {
         "confirmed": confirmed[1],
         "pending": pending[1],
+        "confirmed_discount": confirmed[2],
+        "pending_discount": pending[2],
         "confirmed_count": confirmed[0],
         "pending_count": pending[0],
         "count": confirmed[0] + pending[0],
@@ -183,30 +203,41 @@ async def enrollment_money_rows(
     skip building the ORM objects."""
     on = on or today()
     ids = [r[0] for r in rows]
-    # one statement: per enrollment and month, everything entered / confirmed / pending
+    # one statement: per enrollment and month, what is covered (money + discount) entered /
+    # confirmed / pending, the discount of the month, and the confirmed money and discount
     entered: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
     confirmed: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
     pending: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
+    discount: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
+    confirmed_off: dict[uuid.UUID, dict[int, Decimal]] = {i: {} for i in ids}
+    received: dict[uuid.UUID, Decimal] = {i: ZERO for i in ids}
     if ids:
+        is_confirmed = Payment.status == CONFIRMED
         result = await db.execute(
             select(
                 Payment.enrollment_id,
                 Payment.month_no,
-                func.sum(Payment.amount),
-                func.coalesce(func.sum(Payment.amount).filter(Payment.status == CONFIRMED), 0),
-                func.coalesce(func.sum(Payment.amount).filter(Payment.status == PENDING), 0),
+                func.sum(COVERED),
+                func.coalesce(func.sum(COVERED).filter(is_confirmed), 0),
+                func.coalesce(func.sum(COVERED).filter(Payment.status == PENDING), 0),
+                func.sum(Payment.discount_amount),
+                func.coalesce(func.sum(Payment.amount).filter(is_confirmed), 0),
+                func.coalesce(func.sum(Payment.discount_amount).filter(is_confirmed), 0),
             )
             .where(Payment.enrollment_id.in_(ids))
             .group_by(Payment.enrollment_id, Payment.month_no)
         )
-        for i, m, total_m, confirmed_m, pending_m in result.all():
+        for i, m, total_m, confirmed_m, pending_m, off_m, got_m, got_off_m in result.all():
             entered[i][m] = money(total_m)
             pending[i][m] = money(pending_m)
+            discount[i][m] = money(off_m)
+            confirmed_off[i][m] = money(got_off_m)
+            received[i] += money(got_m)
             if confirmed_m:
                 confirmed[i][m] = money(confirmed_m)
     out: dict[uuid.UUID, dict[str, Any]] = {}
     for eid, enrolled_at, status, price, start, end in rows:
-        total = money(sum(confirmed[eid].values(), ZERO))
+        total, off = received[eid], money(sum(confirmed_off[eid].values(), ZERO))
         local = enrolled_at.astimezone(TZ).date()
         expected = price * expected_months(local, start, end, on)
         owed = owed_month_numbers(enrolled_at, start, end, on)
@@ -218,15 +249,18 @@ async def enrollment_money_rows(
                 price,
                 confirmed[eid].get(m, ZERO),
                 m in owed,
+                discount[eid].get(m, ZERO),
+                confirmed_off[eid].get(m, ZERO),
             )
             for m in range(1, cohort_months(start, end) + 1)
         ]
         out[eid] = {
             "paid": total,
+            "discount": off,
             # one definition with the payment cap: pending + confirmed reach the price
             "paid_months": [st["month_no"] for st in states if st["state"] == MONTH_PAID],
             "expected": expected,
-            "debt": debt_of(expected, total, status),
+            "debt": debt_of(expected, total + off, status),
             "month_states": states,
             # months started so far that are not covered yet, with what is left of each
             "due_months": []
@@ -254,9 +288,14 @@ def month_info(
     price: Decimal,
     confirmed: Decimal | None = None,
     started: bool = True,
+    discount: Decimal = ZERO,
+    confirmed_discount: Decimal = ZERO,
 ) -> dict[str, Any]:
     """The state of one month of an enrollment (pending + confirmed count, like the payment rule):
     оплачен (reaches the price), частично (something, less than the price), не оплачен.
+    `entered` / `pending` / `confirmed` are what the payments cover (money + discount); `paid` in
+    the result is the money only, `discount` what the month's discount takes off
+    (`confirmed_discount`: of the confirmed payments).
     `awaiting`: «оплачен» only thanks to pending payments: the debt (confirmed only) still counts
     the month, `due_remaining` is what the debt counts for it. `started`: the month has begun."""
     if confirmed is None:
@@ -274,7 +313,9 @@ def month_info(
         "started": started,
         "confirmed": confirmed,
         "due_remaining": max(price - confirmed, ZERO) if awaiting else max(price - entered, ZERO),
-        "paid": entered,
+        "paid": entered - discount,
+        "discount": discount,
+        "confirmed_discount": confirmed_discount,
         "pending": pending,
         "price": price,
         "remaining": max(price - entered, ZERO),
@@ -299,9 +340,9 @@ async def month_sums(
     exclude: uuid.UUID | None = None,
     status: str | None = None,
 ) -> dict[uuid.UUID, dict[int, Decimal]]:
-    """What is entered per enrollment and month: pending + confirmed (a month is «taken» as soon
-    as a payment for it exists, confirmed or not). `exclude` leaves one payment out (an edit);
-    `status` sums only that status."""
+    """What is covered per enrollment and month (money + discount): pending + confirmed (a month
+    is «taken» as soon as a payment for it exists, confirmed or not). `exclude` leaves one payment
+    out (an edit); `status` sums only that status."""
     if not enrollment_ids:
         return {}
     where: list[ColumnElement[bool]] = [Payment.enrollment_id.in_(enrollment_ids)]
@@ -310,7 +351,7 @@ async def month_sums(
     if status is not None:
         where.append(Payment.status == status)
     rows = await db.execute(
-        select(Payment.enrollment_id, Payment.month_no, func.sum(Payment.amount))
+        select(Payment.enrollment_id, Payment.month_no, func.sum(COVERED))
         .where(*where)
         .group_by(Payment.enrollment_id, Payment.month_no)
     )
@@ -363,6 +404,16 @@ async def cohort_income(db: AsyncSession, cohort_ids: list[uuid.UUID]) -> dict[u
 def _income_stmt(cohort_where: Sequence[ColumnElement[bool]], *extra: ColumnElement[bool]) -> Any:
     return (
         select(func.coalesce(func.sum(Payment.amount), 0))
+        .select_from(Payment)
+        .join(Enrollment, Enrollment.id == Payment.enrollment_id)
+        .join(Cohort, Cohort.id == Enrollment.cohort_id)
+        .where(Payment.status == CONFIRMED, *cohort_where, *extra)
+    )
+
+
+def _discount_stmt(cohort_where: Sequence[ColumnElement[bool]], *extra: ColumnElement[bool]) -> Any:
+    return (
+        select(func.coalesce(func.sum(Payment.discount_amount), 0))
         .select_from(Payment)
         .join(Enrollment, Enrollment.id == Payment.enrollment_id)
         .join(Cohort, Cohort.id == Enrollment.cohort_id)
@@ -434,18 +485,25 @@ async def finance(
     if until:
         paid.append(Payment.paid_at <= until)
         payouts.append(InstructorPayout.paid_at <= until)
-    # the three sums in one round trip
+    # the four sums in one round trip
     row = (
         await db.execute(
             select(
                 _income_stmt(cohort_where, *paid).scalar_subquery(),
                 _payroll_stmt(cohort_where, *payouts).scalar_subquery(),
                 _ads_stmt(campaign_where, since, until).scalar_subquery(),
+                _discount_stmt(cohort_where, *paid).scalar_subquery(),
             )
         )
     ).one()
-    income, payroll, ads = (money(v) for v in row)
-    return {"income": income, "payroll": payroll, "ads": ads, "profit": income - ads - payroll}
+    income, payroll, ads, discounts = (money(v) for v in row)
+    return {
+        "income": income,
+        "discounts": discounts,
+        "payroll": payroll,
+        "ads": ads,
+        "profit": income - ads - payroll,
+    }
 
 
 # ---- instructors and salaries -----------------------------------------------------------
@@ -608,6 +666,7 @@ __all__ = [
     "cohort_payers",
     "cohort_periods",
     "debt_of",
+    "discount_of",
     "enrollment_money",
     "enrollment_money_rows",
     "expected_months",
