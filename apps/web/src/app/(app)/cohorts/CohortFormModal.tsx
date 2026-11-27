@@ -311,7 +311,7 @@ export function CohortFormModal({
               classNames={{ value: "truncate" }}
               errorMessage={fe.hint("donor_ids").errorMessage}
               isInvalid={fe.hint("donor_ids").isInvalid}
-              isRequired
+              isRequired={funding === "донор"}
               items={donorChoices}
               label="Доноры"
               popoverProps={{ motionProps: overlayMotion }}

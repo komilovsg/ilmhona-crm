@@ -1,7 +1,7 @@
 from app.core.errors import VALIDATION_FAILED, errors
 
 DONOR_NAME_TAKEN = errors.define("donor_name_taken", 409, "Donor name already used")
-# a cohort «донор» / «смешанный» needs at least one donor; «платный» / «бесплатный» none
+# a cohort «донор» needs at least one donor, «смешанный» any number; «платный» / «бесплатный» none
 FUNDING_DONORS_INVALID = errors.define(
     "funding_donors_invalid", 422, "The donors do not fit the cohort's funding"
 )

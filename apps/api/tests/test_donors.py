@@ -202,8 +202,8 @@ async def test_instructor_enrolls_with_a_donor_of_own_cohort_only(
 async def test_funding_rules_of_a_cohort(admin: httpx.AsyncClient) -> None:
     d1, d2 = await donor(admin, "Д1"), await donor(admin, "Д2")
     base = await _cohort_body(admin)
-    # «донор» / «смешанный» need a donor, «платный» / «бесплатный» take none
-    for funding, donors in (("донор", []), ("смешанный", []), ("платный", [d1])):
+    # «донор» needs a donor, «платный» / «бесплатный» take none
+    for funding, donors in (("донор", []), ("платный", [d1]), ("бесплатный", [d1])):
         r = await admin.post(C, json={**base, "funding": funding, "donor_ids": donors})
         assert r.status_code == 422, (funding, r.text)
         assert r.json()["code"] == "funding_donors_invalid"
@@ -481,3 +481,24 @@ async def test_existing_cohorts_with_price_0_read_as_free() -> None:
                 ),
                 {"c": course, "r": room},
             )
+
+
+async def test_mixed_cohort_without_donors(admin: httpx.AsyncClient) -> None:
+    cohort = await mixed(admin, back=0)
+    assert cohort["funding"] == "смешанный" and cohort["donors"] == []
+    r = await enroll_by(admin, cohort, "Сам платит", None)
+    assert r.status_code == 201, r.text
+    assert r.json()["donor_id"] is None
+    eid = r.json()["id"]
+    assert float((await cohort_money(admin, cohort))["seats"]["paying"]) == 1
+    assert money_of(await cohort_money(admin, cohort), eid)["debt"] != "0.00"
+    # a donor added later can be picked
+    d = await donor(admin, "Позже")
+    r = await admin.patch(f"{C}/{cohort['id']}", json={"donor_ids": [d]})
+    assert r.status_code == 200, r.text
+    r = await enroll_by(admin, cohort, "С донором", d)
+    assert r.status_code == 201 and r.json()["donor_id"] == d
+    # back to no donors is refused while one is used; edit to none works on an unused cohort
+    other = await mixed(admin, d, name="M2")
+    r = await admin.patch(f"{C}/{other['id']}", json={"donor_ids": []})
+    assert r.status_code == 200, r.text
