@@ -472,10 +472,11 @@ async def issue(
         number = await new_number(db, issued_at)
         code = new_verify_code()
         ctx.values["certificate.number"] = number
-        ctx.verify_code = code if ctx.verify_base else number
+        ctx.verify_code, ctx.public = code, True
         cert = Certificate(
             number=number,
             verify_code=code,
+            public_code=code,
             student_id=row.student_id,
             batch_id=batch_id,
             branch_id=a.branch.id,

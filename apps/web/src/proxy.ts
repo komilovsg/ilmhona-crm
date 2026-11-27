@@ -70,6 +70,9 @@ export async function proxy(request: NextRequest) {
 
   if (PUBLIC_PATHS.includes(pathname) || PUBLIC_ASSETS.some((p) => pathname.startsWith(p))) return NextResponse.next();
 
+  // The certificate check (QR code on a certificate): public, with or without a session.
+  if (pathname === "/v" || pathname.startsWith("/v/")) return withCsp(request);
+
   const signedIn = request.cookies.has(ACCESS_COOKIE);
 
   if (pathname === "/") {

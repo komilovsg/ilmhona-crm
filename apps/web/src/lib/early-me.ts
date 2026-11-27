@@ -6,7 +6,7 @@
  * until it knows the user. Skipped on the public pages. `useMe` takes the promise once (`takeEarlyMe`);
  * anything but a 200 falls back to the normal `api()` call (refresh, redirects, error texts).
  */
-export const earlyMeScript = `try{if(!/^\\/(login|forgot-password)(\\/|$)/.test(location.pathname))window.__ilmMe=fetch("/api/v1/auth/me",{credentials:"same-origin"}).catch(function(){})}catch(e){}`;
+export const earlyMeScript = `try{if(!/^\\/(login|forgot-password|v)(\\/|$)/.test(location.pathname))window.__ilmMe=fetch("/api/v1/auth/me",{credentials:"same-origin"}).catch(function(){})}catch(e){}`;
 
 declare global {
   interface Window {

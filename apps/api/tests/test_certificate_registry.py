@@ -413,7 +413,7 @@ async def test_pdf_is_rendered_from_the_snapshot_after_later_edits(
     assert "NEW" in fresh
 
 
-async def test_qr_encodes_the_code_with_a_verify_address_and_the_number_without(
+async def test_qr_encodes_the_public_code_on_the_web_origin_or_the_verify_address(
     admin: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.certificates import render
@@ -432,7 +432,7 @@ async def test_qr_encodes_the_code_with_a_verify_address_and_the_number_without(
     first = (await issue(admin, cohort, tid, [a])).json()["items"][0]
     seen.clear()
     await admin.get(f"{REG}/{first['id']}/pdf")
-    assert seen == [f"http://localhost:3200/v/{first['number']}"]
+    assert seen == [f"http://localhost:3200/v/{first['verify_code']}"]
     r = await set_settings(admin, verify_base_url="https://check.example.tj/")
     assert r.status_code == 200 and r.json()["verify_base_url"] == "https://check.example.tj"
     second = (await issue(admin, cohort, tid, [b])).json()["items"][0]
@@ -444,6 +444,13 @@ async def test_qr_encodes_the_code_with_a_verify_address_and_the_number_without(
     seen.clear()
     await admin.get(f"{REG}/{second['id']}/pdf")
     assert seen == [f"https://check.example.tj/v/{second['verify_code']}"]
+    await admin.get(f"{REG}/{first['id']}/pdf")
+    assert seen[-1] == f"http://localhost:3200/v/{first['verify_code']}"
+    # a certificate issued before the check page keeps the number it was issued with
+    await sql(
+        "UPDATE certificate SET data = jsonb_set(data - 'public', '{verify_code}', "
+        f"to_jsonb(number)) WHERE id = '{first['id']}'"
+    )
     await admin.get(f"{REG}/{first['id']}/pdf")
     assert seen[-1] == f"http://localhost:3200/v/{first['number']}"
 
