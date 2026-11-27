@@ -20,7 +20,7 @@ import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
 import { MAX_DATE, MIN_DATE, timeProblem, todayIso } from "@/lib/education";
-import { withDonors } from "@/lib/funding";
+import { payerBody, payerOptions, priced } from "@/lib/funding";
 import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
@@ -149,11 +149,13 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
   const [phone, setPhone] = useState("");
   const [gender, setGender] = useState<string | null>(null);
   const activeDonors = cohort.donors.filter((d) => !d.archived);
-  // «за счёт донора»: the one donor of a donor cohort is the default; a mixed cohort starts with «платит сам»
-  const [donorId, setDonorId] = useState<string | null>(
+  // who pays: the one donor of a donor cohort is the default; a paid or mixed cohort starts with
+  // «платит сам» and offers «не платит» (and the donors of a mixed one)
+  const [payer, setPayer] = useState<string | null>(
     cohort.funding === "донор" && activeDonors.length === 1 ? activeDonors[0].id : null,
   );
-  const funded = withDonors(cohort.funding) ? { donor_id: donorId } : {};
+  const payers = payerOptions(cohort.funding, activeDonors);
+  const funded = payerBody(payer);
   // a running cohort: the day the student really started (lessons before it take no marks)
   const today = todayIso();
   const running = cohort.start_date < today;
@@ -179,7 +181,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const exceeds = wouldExceed(cohort.fill);
   const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
-  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender", "donor_id", "enrolled_on"]);
+  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender", "donor_id", "not_paying", "enrolled_on"]);
   const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
 
   const modes = [
@@ -218,17 +220,18 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
       <div className="space-y-4">
         <OverCapacityNotice fill={cohort.fill} />
         {/* a donor cohort with one donor sets it itself: no field to fill */}
-        {withDonors(cohort.funding) && !(cohort.funding === "донор" && activeDonors.length === 1) && activeDonors.length > 0 && (
+        {payers.length > 0 && !(cohort.funding === "донор" && activeDonors.length === 1) && (
           <SelectField
-            allLabel={cohort.funding === "смешанный" ? "Платит сам" : undefined}
+            allLabel={priced(cohort.funding) ? "Платит сам" : undefined}
             isRequired={cohort.funding === "донор"}
             label={cohort.funding === "донор" ? "Донор" : "Кто платит"}
-            options={activeDonors.map((d) => ({ key: d.id, label: cohort.funding === "донор" ? d.name : `Донор: ${d.name}` }))}
-            value={donorId}
-            {...fe.hint("donor_id")}
+            options={payers}
+            value={payer}
+            {...fe.hint(fe.hint("not_paying").errorMessage ? "not_paying" : "donor_id")}
             onChange={(v) => {
               fe.clear("donor_id");
-              setDonorId(v);
+              fe.clear("not_paying");
+              setPayer(v);
             }}
           />
         )}

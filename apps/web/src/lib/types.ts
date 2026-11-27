@@ -184,7 +184,9 @@ export type EnrollmentRow = {
   review_reason: string | null;
   /** the donor that pays for the student; null = pays themself (or a free cohort) */
   donor_id: string | null;
-  /** moved from a donor to paying themself then: the debt counts from that month */
+  /** «Не платит»: studies for free in a paid or mixed cohort (no donor); owes nothing */
+  not_paying: boolean;
+  /** moved from a donor or «не платит» to paying themself then: the debt counts from that month */
   pays_from: string | null;
   /** hints for the instructor: they added it, and it has no payments, marks or grades */
   created_by_me: boolean;

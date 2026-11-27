@@ -130,6 +130,9 @@ export const apiErrors: Record<string, string> = {
   donor_in_use: "У донора в этом потоке есть студенты ({count}). Сначала смените им финансирование.",
   funding_has_payers: "В потоке есть студенты, которые платят сами ({count}). Сначала выберите им доноров.",
   payment_donor_funded: "Студент учится за счёт донора: оплаты за него не принимаются.",
+  payment_not_paying: "Студент отмечен «Не платит»: оплаты за него не принимаются.",
+  not_paying_funding: "«Не платит» можно отметить только в платном или смешанном потоке.",
+  not_paying_with_donor: "Студент за счёт донора не может быть отмечен «Не платит».",
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -170,6 +173,8 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "enrolled_on_has_marks") return "Раньше этой даты есть отметки";
   if (code === "donor_not_in_cohort") return "Этот донор не финансирует поток";
   if (code === "donor_archived") return "Донор в архиве";
+  if (code === "not_paying_funding") return "Только в платном или смешанном потоке";
+  if (code === "not_paying_with_donor") return "Нельзя вместе с донором";
   if (code === "room_archived") return "Аудитория в архиве";
   if (code === "funding_donors_invalid") return "Доноры не подходят к финансированию";
   if (code === "free_has_price") return "У бесплатного потока цена 0";

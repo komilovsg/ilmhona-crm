@@ -502,3 +502,152 @@ async def test_mixed_cohort_without_donors(admin: httpx.AsyncClient) -> None:
     other = await mixed(admin, d, name="M2")
     r = await admin.patch(f"{C}/{other['id']}", json={"donor_ids": []})
     assert r.status_code == 200, r.text
+
+
+# ---- «не платит» -------------------------------------------------------------------------
+
+
+async def _mark(c: httpx.AsyncClient, e: str, **body: Any) -> httpx.Response:
+    return await c.patch(f"/api/v1/enrollments/{e}/funding", json={"donor_id": None, **body})
+
+
+async def test_not_paying_student_owes_nothing_and_pays_nothing(
+    admin: httpx.AsyncClient,
+) -> None:
+    for funding in ("платный", "смешанный"):
+        cohort = await running_cohort(admin, name=funding, funding=funding, back=1, capacity=30)
+        e = await enroll(admin, cohort, f"Бесплатник {funding}")
+        payer = await enroll(admin, cohort, f"Платник {funding}")
+        r = await _mark(admin, e, not_paying=True)
+        assert r.status_code == 200, r.text
+        assert r.json()["not_paying"] is True and r.json()["donor_id"] is None
+        assert "учится бесплатно" in await last_sentence("enrollment.funding")
+        money = await cohort_money(admin, cohort)
+        assert money_of(money, e)["debt"] == "0.00" and money_of(money, e)["expected"] == "0.00"
+        assert money_of(money, payer)["debt"] != "0.00"
+        # a free seat, not a donor's one
+        assert money["seats"] == {"paying": 1, "donor": 0, "free": 1}
+        r = await admin.post(
+            P,
+            json={
+                "idempotency_key": str(uuid.uuid4()),
+                "enrollment_id": e,
+                "month_no": 1,
+                "amount": "500",
+                "method": "alif",
+                "paid_at": this_month().isoformat(),
+            },
+        )
+        assert r.status_code == 409 and r.json()["code"] == "payment_not_paying"
+        options = (await admin.get(f"{P}/options", params={"cohort_id": cohort["id"]})).json()
+        assert [o["enrollment_id"] for o in options] == [payer]
+        r = await admin.get(f"{P}/debtors", params={"page_size": 100})
+        assert e not in {x["enrollment_id"] for x in r.json()["items"]}
+
+
+async def test_not_paying_enroll_and_refusals(admin: httpx.AsyncClient) -> None:
+    d = await donor(admin, "Фонд")
+    paid = await running_cohort(admin, name="P", capacity=30)
+    sid = await make_student("Сразу бесплатно")
+    r = await admin.post(
+        f"{C}/{paid['id']}/enrollments", json={"student_id": str(sid), "not_paying": True}
+    )
+    assert r.status_code == 201 and r.json()["not_paying"] is True, r.text
+    assert "(не платит)" in await last_sentence("enrollment.create")
+    # never with a donor
+    cohort = await mixed(admin, d, name="M")
+    sid = await make_student("Донор и бесплатно")
+    r = await admin.post(
+        f"{C}/{cohort['id']}/enrollments",
+        json={"student_id": str(sid), "donor_id": d, "not_paying": True},
+    )
+    assert r.status_code == 422 and r.json()["code"] == "not_paying_with_donor"
+    funded = await enroll_donor(admin, cohort, "Донорский", d)
+    r = await admin.patch(
+        f"/api/v1/enrollments/{funded}/funding", json={"donor_id": d, "not_paying": True}
+    )
+    assert r.status_code == 422 and r.json()["code"] == "not_paying_with_donor"
+    async with sessionmaker() as db:
+        with pytest.raises(IntegrityError):
+            await db.execute(
+                text("UPDATE enrollment SET not_paying = true WHERE id = :i"), {"i": funded}
+            )
+    # meaningless where nobody pays: «бесплатный» and «донор» cohorts refuse it
+    free = await running_cohort(admin, name="F", funding="бесплатный")
+    e = await enroll(admin, free, "В бесплатном")
+    r = await _mark(admin, e, not_paying=True)
+    assert r.status_code == 422 and r.json()["code"] == "not_paying_funding"
+    only = await running_cohort(admin, name="D", funding="донор", donor_ids=[d])
+    e = await enroll_donor(admin, only, "В донорском", d)
+    r = await _mark(admin, e, not_paying=True)
+    assert r.status_code == 422 and r.json()["code"] == "not_paying_funding"
+    sid = await make_student("Новый в донорском")
+    r = await admin.post(
+        f"{C}/{only['id']}/enrollments", json={"student_id": str(sid), "not_paying": True}
+    )
+    assert r.status_code == 422 and r.json()["code"] == "not_paying_funding"
+
+
+async def test_from_not_paying_to_paying_counts_debt_from_that_month(
+    admin: httpx.AsyncClient,
+) -> None:
+    cohort = await running_cohort(admin, back=2, capacity=30)  # month 3 is this month
+    e = await enroll(admin, cohort, "Снова платит")
+    assert (await _mark(admin, e, not_paying=True)).status_code == 200
+    assert money_of(await cohort_money(admin, cohort), e)["debt"] == "0.00"
+    r = await _mark(admin, e)
+    assert r.status_code == 200, r.text
+    assert r.json()["not_paying"] is False and r.json()["pays_from"] is not None
+    m = money_of(await cohort_money(admin, cohort), e)
+    assert (m["expected"], m["debt"]) == ("500.00", "500.00")  # this month only, not 1500
+    assert [x["month_no"] for x in m["due_months"]] == [3]
+    assert "снова платит с " in await last_sentence("enrollment.funding")
+
+
+async def test_cohort_to_donor_clears_not_paying(admin: httpx.AsyncClient) -> None:
+    d = await donor(admin, "Один")
+    cohort = await mixed(admin, d, name="M")
+    e = await enroll(admin, cohort, "Был бесплатным")
+    assert (await _mark(admin, e, not_paying=True)).status_code == 200
+    r = await admin.patch(f"{C}/{cohort['id']}", json={"funding": "донор"})
+    assert r.status_code == 200, r.text
+    rows = await sql("SELECT donor_id, not_paying FROM enrollment WHERE id = :i", i=e)
+    assert (str(rows[0][0]), rows[0][1]) == (d, False)
+
+
+async def test_migration_0037_round_trip() -> None:
+    """Up adds `enrollment.not_paying` with its donor check, down drops it, up again works."""
+    import asyncio
+
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests.conftest import SERVER_URL, TEST_DB
+
+    name = f"{TEST_DB}_mig_np"
+    server = create_async_engine(SERVER_URL.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    async with server.connect() as conn:
+        await conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        await conn.execute(text(f'CREATE DATABASE "{name}"'))
+    await server.dispose()
+    url = SERVER_URL.set(database=name)
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
+    engine = create_async_engine(url)
+    q = text(
+        "SELECT count(*) FROM information_schema.columns "
+        "WHERE table_name = 'enrollment' AND column_name = 'not_paying'"
+    )
+    try:
+        seen = []
+        for step, rev in ((command.upgrade, "0037"), (command.downgrade, "0036")):
+            await asyncio.to_thread(step, cfg, rev)
+            async with engine.connect() as conn:
+                seen.append((await conn.execute(q)).scalar_one())
+        await asyncio.to_thread(command.upgrade, cfg, "0037")
+        async with engine.connect() as conn:
+            seen.append((await conn.execute(q)).scalar_one())
+        assert seen == [1, 0, 1]
+    finally:
+        await engine.dispose()

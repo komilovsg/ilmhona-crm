@@ -18,7 +18,7 @@ import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
 import { todayIso } from "@/lib/education";
-import { withDonors } from "@/lib/funding";
+import { payerBody, payerOptions, priced } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -57,11 +57,13 @@ export function NewStudentModal({
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const again = useRef(false);
-  // a donor-funded cohort: who pays for the student. Only this cohort's donors (from its own card), a
-  // single donor of a «донор» cohort is set by the server, so the field is not shown then.
+  // who pays for the student: «платит сам», «не платит» (a paid or mixed cohort) or one of this
+  // cohort's donors (from its own card); a single donor of a «донор» cohort is set by the server,
+  // so the field is not shown then.
   const funding = cohort.data?.funding;
   const donors = (cohort.data?.donors ?? []).filter((d) => !d.archived);
-  const pickDonor = !!funding && withDonors(funding) && !(funding === "донор" && donors.length === 1) && donors.length > 0;
+  const payers = funding ? payerOptions(funding, donors) : [];
+  const pickDonor = payers.length > 0 && !(funding === "донор" && donors.length === 1);
   const donorMissing = funding === "донор" && donors.length > 1;
   const [donorId, setDonorId] = useState<string | null>(null);
   // a running cohort: the day the student really started (kept for «добавить ещё»)
@@ -76,7 +78,7 @@ export function NewStudentModal({
         method: "POST",
         body: {
           new_student: { full_name: name, phone: phone.trim() || null, gender: gender === "none" ? null : gender },
-          ...(pickDonor ? { donor_id: donorId } : {}),
+          ...(pickDonor ? payerBody(donorId) : {}),
           ...(running && enrolledOn && enrolledOn !== today ? { enrolled_on: enrolledOn } : {}),
         },
       }),
@@ -92,7 +94,7 @@ export function NewStudentModal({
       nameRef.current?.focus();
     },
   });
-  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender", "donor_id", "enrolled_on"]);
+  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender", "donor_id", "not_paying", "enrolled_on"]);
   const valid = !!name.trim() && !(donorMissing && !donorId);
   const submit = useSubmit(() => save.mutateAsync(), !valid);
   const run = (more: boolean) => {
@@ -173,14 +175,15 @@ export function NewStudentModal({
         </div>
         {pickDonor && (
           <SelectField
-            allLabel={funding === "смешанный" ? "Платит сам" : undefined}
+            allLabel={funding && priced(funding) ? "Платит сам" : undefined}
             isRequired={funding === "донор"}
             label={funding === "донор" ? "Донор" : "Кто платит"}
-            options={donors.map((d) => ({ key: d.id, label: funding === "донор" ? d.name : `Донор: ${d.name}` }))}
+            options={payers}
             value={donorId}
-            {...fe.hint("donor_id")}
+            {...fe.hint(fe.hint("not_paying").errorMessage ? "not_paying" : "donor_id")}
             onChange={(v) => {
               fe.clear("donor_id");
+              fe.clear("not_paying");
               setDonorId(v);
             }}
           />

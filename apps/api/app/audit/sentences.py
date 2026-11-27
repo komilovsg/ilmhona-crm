@@ -305,6 +305,8 @@ FIELDS: dict[str, str] = {
     "donors": "доноры",
     "donor": "донор",
     "donors_assigned": "студентов передано донору",
+    "not_paying": "не платит",
+    "pays_from": "платит с",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -427,6 +429,22 @@ def _count(n: int, one: str, few: str, many: str) -> str:
 
 def _tail(label: str | None) -> str:
     return f" {label}" if label else ""
+
+
+NOT_PAYING = "Не платит"  # `app.donors.funding.NOT_PAYING_LABEL`
+MONTHS_GEN = (
+    "января", "февраля", "марта", "апреля", "мая", "июня",
+    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+)  # fmt: skip
+
+
+def _month_name(value: Any) -> str:
+    """`2026-11` -> «ноября 2026»; anything else -> ""."""
+    if isinstance(value, str) and len(value) >= 7 and value[5:7].isdigit():
+        n = int(value[5:7])
+        if 1 <= n <= 12:
+            return f"{MONTHS_GEN[n - 1]} {value[:4]}"
+    return ""
 
 
 def _ddmm(value: Any) -> str:
@@ -566,10 +584,18 @@ def sentence(
         tail = f" — сверх плана: {over['enrolled']} из {over['capacity']}" if over else ""
         if donor := _pair(e.diff.get("donor"))[1]:
             tail = f" за счёт донора {donor}{tail}"
+        elif _pair(e.diff.get("not_paying"))[1]:
+            tail = f" (не платит){tail}"
         return f"{who}: зачислен студент {student} в поток {cohort}{tail}"
     if a == "enrollment.funding":
         student, cohort = _pieces(lab)
         old, new = _pair(e.diff.get("funding"))
+        if new == NOT_PAYING:
+            return f"{who}: отмечено: {student} в потоке {cohort} учится бесплатно"
+        if old == NOT_PAYING and new == "Платит сам":
+            since = _month_name(_pair(e.diff.get("pays_from"))[1])
+            tail = f" с {since}" if since else ""
+            return f"{who}: отмечено: {student} в потоке {cohort} снова платит{tail}"
         return f"{who}: изменено финансирование студента {student} в потоке {cohort}: {old} → {new}"
     if a == "enrollment.date":
         student, cohort = _pieces(lab)
