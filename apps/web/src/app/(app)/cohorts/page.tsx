@@ -82,11 +82,15 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
         <div className="min-w-0">
           <div className="text-xs font-medium text-brand-text">{c.code}</div>
           <div className="break-words text-base font-semibold">{c.course_name}</div>
+          {c.stale && (
+            <div className="mt-1.5">
+              <StaleChip stale={c.stale} />
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1">
           <CohortStatus status={c.status} />
           {c.overdue && <OverdueChip />}
-          {c.stale && <StaleChip stale={c.stale} />}
         </div>
       </div>
       <dl className="grid gap-1.5 text-sm">

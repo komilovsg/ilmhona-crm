@@ -180,7 +180,6 @@ export default function CohortPage() {
             <h1 className="text-2xl font-semibold">{c.code}</h1>
             <CohortStatus status={c.status} />
             {c.overdue && <OverdueChip />}
-            {c.stale && <StaleChip stale={c.stale} />}
             {!!c.instructor_conflicts && (
               <Chip
                 color="warning"
@@ -193,6 +192,11 @@ export default function CohortPage() {
             )}
           </div>
           <p className="text-default-600">{c.course_name}</p>
+          {c.stale && (
+            <div className="mt-2">
+              <StaleChip stale={c.stale} />
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {canChange && c.status === "активный" && (

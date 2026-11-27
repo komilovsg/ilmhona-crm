@@ -35,6 +35,7 @@ const ddmm = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 export function StaleChip({ stale }: { stale: { idle_days: number; closes_on: string } }) {
   return (
     <Chip
+      classNames={{ base: "h-auto max-w-full py-0.5", content: "whitespace-normal" }}
       color="warning"
       size="sm"
       title="Отметьте посещаемость, иначе поток закроется автоматически"
