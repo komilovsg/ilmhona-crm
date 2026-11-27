@@ -109,6 +109,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "certificate.reissue": ("перевыпущен", "сертификат"),
     "certificate.revoke": ("отозван", "сертификат"),
     "certificate.pdf": ("скачан", "сертификат"),
+    "certificate.bulk_issue": ("выданы", "сертификаты из Excel"),
+    "certificate.bulk_zip": ("скачан", "архив сертификатов"),
     "cert_settings.signature_upload": ("загружена", "подпись директора"),
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
     "cert_settings.seal_upload": ("загружена", "печать"),
@@ -564,20 +566,34 @@ def sentence(
     if a in ("certificate.issue", "certificate.reissue", "certificate.revoke", "certificate.pdf"):
         student, cohort = _pieces(lab)
         number = _pair(e.diff.get("number"))[1]
+        # a certificate from an Excel list has no cohort
+        where = "" if cohort == "массовая выдача" else f" (поток {cohort})"
         if a == "certificate.pdf":
-            return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
+            return f"{who}: скачан сертификат {number} студента {student}{where}"
         if a == "certificate.revoke":
             reason = _pair(e.diff.get("reason"))[1]
-            return (
-                f"{who}: отозван сертификат {number} студента {student} (поток {cohort}): {reason}"
-            )
+            return f"{who}: отозван сертификат {number} студента {student}{where}: {reason}"
         verb = "выдан" if a == "certificate.issue" else "перевыпущен"
         tail = ""
         if a == "certificate.issue" and e.diff.get("non_graduate"):
             tail = ", не выпускнику"
         if comment := _pair(e.diff.get("comment"))[1]:
             tail += f": {comment}"
-        return f"{who}: {verb} сертификат {number} студенту {student} (поток {cohort}){tail}"
+        if a == "certificate.issue" and e.diff.get("bulk"):
+            return f"{who}: выдан сертификат {number} для {student} (массовая выдача из Excel)"
+        return f"{who}: {verb} сертификат {number} студенту {student}{where}{tail}"
+    if a == "certificate.bulk_zip":
+        count = _pair(e.diff.get("count"))[1] or 0
+        return f"{who}: скачан архив сертификатов массовой выдачи ({count} шт.)"
+    if a == "certificate.bulk_issue":
+        count = _pair(e.diff.get("count"))[1] or 0
+        template = _pair(e.diff.get("template"))[1]
+        skipped = _pair(e.diff.get("skipped"))[1] or 0
+        tail = f", пропущено строк: {skipped}" if skipped else ""
+        return (
+            f"{who}: массовая выдача сертификатов из Excel «{lab}»: "
+            f"выдано {count}, шаблон {template}{tail}"
+        )
     if a == "enrollment.certificate_pdf":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))

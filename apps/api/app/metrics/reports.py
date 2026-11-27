@@ -255,6 +255,7 @@ async def graduate_rows(
                     )
                 )
             ).all()
+            if eid is not None
         }
     students = list({s.id for _, s, *_ in found})
     jobs: dict[uuid.UUID, list[Employment]] = {}
