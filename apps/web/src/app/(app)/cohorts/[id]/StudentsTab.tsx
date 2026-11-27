@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
+import { Checkbox } from "@heroui/checkbox";
 import { Chip } from "@heroui/chip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { useMenu } from "@/components/useMenu";
@@ -35,7 +36,8 @@ import { lazyModal } from "@/lib/lazy-modal";
 const EnrollModal = lazyModal(() => import("./modals").then((m) => m.EnrollModal));
 const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
 const EnrollDateModal = lazyModal(() => import("@/components/EnrollDateModal").then((m) => m.EnrollDateModal));
-const PaymentFormModal = lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
+const BulkEnrollDateModal = lazyModal(() => import("./BulkEnrollDateModal").then((m) => m.BulkEnrollDateModal));
+const PaymentFormModal =lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
   const overlayMotion = useOverlayMotion();
@@ -101,6 +103,8 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const [removing, setRemoving] = useState<EnrollmentRow | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
   const [dating, setDating] = useState<EnrollmentRow | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [bulkDating, setBulkDating] = useState(false);
   const seesMoney = useSeesPayments();
   const canPay = useCanPay();
   const open = cohort.status === "набор" || cohort.status === "активный";
@@ -172,6 +176,29 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const confirm = useSubmit(() => removing ? remove.mutateAsync(removing.id) : Promise.resolve());
 
   const rows = expelledLast(list.data ?? []);
+  // ticking rows to move the enrollment day at once: the same people as the single edit (admin and manager)
+  const canBulk = canChange && !instructor;
+  const pickedIds = rows.filter((r) => picked.has(r.id)).map((r) => r.id);
+  const allPicked = rows.length > 0 && pickedIds.length === rows.length;
+  const toggle = (id: string, on: boolean) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+
+      if (on) next.add(id);
+      else next.delete(id);
+
+      return next;
+    });
+  const tick = (r: EnrollmentRow) =>
+    canBulk && (
+      <Checkbox
+        aria-label={`Выбрать: ${r.student_name}`}
+        className="m-0 p-0"
+        isSelected={picked.has(r.id)}
+        size="sm"
+        onValueChange={(on) => toggle(r.id, on)}
+      />
+    );
   const firstExpelled = rows.findIndex((r) => r.status === EXPELLED);
   const expelledTitle = `Отчисленные (${firstExpelled < 0 ? 0 : rows.length - firstExpelled})`;
   const flag = (r: EnrollmentRow) =>
@@ -308,6 +335,24 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         </div>
       </div>
 
+      {canBulk && rows.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-content1 px-4 py-2">
+          <Checkbox
+            isIndeterminate={pickedIds.length > 0 && !allPicked}
+            isSelected={allPicked}
+            size="sm"
+            onValueChange={(on) => setPicked(on ? new Set(rows.map((r) => r.id)) : new Set())}
+          >
+            Выбрать всех
+          </Checkbox>
+          {pickedIds.length > 0 && (
+            <Button color="primary" size="sm" startContent={<Icon name="pen" size={14} />} variant="flat" onPress={() => setBulkDating(true)}>
+              Изменить дату зачисления ({pickedIds.length})
+            </Button>
+          )}
+        </div>
+      )}
+
       <QueryState
         empty={
           <EmptyState
@@ -330,6 +375,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
+                  {canBulk && <th className="w-10 px-2" />}
                   <th className="w-10 px-2 py-3 text-center font-medium">№</th>
                   <th className="px-4 py-3 font-medium">Студент</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
@@ -350,12 +396,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   <Fragment key={r.id}>
                   {i === firstExpelled && (
                     <tr className="border-y-2 border-divider bg-default-50 text-xs text-default-500">
-                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 9 : 6} scope="colgroup">
+                      <th className="px-4 py-2 text-left font-medium" colSpan={(seesMoney ? 9 : 6) + (canBulk ? 1 : 0)} scope="colgroup">
                         {expelledTitle}
                       </th>
                     </tr>
                   )}
                   <tr className={clsx("border-b border-divider last:border-0 hover:bg-default-50", r.status === EXPELLED && "text-default-500")}>
+                    {canBulk && <td className="px-2 py-3 text-center">{tick(r)}</td>}
                     <td className="px-2 py-3 text-center text-xs tabular-nums text-default-500">{i + 1}</td>
                     <td className="px-4 py-3 font-medium">
                       <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
@@ -389,7 +436,8 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
               )}
               <li className={clsx("rounded-2xl bg-content1 p-4", r.status === EXPELLED && "text-default-500")}>
                 <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center">
+                  <div className="flex min-w-0 items-center gap-2">
+                    {tick(r)}
                     <Link className="min-w-0 truncate font-medium" href={`/students/${r.student_id}`}>
                       <span className="mr-2 text-xs font-normal tabular-nums text-default-500">{i + 1}.</span>
                       {r.student_name}
@@ -423,6 +471,18 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
           cohortStart={cohort.start_date}
           enrollment={{ ...dating, enrolled_on: enrolledOn(dating) }}
           onClose={() => setDating(null)}
+        />
+      )}
+      {bulkDating && (
+        <BulkEnrollDateModal
+          cohortId={cohort.id}
+          cohortStart={cohort.start_date}
+          ids={pickedIds}
+          onClose={() => setBulkDating(false)}
+          onDone={() => {
+            setBulkDating(false);
+            setPicked(new Set());
+          }}
         />
       )}
       {paying && <PaymentFormModal enrollmentId={paying} payment={null} onClose={() => setPaying(null)} />}
