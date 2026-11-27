@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
+import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 
 import { CertCommentModal } from "@/components/certs/CertCommentModal";
@@ -34,10 +35,11 @@ type Filters = {
   course: string | null;
   instructor: string | null;
   template: string | null;
+  batch: string | null;
   from: string;
   to: string;
 };
-const NO_FILTERS: Filters = { q: "", status: null, branch: null, course: null, instructor: null, template: null, from: "", to: "" };
+const NO_FILTERS: Filters = { q: "", status: null, branch: null, course: null, instructor: null, template: null, batch: null, from: "", to: "" };
 const STATUS_OPTIONS = (Object.keys(STATUS_LABEL) as CertStatus[]).map((key) => ({ key, label: STATUS_LABEL[key] }));
 
 function paramsOf(f: Filters) {
@@ -48,6 +50,7 @@ function paramsOf(f: Filters) {
     course_id: f.course ?? undefined,
     instructor_id: f.instructor ?? undefined,
     template_id: f.template ?? undefined,
+    batch_id: f.batch ?? undefined,
     date_from: f.from || undefined,
     date_to: f.to || undefined,
   };
@@ -58,6 +61,17 @@ function StatusBadge({ status }: { status: CertStatus }) {
     <Chip color={STATUS_TONE[status]} size="sm" variant="flat">
       {STATUS_LABEL[status]}
     </Chip>
+  );
+}
+
+/** The holder: a link to the student card when the certificate is linked to one, plain text otherwise. */
+function Who({ r, block }: { r: CertRow; block?: boolean }) {
+  if (!r.student_id) return <span className={block ? "block truncate font-medium" : undefined}>{r.student_name}</span>;
+
+  return (
+    <Link className={block ? "block truncate font-medium" : "hover:text-brand-text"} href={`/students/${r.student_id}`}>
+      {r.student_name}
+    </Link>
   );
 }
 
@@ -116,7 +130,7 @@ export default function CertificatesPage() {
     { key: "pdf", label: "Скачать", icon: "download" },
     ...(canChange && r.status === "valid"
       ? [
-          { key: "reissue", label: "Перевыпустить", icon: "edit" },
+          ...(r.cohort_id ? [{ key: "reissue", label: "Перевыпустить", icon: "edit" }] : []),
           { key: "revoke", label: "Аннулировать", icon: "ban", danger: true },
         ]
       : []),
@@ -126,7 +140,26 @@ export default function CertificatesPage() {
 
   return (
     <>
-      <PageHeader actions={<ExportButton label="Выгрузить в Excel" params={{ ...paramsOf(f), format: "xlsx" }} path="/api/v1/certificates" />} title="Сертификаты" />
+      <PageHeader
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {canChange && (
+              <Button as={Link} color="primary" href="/certificates/bulk" variant="flat">
+                Выдать из Excel
+              </Button>
+            )}
+            <ExportButton label="Выгрузить в Excel" params={{ ...paramsOf(f), format: "xlsx" }} path="/api/v1/certificates" />
+          </div>
+        }
+        title="Сертификаты"
+      />
+      {f.batch && (
+        <div className="mb-3">
+          <Chip variant="flat" onClose={() => set({ ...f, batch: null })}>
+            Только партия из Excel
+          </Chip>
+        </div>
+      )}
       <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FilterInput isClearable placeholder="Поиск по номеру или ФИО" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         <SelectField filter allLabel="Любой статус" label="Статус" options={STATUS_OPTIONS} value={f.status} onChange={(status) => set({ ...f, status: status as CertStatus | null })} />
@@ -169,16 +202,19 @@ export default function CertificatesPage() {
                     <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-default-50">
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{r.number}</td>
                       <td className="px-4 py-3">
-                        <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
-                          {r.student_name}
-                        </Link>
+                        <Who r={r} />
                       </td>
                       <td className="px-4 py-3">
-                        <div>{r.course_name}</div>
-                        <Link className="text-xs text-brand-text" href={`/cohorts/${r.cohort_id}`}>
-                          {r.cohort_code}
-                        </Link>
-                        <span className="text-xs text-default-500"> · {r.branch_name}</span>
+                        <div>{r.course_name ?? "—"}</div>
+                        {r.cohort_id && (
+                          <Link className="text-xs text-brand-text" href={`/cohorts/${r.cohort_id}`}>
+                            {r.cohort_code}
+                          </Link>
+                        )}
+                        <span className="text-xs text-default-500">
+                          {r.cohort_id ? " · " : "Список Excel · "}
+                          {r.branch_name}
+                        </span>
                       </td>
                       <td className="px-4 py-3">{r.instructor_name ?? "—"}</td>
                       <td className="px-4 py-3">
@@ -202,10 +238,8 @@ export default function CertificatesPage() {
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium">{r.number}</div>
-                      <Link className="block truncate font-medium" href={`/students/${r.student_id}`}>
-                        {r.student_name}
-                      </Link>
-                      <div className="text-sm text-default-500">{[r.course_name, r.cohort_code].join(" · ")}</div>
+                      <Who block r={r} />
+                      <div className="text-sm text-default-500">{[r.course_name, r.cohort_code].filter(Boolean).join(" · ") || "Список Excel"}</div>
                     </div>
                     <div className="flex items-center gap-1">
                       <StatusBadge status={r.status} />

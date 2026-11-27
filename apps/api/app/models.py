@@ -657,9 +657,14 @@ class Certificate(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     number: Mapped[str] = mapped_column(Text)
     verify_code: Mapped[str] = mapped_column(Text, unique=True)
-    enrollment_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
-    cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
-    course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    # null for a certificate issued from an Excel list (batch_id is then set)
+    enrollment_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
+    cohort_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
+    course_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    student_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("student.id", ondelete="SET NULL")
+    )
+    batch_id: Mapped[UUID | None] = mapped_column(PG_UUID)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
     instructor_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")

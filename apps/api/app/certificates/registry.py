@@ -22,6 +22,7 @@ from app.auth.deps import Principal, require, require_csrf_header
 from app.certificates.api import file_name, pick_template
 from app.certificates.errors import (
     CERT_ALREADY_ISSUED,
+    CERT_BATCH_FIXED,
     CERT_COMMENT_REQUIRED,
     CERT_NOT_READY,
     CERT_NOT_VALID,
@@ -69,6 +70,7 @@ from app.models import (
 from app.permissions import allows
 
 Issuer = aliased(AppUser)
+BULK_LABEL = "массовая выдача"  # in an audit label where a cohort code would stand
 
 router = APIRouter(
     prefix="/api/v1", tags=["certificates"], dependencies=[Depends(require_csrf_header)]
@@ -348,15 +350,14 @@ async def _lock(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, Enrol
 
 
 async def _already_issued(db: AsyncSession, ids: list[uuid.UUID]) -> list[uuid.UUID]:
-    return list(
-        (
-            await db.execute(
-                select(Certificate.enrollment_id).where(
-                    Certificate.enrollment_id.in_(ids), Certificate.status == "valid"
-                )
+    found = (
+        await db.execute(
+            select(Certificate.enrollment_id).where(
+                Certificate.enrollment_id.in_(ids), Certificate.status == "valid"
             )
-        ).scalars()
-    )
+        )
+    ).scalars()
+    return [e for e in found if e is not None]
 
 
 @router.post("/cohorts/{cohort_id}/certificates/issue", status_code=201)
@@ -454,13 +455,15 @@ async def issue_one(enrollment_id: uuid.UUID, body: IssueOne, p: Change, db: DB)
 
 async def _locked_valid(
     db: AsyncSession, p: Principal, certificate_id: uuid.UUID
-) -> tuple[Certificate, Enrollment]:
-    """The certificate and its enrollment, locked (enrollment first, like the issue does)."""
+) -> tuple[Certificate, Enrollment | None]:
+    """The certificate and its enrollment (none for a batch one), locked, the enrollment first."""
     cert = await db.get(Certificate, certificate_id)
     if cert is None:
         raise DomainError(NOT_FOUND)
     p.check_scope(cert.branch_id)
-    enrollment = (await _lock(db, [cert.enrollment_id]))[cert.enrollment_id]
+    enrollment = None
+    if cert.enrollment_id is not None:
+        enrollment = (await _lock(db, [cert.enrollment_id]))[cert.enrollment_id]
     await db.refresh(cert, with_for_update=True)
     if cert.status != "valid":
         raise DomainError(CERT_NOT_VALID, status=cert.status)
@@ -471,6 +474,8 @@ async def _locked_valid(
 async def reissue(certificate_id: uuid.UUID, body: Reissue, p: Change, db: DB) -> dict[str, Any]:
     """A new certificate with fresh data and the same number; the old one becomes `replaced`."""
     old, _ = await _locked_valid(db, p, certificate_id)
+    if old.cohort_id is None or old.enrollment_id is None:
+        raise DomainError(CERT_BATCH_FIXED)  # revoke it and issue again from a new list
     _finished((await db.get(Cohort, old.cohort_id)) or _gone())
     template = await chosen_template(db, body.template_id or old.template_id)
     version = await published_version(db, template)
@@ -500,7 +505,11 @@ async def revoke(certificate_id: uuid.UUID, body: Revoke, p: Change, db: DB) -> 
     cert.revoked_at, cert.revoked_by = clock.now(), p.id
     await db.flush()
     name = str(cert.data["values"].get("student.full_name", ""))
-    cohort_code = await db.scalar(select(Cohort.code).where(Cohort.id == cert.cohort_id))
+    cohort_code = (
+        await db.scalar(select(Cohort.code).where(Cohort.id == cert.cohort_id))
+        if cert.cohort_id
+        else BULK_LABEL
+    )
     await record(
         db, p.id, "certificate.revoke", "certificate", cert.id,
         {"number": [None, cert.number], "reason": [None, body.reason]},
@@ -525,10 +534,12 @@ def _select() -> Any:
             Issuer.full_name.label("issued_by_name"),
             CertTemplate.name.label("template_name"),
         )
-        .join(Enrollment, Enrollment.id == Certificate.enrollment_id)
-        .join(Student, Student.id == Enrollment.student_id)
-        .join(Cohort, Cohort.id == Certificate.cohort_id)
-        .join(Course, Course.id == Certificate.course_id)
+        .outerjoin(Enrollment, Enrollment.id == Certificate.enrollment_id)
+        .outerjoin(
+            Student, Student.id == func.coalesce(Certificate.student_id, Enrollment.student_id)
+        )
+        .outerjoin(Cohort, Cohort.id == Certificate.cohort_id)
+        .outerjoin(Course, Course.id == Certificate.course_id)
         .join(Branch, Branch.id == Certificate.branch_id)
         .join(CertTemplate, CertTemplate.id == Certificate.template_id)
         .outerjoin(AppUser, AppUser.id == Certificate.instructor_id)
@@ -545,12 +556,13 @@ def _row(r: Any) -> dict[str, Any]:
         "status": c.status,
         "enrollment_id": c.enrollment_id,
         "student_id": r.student_id,
+        "batch_id": c.batch_id,
         # the name as printed on the certificate
         "student_name": c.data["values"].get("student.full_name") or r.student_name,
         "cohort_id": c.cohort_id,
         "cohort_code": r.cohort_code,
         "course_id": c.course_id,
-        "course_name": r.course_name,
+        "course_name": r.course_name or c.data["values"].get("course.name") or None,
         "branch_id": c.branch_id,
         "branch_name": r.branch_name,
         "instructor_id": c.instructor_id,
@@ -593,6 +605,7 @@ async def registry(
     instructor_id: uuid.UUID | None = None,
     branch_id: uuid.UUID | None = None,
     template_id: uuid.UUID | None = None,
+    batch_id: uuid.UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     q: str | None = None,
@@ -614,6 +627,7 @@ async def registry(
         (Certificate.instructor_id, instructor_id),
         (Certificate.branch_id, branch_id),
         (Certificate.template_id, template_id),
+        (Certificate.batch_id, batch_id),
     ):
         if value is not None:
             where.append(column == value)
@@ -642,7 +656,8 @@ async def registry(
             filters={
                 "status": status, "course_id": course_id, "cohort_id": cohort_id,
                 "instructor_id": instructor_id, "branch_id": branch_id,
-                "template_id": template_id, "date_from": date_from, "date_to": date_to, "q": q,
+                "template_id": template_id, "batch_id": batch_id, "date_from": date_from,
+                "date_to": date_to, "q": q,
             },
         )  # fmt: skip
     total = (
@@ -704,7 +719,7 @@ async def certificate_pdf(certificate_id: uuid.UUID, p: View, db: DB) -> Respons
     await record(
         db, p.id, "certificate.pdf", "certificate", cert.id,
         {"number": [None, cert.number]}, branch_id=cert.branch_id,
-        label=f"{name} ({row.cohort_code})",
+        label=f"{name} ({row.cohort_code or BULK_LABEL})",
     )  # fmt: skip
     return Response(
         pdf,

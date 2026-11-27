@@ -545,7 +545,7 @@ async def test_attendance_rights_view_does_not_write_and_branch_scope(
 
 @pytest.mark.parametrize(
     ("now", "started"),
-    [("00:30", False), ("07:59", False), ("08:00", True), ("08:06", True), ("23:30", True)],
+    [("00:30", False), ("08:06", False), ("08:59", False), ("09:00", True), ("23:30", True)],
 )
 async def test_bug_21_today_and_unfilled_for_the_instructor(
     admin: httpx.AsyncClient,
@@ -554,8 +554,8 @@ async def test_bug_21_today_and_unfilled_for_the_instructor(
     now: str,
     started: bool,
 ) -> None:
-    """«Held» means started: today's 08:00 lesson is «not filled» once it has begun and one
-    student is unmarked, never before. The clock is frozen, so the answer cannot depend on
+    """Today's 08:00-09:00 lesson is «not filled» once it has ended and one student is
+    unmarked, never while it is still going. The clock is frozen, so the answer cannot depend on
     the hour the suite runs at."""
     clock(now)
     ins = await login_as("ins", "instructor", branch="Душанбе")
@@ -578,7 +578,7 @@ async def test_bug_21_today_and_unfilled_for_the_instructor(
     assert data["date"] == t.isoformat()
     assert [(x["lesson_id"], x["marked"], x["total"]) for x in data["today"]] == [(today_id, 1, 2)]
     # nine past lessons, none marked: all in «не заполнено» (the cohort is still ahead of its end);
-    # today's lesson joins them only after it has started
+    # today's lesson joins them only after it has ended
     expected = set(lessons) | ({today_id} if started else set())
     assert {x["lesson_id"] for x in data["unfilled"]} == expected
     assert {x["cohort_code"] for x in data["unfilled"]} == {cohort["code"]}  # only the own cohort

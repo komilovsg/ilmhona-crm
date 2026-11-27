@@ -16,6 +16,13 @@ from app.graduates.errors import NOT_GRADUATE
 from app.models import Enrollment
 
 
+async def new_number(db: AsyncSession, now: datetime | None = None) -> str:
+    """The next CERT-YYYY-NNNN (also for a certificate that has no enrollment)."""
+    now = now or datetime.now(UTC)
+    n = (await db.execute(text("SELECT nextval('certificate_no_seq')"))).scalar_one()
+    return f"CERT-{now.year}-{n:04d}"
+
+
 async def assign_number(
     db: AsyncSession, enrollment: Enrollment, *, graduate_only: bool = True
 ) -> bool:
@@ -26,9 +33,8 @@ async def assign_number(
     if enrollment.certificate_no:
         return False
     now = datetime.now(UTC)
-    n = (await db.execute(text("SELECT nextval('certificate_no_seq')"))).scalar_one()
     enrollment.certificate_non_graduate = enrollment.status != GRADUATE
-    enrollment.certificate_no = f"CERT-{now.year}-{n:04d}"
+    enrollment.certificate_no = await new_number(db, now)
     enrollment.certificate_issued_at = now
     await db.flush()
     return True
