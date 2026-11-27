@@ -204,6 +204,21 @@ async def today_lessons(
     return [tuple(r) for r in rows.all()]
 
 
+async def next_lesson(
+    db: AsyncSession, cohort_where: list[ColumnElement[bool]], day: date
+) -> tuple[Lesson, Cohort, str, str, int, int] | None:
+    """The first lesson after `day` in scope (an empty day shows when the next one is)."""
+    row = (
+        await db.execute(
+            lesson_marks_query([*cohort_where, Lesson.lesson_date > day, ~Lesson.cancelled])
+            .where(Cohort.status != "отменён")
+            .order_by(Lesson.starts_at, Cohort.code)
+            .limit(1)
+        )
+    ).first()
+    return tuple(row) if row else None
+
+
 def _unfilled_query(cohort_where: list[ColumnElement[bool]], now: datetime) -> Any:
     return (
         lesson_marks_query(

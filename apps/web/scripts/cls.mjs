@@ -16,6 +16,8 @@ const BASE = process.env.WEB_URL ?? "http://localhost:3290";
 const LOGIN = process.env.CRM_LOGIN;
 const PASSWORD = process.env.CRM_PASSWORD;
 const DELAY = Number(process.env.API_DELAY_MS ?? 1200);
+// CRM_PAGES=/today checks only those pages (a user who may not open every section)
+const ONLY = process.env.CRM_PAGES?.split(",");
 const LIMIT = Number(process.env.CLS_LIMIT ?? 0.1);
 
 if (!LOGIN || !PASSWORD) {
@@ -53,10 +55,11 @@ for (const vp of VIEWPORTS) {
   }
 
   const get = async (path) => (await context.request.get(`${BASE}${path}`)).json();
-  const cohort = (await get("/api/v1/cohorts?page_size=1")).items?.[0];
-  const student = (await get("/api/v1/students?page_size=1")).items?.[0];
-  const template = (await get("/api/v1/cert-templates")).items?.[0];
-  const pages = [
+  const cohort = ONLY ? undefined : (await get("/api/v1/cohorts?page_size=1")).items?.[0];
+  const student = ONLY ? undefined : (await get("/api/v1/students?page_size=1")).items?.[0];
+  const template = ONLY ? undefined : (await get("/api/v1/cert-templates")).items?.[0];
+  const pages = ONLY ?? [
+    "/today",
     "/dashboard",
     "/users",
     "/roles",
@@ -105,7 +108,7 @@ for (const vp of VIEWPORTS) {
 
   // Overlays must not shift the page either: a toast (stack, slide in and out) and the modal / bottom sheet,
   // opened after the page settled, are fixed-position and leave the layout alone.
-  {
+  if (!ONLY) {
     const page = await context.newPage();
 
     await page.route("**/export*", (route) => route.fulfill({ status: 500, contentType: "application/json", body: "{}" }));
