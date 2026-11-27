@@ -3,8 +3,8 @@
 Prints a temporary password (shown once, valid 7 days, changed at the first sign-in).
 
 `python -m app.cli daily` — the daily job: cohort statuses by dates (#20); активный cohorts with
-no attendance marks for `stale_days` days close (finish logic, lessons ahead freed); then login attempts older than a day are
-deleted. Safe to run any number of times.
+no attendance marks for `stale_days` days close (finish logic, lessons ahead freed); then login
+attempts older than a day are deleted. Safe to run any number of times.
 
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
