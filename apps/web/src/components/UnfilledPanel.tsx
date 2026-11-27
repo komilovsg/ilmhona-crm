@@ -62,8 +62,9 @@ function Panel({ data, title }: { data: TodayData; title: string }) {
   const count = data.unfilled.length;
 
   return (
-    <section aria-labelledby="unfilled-title" className="rounded-2xl bg-content1 p-4">
-      <div className="mb-2 flex items-center justify-between gap-3">
+    // capped at the screen height: a long backlog scrolls inside the card
+    <section aria-labelledby="unfilled-title" className="flex max-h-[calc(100dvh-8rem)] flex-col rounded-2xl bg-content1 p-4">
+      <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
         <h2 className="text-lg font-semibold" id="unfilled-title">
           {title}
         </h2>
@@ -79,11 +80,11 @@ function Panel({ data, title }: { data: TodayData; title: string }) {
           Всё отмечено за последние 30 дней.
         </p>
       ) : (
-        <div className="space-y-3">
+        <div className="-mx-1 min-h-0 space-y-3 overflow-y-auto overscroll-contain px-1">
           {groups.map((g) => (
             <div key={g.instructor_id ?? "none"}>
               {(groups.length > 1 || g.instructor_name === null) && (
-                <h3 className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-default-500">
+                <h3 className="sticky top-0 z-10 bg-content1 px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-default-500">
                   {g.instructor_name ?? "Без инструктора"} · {lessonsWord(g.lessons.length)}
                 </h3>
               )}
