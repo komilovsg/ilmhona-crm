@@ -88,7 +88,7 @@ export function TemplatesTab() {
         skeleton={<CardGridSkeleton cards={4} lines={3} />}
       >
         {(d) => (
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {d.items.map((t) => (
               <li key={t.id} className="flex flex-col gap-2 rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">

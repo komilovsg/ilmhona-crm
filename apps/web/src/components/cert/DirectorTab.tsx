@@ -25,7 +25,7 @@ export function DirectorTab() {
       {(s) => (
         <div className="space-y-5">
           <DirectorForm key={s.version} settings={s} />
-          <div className="grid gap-5 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <DirectorImageCard kind="signature" settings={s} />
             <DirectorImageCard kind="seal" settings={s} />
           </div>
@@ -93,7 +93,7 @@ function DirectorForm({ settings }: { settings: CertSettings }) {
         <p className="text-sm text-default-500">Имя и должность подставляются в сертификат через поля «Директор: имя» и «Директор: должность».</p>
       </div>
       <Segmented label="Язык" options={LANG_OPTIONS} value={lang} onChange={setLang} />
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Input key={nameKey} isDisabled={!canChange} label="Имя директора" maxLength={120} value={v[nameKey]} {...fe.field(nameKey, (x) => setV({ ...v, [nameKey]: x }))} />
         <Input key={titleKey} isDisabled={!canChange} label="Должность" maxLength={120} value={v[titleKey]} {...fe.field(titleKey, (x) => setV({ ...v, [titleKey]: x }))} />
       </div>

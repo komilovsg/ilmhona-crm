@@ -77,7 +77,7 @@ export function ListSkeleton({ cols = 5, rows = 8 }: { cols?: number; rows?: num
 /** Cohort cards grid (same grid classes as the cohorts page). */
 export function CardGridSkeleton({ cards = 6, lines = 4 }: { cards?: number; lines?: number }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
       {Array.from({ length: cards }, (_, i) => (
         <div key={i} className="flex flex-col gap-3 rounded-2xl bg-content1 p-4">
           <div className="flex items-start justify-between gap-2">
@@ -144,7 +144,7 @@ export function DetailSkeleton({ cells = 6, withTable = true }: { cells?: number
         <Bone className="h-8 w-8 rounded-lg" />
       </div>
       {cells > 0 && (
-        <section className="mb-5 grid gap-4 rounded-2xl bg-content1 p-4 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="mb-5 grid grid-cols-1 gap-4 rounded-2xl bg-content1 p-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: cells }, (_, i) => (
             <div key={i} className="flex items-start gap-3">
               <Bone className="mt-0.5 h-8 w-8 rounded-lg" />
@@ -236,12 +236,12 @@ export function AnalyticsSkeleton() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {card("min-h-52", 2)}
         {card("min-h-52", 4)}
       </div>
       {card("min-h-80", 5)}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {card("min-h-56", 4)}
         {card("min-h-56", 4)}
       </div>

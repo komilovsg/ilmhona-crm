@@ -12,6 +12,7 @@ import { ExportButton } from "@/components/ExportButton";
 import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu, type MenuAction } from "@/components/RowMenu";
@@ -66,10 +67,10 @@ function StatusBadge({ status }: { status: CertStatus }) {
 
 /** The holder: a link to the student card when the certificate is linked to one, plain text otherwise. */
 function Who({ r, block }: { r: CertRow; block?: boolean }) {
-  if (!r.student_id) return <span className={block ? "block truncate font-medium" : undefined}>{r.student_name}</span>;
+  if (!r.student_id) return <span className={block ? "block min-w-0 truncate font-medium" : undefined}>{r.student_name}</span>;
 
   return (
-    <Link className={block ? "block truncate font-medium" : "hover:text-brand-text"} href={`/students/${r.student_id}`}>
+    <Link className={block ? "block min-w-0 truncate font-medium" : "hover:text-brand-text"} href={`/students/${r.student_id}`}>
       {r.student_name}
     </Link>
   );
@@ -160,7 +161,7 @@ export default function CertificatesPage() {
           </Chip>
         </div>
       )}
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FilterInput isClearable placeholder="Поиск по номеру или ФИО" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         <SelectField filter allLabel="Любой статус" label="Статус" options={STATUS_OPTIONS} value={f.status} onChange={(status) => set({ ...f, status: status as CertStatus | null })} />
         {!me?.branch && (
@@ -187,6 +188,7 @@ export default function CertificatesPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-divider text-xs text-default-500">
                   <tr>
+                    <NoTh />
                     <th className="px-4 py-3 font-medium">Номер</th>
                     <th className="px-4 py-3 font-medium">ФИО</th>
                     <th className="px-4 py-3 font-medium">Курс · поток</th>
@@ -198,8 +200,9 @@ export default function CertificatesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.items.map((r) => (
+                  {d.items.map((r, i) => (
                     <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                      <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{r.number}</td>
                       <td className="px-4 py-3">
                         <Who r={r} />
@@ -233,12 +236,15 @@ export default function CertificatesPage() {
               </table>
             </div>
             <ul data-rows className="space-y-3 md:hidden">
-              {d.items.map((r) => (
+              {d.items.map((r, i) => (
                 <li key={r.id} className="rounded-2xl bg-content1 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium">{r.number}</div>
-                      <Who block r={r} />
+                      <div className="flex min-w-0 items-baseline">
+                        <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
+                        <Who block r={r} />
+                      </div>
                       <div className="text-sm text-default-500">{[r.course_name, r.cohort_code].filter(Boolean).join(" · ") || "Список Excel"}</div>
                     </div>
                     <div className="flex items-center gap-1">

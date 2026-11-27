@@ -4,7 +4,7 @@ export default function Loading() {
   return (
     <Late>
       <HeaderSkeleton />
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <FormSkeleton fields={4} />
         <FormSkeleton fields={3} />
       </div>

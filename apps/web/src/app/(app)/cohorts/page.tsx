@@ -266,7 +266,7 @@ export default function CohortsPage() {
         skeleton={<CardGridSkeleton lines={seesPayments ? 5 : 4} />}
       >
         <>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {cohorts.map((c) => (
               <CohortCard key={c.id} cohort={c} />
             ))}

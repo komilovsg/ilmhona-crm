@@ -168,7 +168,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
           </span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <SelectField
             isDisabled={!!me?.branch}
             isRequired
@@ -211,7 +211,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
           <>
             <section aria-label="Колонки">
               <h3 className="mb-2 text-sm font-medium">Колонки файла</h3>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {Object.keys(FIELD_LABELS).map((field) => (
                   <SelectField
                     key={field}
@@ -250,9 +250,10 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
 
             {preview.rows.length > 0 && (
               <div className="overflow-x-auto rounded-xl border border-divider">
-                <table className="w-full min-w-[34rem] text-left text-sm">
+                <table className="w-full min-w-[36rem] text-left text-sm">
                   <thead className="border-b border-divider text-xs text-default-500">
                     <tr>
+                      <th className="w-10 px-2 py-2 text-center font-medium">№</th>
                       <th className="px-3 py-2 font-medium">Стр.</th>
                       <th className="px-3 py-2 font-medium">ФИО</th>
                       <th className="px-3 py-2 font-medium">Телефон</th>
@@ -261,8 +262,9 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.rows.map((r) => (
+                    {preview.rows.map((r, i) => (
                       <tr key={r.line} className="border-b border-divider last:border-0">
+                        <td className="px-2 py-2 text-center text-xs tabular-nums text-default-500">{i + 1}</td>
                         <td className="px-3 py-2 text-default-500">{r.line}</td>
                         <td className="px-3 py-2">
                           {r.skip ? "—" : r.full_name}

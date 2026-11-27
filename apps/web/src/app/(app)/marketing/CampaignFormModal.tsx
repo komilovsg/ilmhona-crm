@@ -122,7 +122,7 @@ export function CampaignFormModal({ campaign, onClose }: { campaign: CampaignRow
       title={campaign ? "Кампания" : "Новая кампания"}
       onClose={onClose}
     >
-      <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+      <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={submit}>
         <Input className="sm:col-span-2" isRequired label="Название" value={name} {...fe.field("name", setName)} />
         <SelectField
           label="Платформа"

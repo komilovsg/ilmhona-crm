@@ -240,7 +240,7 @@ export default function CohortPage() {
         </div>
       </div>
 
-      <section className="mb-5 grid gap-4 rounded-2xl bg-content1 p-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="mb-5 grid grid-cols-1 gap-4 rounded-2xl bg-content1 p-4 sm:grid-cols-2 lg:grid-cols-3">
         <Info icon="instructors" label="Инструктор">
           {c.instructor_name ?? "не назначен"}
         </Info>

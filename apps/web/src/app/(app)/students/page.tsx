@@ -12,6 +12,7 @@ import clsx from "clsx";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
@@ -212,6 +213,7 @@ export default function StudentsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
+                  <NoTh />
                   <th className="px-4 py-3 font-medium">ФИО</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Филиал</th>
@@ -221,8 +223,9 @@ export default function StudentsPage() {
                 </tr>
               </thead>
               <tbody>
-                {students.map((s) => (
+                {students.map((s, i) => (
                   <tr key={s.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                    <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                     <td className="px-4 py-3 font-medium">
                       <Link className="hover:text-brand-text" href={`/students/${s.id}`}>
                         {s.full_name}
@@ -252,10 +255,11 @@ export default function StudentsPage() {
             </table>
           </div>
           <ul data-rows className="space-y-3 md:hidden">
-            {students.map((s) => (
+            {students.map((s, i) => (
               <li key={s.id} className="rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <Link className="min-w-0 truncate font-medium" href={`/students/${s.id}`}>
+                    <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
                     {s.full_name}
                   </Link>
                   <PersonStatus status={s.status} />

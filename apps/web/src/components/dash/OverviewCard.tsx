@@ -177,7 +177,7 @@ function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
           data.ads != null && { label: "CAC (все лиды)", value: orDash(data.cac, (v) => formatPrice(Math.round(Number(v)))), hint: "Реклама ÷ все записавшиеся" },
         ] as (Stat | false)[]).filter((s): s is Stat => !!s)}
       />
-      <div className="mb-4 grid gap-4 lg:grid-cols-2">
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <BarList note="доля от всех лидов периода" rows={funnel} title="Воронка лидов" />
         <div className="hidden md:block">
           <UnfilledWidget data={data} />
@@ -248,7 +248,7 @@ function CoursesTab({ items }: { items: CourseRow[] }) {
       .map((c) => ({ key: c.course_id, label: c.course_name, value: pick(c), text: text(c), hint: c.graduates ? `· выпускников ${c.graduates}` : undefined }));
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       {items.some((c) => c.income != null) && (
         <BarList rows={by((c) => Number(c.income), (c) => `${compact(Number(c.income))} TJS`)} title="Доход по курсам" />
       )}
@@ -305,7 +305,7 @@ export function OverviewCard({ branch }: { branch: string }) {
           skeleton={
             <>
               <StatCardsSkeleton compact count={9} />
-              <div className="grid gap-4 lg:grid-cols-2">{chartSkeleton}{chartSkeleton}</div>
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{chartSkeleton}{chartSkeleton}</div>
             </>
           }
         >
@@ -322,7 +322,7 @@ export function OverviewCard({ branch }: { branch: string }) {
           isEmpty={(d) => d.items.length === 0}
           empty={<p className="rounded-2xl bg-content1 p-8 text-center text-sm text-default-500">Потоков пока нет</p>}
           query={courses}
-          skeleton={<div className="grid gap-4 lg:grid-cols-2">{chartSkeleton}{chartSkeleton}</div>}
+          skeleton={<div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{chartSkeleton}{chartSkeleton}</div>}
         >
           {(data) => <CoursesTab items={data.items} />}
         </QueryState>

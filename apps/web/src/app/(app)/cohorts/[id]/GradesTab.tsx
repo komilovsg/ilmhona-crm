@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPrefix, NoTd, NoTh } from "@/components/RowNo";
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Spinner } from "@heroui/spinner";
@@ -386,6 +387,7 @@ function GradesList({ cohortId, canMark, data }: { cohortId: string; canMark: bo
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
+              <NoTh />
               <th className="px-4 py-3 font-medium">Студент</th>
               <th className="px-4 py-3 font-medium">
                 {attendanceCat?.name ?? "Посещаемость"} · {attendanceCat?.weight ?? 0}
@@ -402,8 +404,9 @@ function GradesList({ cohortId, canMark, data }: { cohortId: string; canMark: bo
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.map((r, i) => (
               <tr key={`${r.enrollment_id}-${schemeKey}`} className="border-b border-divider last:border-0 hover:bg-default-50">
+                <NoTd n={i + 1} />
                 <td className="px-4 py-3 font-medium">{r.student_name}</td>
                 <RowFields canMark={canMark} cohortId={cohortId} layout="table" row={r} scheme={scheme} />
                 <td className="px-4 py-3">
@@ -415,10 +418,13 @@ function GradesList({ cohortId, canMark, data }: { cohortId: string; canMark: bo
         </table>
       </div>
       <ul data-rows className="space-y-3 md:hidden">
-        {rows.map((r) => (
+        {rows.map((r, i) => (
           <li key={`${r.enrollment_id}-${schemeKey}`} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate font-medium">{r.student_name}</span>
+              <span className="truncate font-medium">
+                <NoPrefix n={i + 1} />
+                {r.student_name}
+              </span>
               <PersonStatus status={r.status} />
             </div>
             <RowFields canMark={canMark} cohortId={cohortId} layout="card" row={r} scheme={scheme} />

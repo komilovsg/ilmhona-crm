@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPrefix } from "@/components/RowNo";
 import { useState } from "react";
 
 import { LoadingButton } from "@/components/LoadingButton";
@@ -91,10 +92,13 @@ export function JournalUnmatched({
         </p>
       )}
       <ul className="divide-y divide-divider rounded-xl border border-divider text-sm">
-        {rows.map((u) => (
+        {rows.map((u, i) => (
           <li key={u.line} className="space-y-2 px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className={u.struck ? "line-through" : "font-medium"}>{u.name}</span>
+              <span className={u.struck ? "line-through" : "font-medium"}>
+                <NoPrefix n={i + 1} />
+                {u.name}
+              </span>
               <span className="text-xs text-default-500">
                 {u.struck && "вычеркнут · "}отметок: {u.marks}
               </span>

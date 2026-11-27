@@ -12,6 +12,7 @@ import { Chip } from "@heroui/chip";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
@@ -161,7 +162,7 @@ export default function GraduatesPage() {
         value={view}
         onChange={setView}
       />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {view === "students" && (
           <FilterInput isClearable placeholder="Поиск по имени или телефону" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         )}
@@ -198,6 +199,7 @@ export default function GraduatesPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b border-divider text-xs text-default-500">
                     <tr>
+                      <NoTh />
                       <th className="px-4 py-3 font-medium">Студент</th>
                       <th className="px-4 py-3 font-medium">Курс · инструктор</th>
                       <th className="px-4 py-3 font-medium">Зачислен</th>
@@ -209,8 +211,9 @@ export default function GraduatesPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {d.items.map((g) => (
+                    {d.items.map((g, i) => (
                       <tr key={g.enrollment_id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                        <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                         <td className="px-4 py-3">
                           <Link className="font-medium hover:text-brand-text" href={`/students/${g.student_id}`}>
                             {g.student_name}
@@ -236,11 +239,12 @@ export default function GraduatesPage() {
                 </table>
               </div>
               <ul data-rows className="space-y-3 md:hidden">
-                {d.items.map((g) => (
+                {d.items.map((g, i) => (
                   <li key={g.enrollment_id} className="rounded-2xl bg-content1 p-4">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <Link className="block truncate font-medium" href={`/students/${g.student_id}`}>
+                          <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
                           {g.student_name}
                         </Link>
                         <div className="text-sm text-default-500">{[g.course_name, g.cohort_code].join(" · ")}</div>
