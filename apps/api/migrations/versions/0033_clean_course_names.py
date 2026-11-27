@@ -1,0 +1,141 @@
+"""clean course names: no intake date in a course name, dated duplicates merged
+
+«Программирование (23 янв)», «Программирование (10 мар)» and «Программирование» become one
+course «Программирование»; the date shows in the cohort title (from the cohort's start date).
+
+Per group of courses whose names match once the trailing date is cut (trimmed, spaces collapsed,
+case ignored), and only for groups with at least one dated name:
+- the survivor is the oldest course (created_at, then id); its price, duration, format and
+  direction stay; the merged courses' differing values are kept in the audit entry;
+- every reference moves to the survivor: cohort, lead, campaign, note, certificate,
+  cert_template_rule (a rule the survivor already has for that instructor wins, the merged one
+  is dropped);
+- the survivor takes a merged course's legacy_ref when it has none, so a re-run of the import
+  finds it;
+- the merged courses are deleted, the survivor gets the clean name (an undated name in the group
+  wins, else the survivor's own name without the date);
+- one audit entry per merged course («course.merge») and per rename («course.update»).
+
+The pattern is a frozen copy of app/education/course_names.py.
+"""
+
+import json
+import logging
+import re
+from typing import Any
+
+import sqlalchemy as sa
+from alembic import op
+
+revision = "0033"
+down_revision = "0030"
+
+log = logging.getLogger("alembic.runtime.migration")
+
+_MONTH = (
+    r"(?:янв(?:ар[ья])?|фев(?:рал[ья])?|мар(?:та?)?|апр(?:ел[ья])?|ма[йя]|июн[ья]?|июл[ья]?"
+    r"|авг(?:уста?)?|сен(?:т(?:ябр[ья])?)?|окт(?:ябр[ья])?|ноя(?:бр[ья])?|дек(?:абр[ья])?)\.?"
+)
+_YEAR = r"(?:\s*(?:\d{4}|\d{2})(?:\s*г\.?)?)?"
+_WORD_DATE = rf"\d{{1,2}}\s*{_MONTH}{_YEAR}"
+_NUM_DATE = r"(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])(?:\.(?:\d{4}|\d{2}))?"
+TRAILING_DATE = re.compile(rf"\s*\(\s*(?:{_WORD_DATE}|{_NUM_DATE})\s*\)\s*$", re.IGNORECASE)
+
+# table -> the audit diff key counting its moved rows
+MOVED = {
+    "cohort": "cohorts",
+    "lead": "leads",
+    "campaign": "campaigns",
+    "certificate": "certificates",
+    "note": "notes",
+}
+FIELDS = ("direction", "default_price_month", "duration_months", "format")
+NO_INSTRUCTOR = "'00000000-0000-0000-0000-000000000000'::uuid"
+
+
+def _tidy(name: str) -> str:
+    return re.sub(r"\s+", " ", name).strip()
+
+
+def _plain(value: Any) -> Any:
+    return value if value is None or isinstance(value, int | str) else str(value)
+
+
+def _audit(conn: sa.Connection, action: str, entity_id: Any, label: str, diff: dict) -> None:
+    conn.execute(
+        sa.text(
+            "INSERT INTO audit_log (user_id, action, entity, entity_id, label, diff) "
+            "VALUES (NULL, :action, 'course', :id, :label, CAST(:diff AS jsonb))"
+        ),
+        {"action": action, "id": str(entity_id), "label": label, "diff": json.dumps(diff)},
+    )
+
+
+def upgrade() -> None:
+    conn = op.get_bind()
+    rows = conn.execute(
+        sa.text(
+            "SELECT id, name, legacy_ref, direction, default_price_month, duration_months, format "
+            "FROM course ORDER BY created_at, id"
+        )
+    ).mappings()
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        clean = _tidy(TRAILING_DATE.sub("", row["name"]))
+        if not clean:  # a name that is only a date stays as it is
+            continue
+        groups.setdefault(clean.casefold(), []).append({**row, "clean": clean})
+
+    for members in groups.values():
+        if not any(TRAILING_DATE.search(m["name"]) for m in members):
+            continue  # no dated name here: nothing to clean
+        survivor, merged = members[0], members[1:]
+        undated = [m for m in members if not TRAILING_DATE.search(m["name"])]
+        new_name = _tidy(undated[0]["name"]) if undated else survivor["clean"]
+        sid = survivor["id"]
+        legacy = survivor["legacy_ref"]
+        for m in merged:
+            mid = m["id"]
+            moved: dict[str, Any] = {"into": [None, new_name]}
+            for table, key in MOVED.items():
+                n = conn.execute(
+                    sa.text(f"UPDATE {table} SET course_id = :s WHERE course_id = :m"),
+                    {"s": sid, "m": mid},
+                ).rowcount
+                moved[key] = [None, n]
+            conn.execute(
+                sa.text(
+                    "UPDATE cert_template_rule r SET course_id = :s WHERE r.course_id = :m "
+                    "AND NOT EXISTS (SELECT 1 FROM cert_template_rule t WHERE t.course_id = :s "
+                    f"AND coalesce(t.instructor_id, {NO_INSTRUCTOR}) = "
+                    f"coalesce(r.instructor_id, {NO_INSTRUCTOR}))"
+                ),
+                {"s": sid, "m": mid},
+            )
+            differs = {
+                f: [_plain(m[f]), _plain(survivor[f])] for f in FIELDS if m[f] != survivor[f]
+            }
+            if differs:
+                moved["differs"] = differs
+            if legacy is None and m["legacy_ref"] is not None:
+                legacy = m["legacy_ref"]
+            # its leftover template rules (the survivor already had one) go with it (CASCADE)
+            conn.execute(sa.text("DELETE FROM course WHERE id = :m"), {"m": mid})
+            _audit(conn, "course.merge", mid, m["name"], moved)
+            log.info("course %r merged into %r: %s", m["name"], new_name, moved)
+        if legacy != survivor["legacy_ref"]:
+            conn.execute(
+                sa.text("UPDATE course SET legacy_ref = :r WHERE id = :s"), {"r": legacy, "s": sid}
+            )
+        if new_name != survivor["name"]:
+            conn.execute(
+                sa.text("UPDATE course SET name = :n WHERE id = :s"), {"n": new_name, "s": sid}
+            )
+            _audit(conn, "course.update", sid, new_name, {"name": [survivor["name"], new_name]})
+            log.info("course %r renamed to %r", survivor["name"], new_name)
+
+
+def downgrade() -> None:
+    # Data cleanup only: merged courses and the old names cannot be told apart again (the audit
+    # log keeps what happened), so going down changes nothing.
+    pass

@@ -21,7 +21,13 @@ from app.cohorts.status import TZ
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.versioning import Version, check_version
-from app.education.errors import COURSE_GLOBAL_ONLY, COURSE_IN_USE, ROOM_IN_USE
+from app.education.course_names import has_date
+from app.education.errors import (
+    COURSE_GLOBAL_ONLY,
+    COURSE_IN_USE,
+    COURSE_NAME_HAS_DATE,
+    ROOM_IN_USE,
+)
 from app.education.scope import RoomReader, branch_for_write, cohort_filters, writer
 from app.export import MAX_ROWS, Col, xlsx_response
 from app.models import AppUser, Branch, Cohort, Course, Lesson, Room
@@ -379,8 +385,15 @@ def _course_snapshot(c: Course) -> dict[str, Any]:
     }
 
 
+def _check_course_name(name: str | None) -> None:
+    """«Программирование (23 янв)» is refused: the date belongs to the cohort, not the course."""
+    if name is not None and has_date(name):
+        raise DomainError(COURSE_NAME_HAS_DATE).for_field("name", "course_name_has_date")
+
+
 @router.post("/courses", status_code=201)
 async def create_course(body: CourseIn, p: CourseChange, db: DB) -> dict[str, Any]:
+    _check_course_name(body.name)
     course = Course(**body.model_dump())
     db.add(course)
     await db.flush()
@@ -397,6 +410,7 @@ async def update_course(
     course = (await db.execute(select(Course).where(Course.id == course_id))).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)
+    _check_course_name(body.name)
     await check_version(
         db,
         course,
