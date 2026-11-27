@@ -107,6 +107,7 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM lesson",
             "DELETE FROM enrollment",
             "DELETE FROM cohort",
+            "ALTER SEQUENCE cohort_code_seq RESTART",
             "DELETE FROM student",
             "DELETE FROM course",
             "DELETE FROM room",
