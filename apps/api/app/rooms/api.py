@@ -2,6 +2,8 @@
 
 Reads: view on `rooms`, `cohorts` or `students` (the cohort form needs the lists). Writes:
 `rooms` change. Rooms are branch-scoped (404 outside the branch); courses are global.
+An archived room is left out of the lists (unless asked for) and of the pickers; the week grid
+shows it only for the days it still holds lessons, so old weeks read as they were.
 """
 
 import uuid
@@ -11,13 +13,14 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.audit.log import diff_of, record
 from app.auth.deps import Principal, require, require_csrf_header
 from app.cohorts.status import TZ
+from app.core import clock
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.versioning import Version, check_version
@@ -26,6 +29,7 @@ from app.education.errors import (
     COURSE_GLOBAL_ONLY,
     COURSE_IN_USE,
     COURSE_NAME_HAS_DATE,
+    ROOM_HAS_FUTURE_LESSONS,
     ROOM_IN_USE,
 )
 from app.education.scope import RoomReader, branch_for_write, cohort_filters, writer
@@ -62,6 +66,7 @@ class RoomCreate(Strict):
 class RoomUpdate(Strict):
     name: Name | None = None
     capacity: Annotated[int, Field(ge=1, le=100)] | None = None
+    archived: bool | None = None
 
 
 class CourseIn(Strict):
@@ -94,7 +99,13 @@ def room_out(r: Room, branch_name: str) -> dict[str, Any]:
         "branch_name": branch_name,
         "name": r.name,
         "capacity": r.capacity,
+        "archived": r.archived_at is not None,
+        "archived_at": r.archived_at,
     }
+
+
+def _room_snapshot(r: Room) -> dict[str, Any]:
+    return {"name": r.name, "capacity": r.capacity, "archived": r.archived_at is not None}
 
 
 def course_out(c: Course) -> dict[str, Any]:
@@ -126,8 +137,10 @@ async def _room(db: AsyncSession, p: Principal, room_id: uuid.UUID) -> tuple[Roo
 # ---- rooms -------------------------------------------------------------------------------
 
 
-def _room_where(p: Principal, branch_id: uuid.UUID | None) -> list[Any]:
-    where: list[Any] = []
+def _room_where(
+    p: Principal, branch_id: uuid.UUID | None, include_archived: bool = False
+) -> list[Any]:
+    where: list[Any] = [] if include_archived else [Room.archived_at.is_(None)]
     if p.branch_id is not None:
         where.append(Room.branch_id == p.branch_id)
     if branch_id:
@@ -140,15 +153,16 @@ def _room_select(where: list[Any]) -> Any:
         select(Room, Branch.name)
         .join(Branch, Branch.id == Room.branch_id)
         .where(*where)
-        .order_by(Branch.name, Room.name)
+        .order_by(Branch.name, Room.archived_at.isnot(None), Room.name)
     )
 
 
 @router.get("/rooms")
 async def list_rooms(
-    p: RoomReader, db: DB, branch_id: uuid.UUID | None = None
+    p: RoomReader, db: DB, branch_id: uuid.UUID | None = None, include_archived: bool = False
 ) -> list[dict[str, Any]]:
-    rows = await db.execute(_room_select(_room_where(p, branch_id)))
+    """Active rooms (the pickers); `include_archived` adds the archived ones, sorted last."""
+    rows = await db.execute(_room_select(_room_where(p, branch_id, include_archived)))
     return [room_out(r, b) for r, b in rows.all()]
 
 
@@ -156,14 +170,19 @@ ROOM_COLUMNS: list[Col[Any]] = [
     Col("Филиал", lambda r: r[1]),
     Col("Аудитория", lambda r: r[0].name),
     Col("Вместимость", lambda r: r[0].capacity, "int"),
+    Col("В архиве", lambda r: r[0].archived_at is not None, "bool"),
 ]
 
 
 @router.get("/rooms/export")
 async def export_rooms(
-    p: Annotated[Principal, require("rooms", "view")], db: DB, branch_id: uuid.UUID | None = None
+    p: Annotated[Principal, require("rooms", "view")],
+    db: DB,
+    branch_id: uuid.UUID | None = None,
+    include_archived: bool = False,
 ) -> Response:
-    rows = (await db.execute(_room_select(_room_where(p, branch_id)).limit(MAX_ROWS + 1))).all()
+    where = _room_where(p, branch_id, include_archived)
+    rows = (await db.execute(_room_select(where).limit(MAX_ROWS + 1))).all()
     return await xlsx_response(
         db,
         p,
@@ -172,7 +191,7 @@ async def export_rooms(
         title="Аудитории",
         columns=ROOM_COLUMNS,
         rows=rows,
-        filters={"branch_id": branch_id},
+        filters={"branch_id": branch_id, "include_archived": include_archived},
     )
 
 
@@ -187,7 +206,22 @@ async def _week(
     end = date_to or date_from + timedelta(days=6)
     if end < date_from or (end - date_from).days > 62:
         raise DomainError(VALIDATION_FAILED)
-    rooms = (await db.execute(_room_select(_room_where(p, branch_id)))).all()
+    # an archived room only for the days it still holds lessons (history keeps its place)
+    held = (
+        select(Lesson.id)
+        .where(
+            Lesson.room_id == Room.id,
+            ~Lesson.cancelled,
+            Lesson.lesson_date >= date_from,
+            Lesson.lesson_date <= end,
+        )
+        .exists()
+    )
+    where = [
+        *_room_where(p, branch_id, include_archived=True),
+        or_(Room.archived_at.is_(None), held),
+    ]
+    rooms = (await db.execute(_room_select(where))).all()
     lessons = (
         await db.execute(
             select(Lesson, Cohort, Course.name, AppUser.full_name)
@@ -305,21 +339,33 @@ async def update_room(
     await check_version(
         db, room, version, "room", current, changes=body.model_dump(exclude_unset=True)
     )
-    before = {"name": room.name, "capacity": room.capacity}
+    before = _room_snapshot(room)
     if body.name is not None:
         room.name = body.name
     if body.capacity is not None:
         room.capacity = body.capacity
+    if body.archived is True and room.archived_at is None:
+        ahead = (
+            await db.execute(
+                select(func.count())
+                .select_from(Lesson)
+                .where(Lesson.room_id == room.id, ~Lesson.cancelled, Lesson.starts_at > clock.now())
+            )
+        ).scalar_one()
+        if ahead:
+            raise DomainError(ROOM_HAS_FUTURE_LESSONS, count=ahead).for_field(
+                "archived", "room_has_future_lessons"
+            )
+        room.archived_at = clock.now()
+    elif body.archived is False:
+        room.archived_at = None
     await db.flush()
-    await record(
-        db,
-        p.id,
-        "room.update",
-        "room",
-        room.id,
-        diff_of(before, {"name": room.name, "capacity": room.capacity}),
-        branch_id=room.branch_id,
-    )
+    diff = diff_of(before, _room_snapshot(room))
+    if diff:
+        action = "room.update"
+        if set(diff) == {"archived"}:
+            action = "room.archive" if room.archived_at else "room.unarchive"
+        await record(db, p.id, action, "room", room.id, diff, branch_id=room.branch_id)
     return room_out(room, branch_name)
 
 

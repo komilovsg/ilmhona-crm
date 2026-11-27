@@ -40,6 +40,8 @@ export const apiErrors: Record<string, string> = {
   course_name_taken: "Курс с таким названием уже есть.",
   course_name_has_date: "Не пишите дату в названии курса — дата видна у потока.",
   room_in_use: "В аудитории есть потоки или уроки. Удалить нельзя.",
+  room_archived: "Аудитория в архиве: выбрать её нельзя.",
+  room_has_future_lessons: "В аудитории есть будущие уроки ({count}). Сначала перенесите их в другую аудиторию.",
   course_in_use: "По курсу есть потоки. Удалить нельзя.",
   cohort_in_use: "В потоке есть студенты. Сначала уберите их или отмените поток.",
   student_in_use: "Студент зачислен в потоки. Удалить нельзя.",
@@ -163,6 +165,7 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "donor_required") return "Выберите донора";
   if (code === "donor_not_in_cohort") return "Этот донор не финансирует поток";
   if (code === "donor_archived") return "Донор в архиве";
+  if (code === "room_archived") return "Аудитория в архиве";
   if (code === "funding_donors_invalid") return "Доноры не подходят к финансированию";
   if (code === "free_has_price") return "У бесплатного потока цена 0";
   if (code === "deadline_before_start") return "Срок должен быть позже начала";

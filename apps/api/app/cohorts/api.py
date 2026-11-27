@@ -57,6 +57,7 @@ from app.education.errors import (
     FINISH_CHANGED,
     INSTRUCTOR_INVALID,
     LESSON_CANCELLED,
+    ROOM_ARCHIVED,
     ROOM_BRANCH_MISMATCH,
     STUDENT_BRANCH_MISMATCH,
 )
@@ -389,15 +390,23 @@ async def _default_rate(db: AsyncSession, instructor_id: uuid.UUID | None) -> De
 
 
 async def _room_in_branch(
-    db: AsyncSession, p: Principal, room_id: uuid.UUID, branch_id: uuid.UUID
+    db: AsyncSession,
+    p: Principal,
+    room_id: uuid.UUID,
+    branch_id: uuid.UUID,
+    *,
+    assign: bool = False,
 ) -> Room:
-    """A room outside the user's scope is 404 like a missing one (no probing other branches)."""
+    """A room outside the user's scope is 404 like a missing one (no probing other branches).
+    `assign`: the room becomes a cohort's room, which an archived room never does."""
     room = (await db.execute(select(Room).where(Room.id == room_id))).scalar_one_or_none()
     if room is None:
         raise DomainError(NOT_FOUND)
     p.check_scope(room.branch_id)
     if room.branch_id != branch_id:
         raise DomainError(ROOM_BRANCH_MISMATCH)
+    if assign and room.archived_at is not None:
+        raise DomainError(ROOM_ARCHIVED).for_field("room_id", "room_archived")
     return room
 
 
@@ -585,7 +594,7 @@ async def create_cohort(body: CohortCreate, p: Change, db: DB) -> dict[str, Any]
     ).scalar_one_or_none()
     if course is None:
         raise DomainError(NOT_FOUND)
-    await _room_in_branch(db, p, body.room_id, branch_id)
+    await _room_in_branch(db, p, body.room_id, branch_id, assign=True)
     await _check_instructor(db, body.instructor_id, branch_id)
     cohort = Cohort(
         course_id=course.id,
@@ -689,7 +698,9 @@ async def update_cohort(
     ):
         raise DomainError(VALIDATION_FAILED)
     if "room_id" in sent and body.room_id is not None:
-        await _room_in_branch(db, p, body.room_id, cohort.branch_id)
+        await _room_in_branch(
+            db, p, body.room_id, cohort.branch_id, assign=body.room_id != cohort.room_id
+        )
         cohort.room_id = body.room_id
     instructor_before = cohort.instructor_id
     if "instructor_id" in sent and body.instructor_id != cohort.instructor_id:

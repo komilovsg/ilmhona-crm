@@ -158,7 +158,7 @@ function Board({
                 ri === rooms.length - 1 && "border-r border-r-[var(--hairline-strong)]",
               )}
               style={{ gridRow: 2, gridColumn: column(di, ri) }}
-              title={`${room.name} · ${room.branch_name}`}
+              title={`${room.name} · ${room.branch_name}${room.archived ? " · в архиве" : ""}`}
             >
               {room.name}
             </div>
@@ -184,18 +184,19 @@ function Board({
                 ri === 0 && "border-l-[var(--hairline-strong)]",
                 ri === rooms.length - 1 && "border-r border-r-[var(--hairline-strong)]",
                 d === today && "bg-primary/[0.04]",
-                onPick && "cursor-cell transition-colors hover:bg-primary/[0.08]",
+                onPick && !room.archived && "cursor-cell transition-colors hover:bg-primary/[0.08]",
               )}
               style={{ gridColumn: column(di, ri), gridRow: `${HEAD + 1} / -1` }}
-              title={onPick ? `${room.name}: свободно — нажмите, чтобы занять` : undefined}
+              title={onPick && !room.archived ? `${room.name}: свободно — нажмите, чтобы занять` : undefined}
               onClick={
-                onPick &&
-                ((e) => {
-                  const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
-                  const start = from + Math.floor(y / (perSlot * LINE_PX)) * SLOT;
+                onPick && !room.archived
+                  ? (e) => {
+                      const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
+                      const start = from + Math.floor(y / (perSlot * LINE_PX)) * SLOT;
 
-                  onPick({ room, date: d, start: clock(Math.min(start, to - SLOT)), x: e.clientX, y: e.clientY });
-                })
+                      onPick({ room, date: d, start: clock(Math.min(start, to - SLOT)), x: e.clientX, y: e.clientY });
+                    }
+                  : undefined
               }
             />
           )),

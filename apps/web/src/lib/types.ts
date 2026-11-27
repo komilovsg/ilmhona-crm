@@ -74,7 +74,16 @@ export type AuditRow = {
 
 // ---- education (stage 1a) ----
 
-export type Room = { id: string; version: number; branch_id: string; branch_name: string; name: string; capacity: number };
+export type Room = {
+  id: string;
+  version: number;
+  branch_id: string;
+  branch_name: string;
+  name: string;
+  capacity: number;
+  archived: boolean;
+  archived_at: string | null;
+};
 
 export type Course = {
   version: number;

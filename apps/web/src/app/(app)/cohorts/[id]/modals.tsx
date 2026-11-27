@@ -46,6 +46,11 @@ export function LessonFormModal({
   const [start, setStart] = useState(lesson?.start ?? preset?.start ?? cohort.start_time);
   const [end, setEnd] = useState(lesson?.end ?? preset?.end ?? cohort.end_time);
   const [roomId, setRoomId] = useState<string | null>(lesson?.room_id ?? preset?.room_id ?? cohort.room_id);
+  // a lesson held in a room archived since keeps it as an option (the select never holds an unknown key)
+  const roomOptions = rooms.map((r) => ({ key: r.id, label: r.name }));
+
+  if (lesson?.room_id && !rooms.some((r) => r.id === lesson.room_id))
+    roomOptions.unshift({ key: lesson.room_id, label: lesson.room_name });
   const problem = timeProblem(start, end);
   const valid = !!date && !!roomId && !problem && date >= MIN_DATE && date <= MAX_DATE;
 
@@ -71,7 +76,7 @@ export function LessonFormModal({
     },
     request: (changed, version) => api(`/api/v1/lessons/${lesson?.id}`, { method: "PATCH", body: changed, version }),
     labels: { date: "Дата", start_time: "Начало", end_time: "Конец", room_id: "Аудитория" },
-    show: { room_id: (id: string | null) => rooms.find((r) => r.id === id)?.name ?? "—" },
+    show: { room_id: (id: string | null) => roomOptions.find((r) => r.key === id)?.label ?? "—" },
     onSaved: done,
   });
   const fe = useFieldErrors(lesson ? edit.failure : create.error, ["date", "start_time", "end_time", "room_id"]);
@@ -106,7 +111,7 @@ export function LessonFormModal({
         <SelectField
           isRequired
           label="Аудитория"
-          options={rooms.map((r) => ({ key: r.id, label: r.name }))}
+          options={roomOptions}
           value={roomId}
           {...fe.hint("room_id")}
           onChange={(v) => {
