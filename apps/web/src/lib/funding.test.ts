@@ -10,6 +10,7 @@ test("donors go with «донор» and «смешанный» only", () => {
   assert.equal(withDonors("бесплатный"), false);
   assert.equal(fundingProblem("донор", []), "Выберите хотя бы одного донора");
   assert.equal(fundingProblem("донор", ["a"]), null);
+  assert.equal(fundingProblem("смешанный", []), null);
   assert.equal(fundingProblem("платный", []), null);
 });
 

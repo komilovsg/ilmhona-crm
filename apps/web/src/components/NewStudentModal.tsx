@@ -59,7 +59,7 @@ export function NewStudentModal({
   // single donor of a «донор» cohort is set by the server, so the field is not shown then.
   const funding = cohort.data?.funding;
   const donors = (cohort.data?.donors ?? []).filter((d) => !d.archived);
-  const pickDonor = !!funding && withDonors(funding) && !(funding === "донор" && donors.length === 1);
+  const pickDonor = !!funding && withDonors(funding) && !(funding === "донор" && donors.length === 1) && donors.length > 0;
   const donorMissing = funding === "донор" && donors.length > 1;
   const [donorId, setDonorId] = useState<string | null>(null);
 

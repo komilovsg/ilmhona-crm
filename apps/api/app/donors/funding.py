@@ -4,7 +4,8 @@
 - бесплатный: price 0, nobody pays; no donors.
 - донор: every student is paid for by one of the cohort's donors; with one donor it is set by
   itself, with several it must be chosen.
-- смешанный: a price and donors; each student either pays or is paid for by one donor.
+- смешанный: a price and any number of donors (none at first); each student either pays or is
+  paid for by one donor.
 
 A donor-funded student owes nothing and no payment is taken for them (`app.metrics.money`).
 Moving a student from a donor to paying themself sets `pays_from`: the debt counts from that
@@ -68,7 +69,9 @@ async def check_new_donors(db: AsyncSession, donor_ids: Sequence[uuid.UUID]) -> 
 
 
 def check_funding(funding: str, donor_ids: Sequence[uuid.UUID]) -> None:
-    if (funding in WITH_DONORS) != bool(donor_ids):
+    """«донор» needs a donor; «смешанный» takes any number (none: everyone pays); the rest none."""
+    ok = bool(donor_ids) if funding == DONOR else funding == MIXED or not donor_ids
+    if not ok:
         raise DomainError(FUNDING_DONORS_INVALID).for_field("donor_ids", "funding_donors_invalid")
 
 

@@ -9,7 +9,7 @@ export const FUNDINGS: { key: FundingKind; label: string }[] = [
   { key: "смешанный", label: "Смешанный" },
 ];
 
-/** «донор» and «смешанный» need donors; «платный» and «бесплатный» take none. */
+/** «донор» needs donors, «смешанный» may have them; «платный» and «бесплатный» take none. */
 export function withDonors(funding: string): boolean {
   return funding === "донор" || funding === "смешанный";
 }
@@ -27,7 +27,7 @@ export function studentFunding(funding: string, donorId: string | null, donors: 
 
 /** The form's problem with the chosen funding, or null. */
 export function fundingProblem(funding: string, donorIds: string[]): string | null {
-  if (withDonors(funding) && donorIds.length === 0) return "Выберите хотя бы одного донора";
+  if (funding === "донор" && donorIds.length === 0) return "Выберите хотя бы одного донора";
 
   return null;
 }

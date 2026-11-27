@@ -213,7 +213,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
       <div className="space-y-4">
         <OverCapacityNotice fill={cohort.fill} />
         {/* a donor cohort with one donor sets it itself: no field to fill */}
-        {withDonors(cohort.funding) && !(cohort.funding === "донор" && activeDonors.length === 1) && (
+        {withDonors(cohort.funding) && !(cohort.funding === "донор" && activeDonors.length === 1) && activeDonors.length > 0 && (
           <SelectField
             allLabel={cohort.funding === "смешанный" ? "Платит сам" : undefined}
             isRequired={cohort.funding === "донор"}
