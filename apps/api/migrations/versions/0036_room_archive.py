@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0036"
-down_revision = "0033"
+down_revision = "0035"
 
 log = logging.getLogger("alembic.runtime.migration")
 
