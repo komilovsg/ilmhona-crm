@@ -2,14 +2,14 @@
 really started: earlier lessons then take marks. Moving it later never drops marks, back-dating
 shows the debt it adds, rights and scope are those of enrolling."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 import httpx
 
 from app.audit.sentences import Entry, sentence
-from app.cohorts.status import today
+from app.cohorts.status import TZ, today
 from tests.conftest import SignedIn, sql
 from tests.edu import C, make_cohort, make_course, make_room
 from tests.test_attendance import NEW, E, mark, past_cohort
@@ -199,3 +199,64 @@ async def test_instructor_cannot_move_the_day_manager_can(
     assert r.status_code == 403
     mgr = await login_as("mgr2", "manager", branch="Душанбе")
     assert (await _move(mgr, row, day)).status_code == 200
+
+
+def _day(row: dict[str, Any]) -> date:
+    return datetime.fromisoformat(row["enrolled_at"]).astimezone(TZ).date()
+
+
+async def test_bulk_date_updates_all_selected(admin: httpx.AsyncClient) -> None:
+    cohort, _ = await past_cohort(admin)
+    rows = []
+    for i in range(3):
+        r = await admin.post(
+            f"{C}/{cohort['id']}/enrollments",
+            json={"new_student": {"full_name": f"Студент {i}", "phone": f"+99290000010{i}"}},
+        )
+        assert r.status_code == 201, r.text
+        rows.append(r.json())
+    day = today() - timedelta(days=4)
+    r = await admin.post(
+        f"{C}/{cohort['id']}/enrollments/enrolled-date",
+        json={"enrollment_ids": [x["id"] for x in rows], "enrolled_on": day.isoformat()},
+    )
+    assert (r.status_code, r.json()) == (200, {"updated": 3}), r.text
+    got = (await admin.get(f"{C}/{cohort['id']}/enrollments")).json()
+    assert [_day(x) for x in got] == [day] * 3
+    assert len(await sql("SELECT 1 FROM audit_log WHERE action = 'enrollment.date'")) == 3
+
+
+async def test_bulk_date_forbidden_for_instructor(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    ins = await login_as("ins3", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    own, _ = await past_cohort(admin, name="A", instructor_id=me)
+    row = await _join_now(admin, own)
+    r = await ins.post(
+        f"{C}/{own['id']}/enrollments/enrolled-date",
+        json={"enrollment_ids": [row["id"]], "enrolled_on": today().isoformat()},
+    )
+    assert r.status_code == 403
+
+
+async def test_bulk_date_foreign_id_changes_nothing(admin: httpx.AsyncClient) -> None:
+    a, _ = await past_cohort(admin, name="A")
+    b, _ = await past_cohort(admin, name="B")
+    mine = await _join_now(admin, a)
+    theirs = await _join_now(admin, b)
+    day = today() - timedelta(days=3)
+    r = await admin.post(
+        f"{C}/{a['id']}/enrollments/enrolled-date",
+        json={"enrollment_ids": [mine["id"], theirs["id"]], "enrolled_on": day.isoformat()},
+    )
+    assert r.status_code == 404
+    for c in (a, b):
+        rows = (await admin.get(f"{C}/{c['id']}/enrollments")).json()
+        assert all(_day(x) == today() for x in rows)
+    future = (today() + timedelta(days=1)).isoformat()
+    r = await admin.post(
+        f"{C}/{a['id']}/enrollments/enrolled-date",
+        json={"enrollment_ids": [mine["id"]], "enrolled_on": future},
+    )
+    assert r.status_code == 422

@@ -247,6 +247,11 @@ class EnrollmentDate(Strict):
     enrolled_on: Day
 
 
+class EnrollmentDates(Strict):
+    enrollment_ids: Annotated[list[uuid.UUID], Field(min_length=1, max_length=500)]
+    enrolled_on: Day
+
+
 class EnrollmentReview(Strict):
     needs_review: bool
 
@@ -1512,6 +1517,54 @@ async def set_enrollment_date(
     )
     busy = await _with_records(db, [enrollment.id])
     return {**_enrollment_out(enrollment, student, p.id, enrollment.id in busy), "debt": debt}
+
+
+@router.post("/cohorts/{cohort_id}/enrollments/enrolled-date")
+async def set_enrollment_dates(
+    cohort_id: uuid.UUID, body: EnrollmentDates, p: Enroller, db: DB
+) -> dict[str, int]:
+    """The same day for many enrollments of one cohort, all or nothing: a foreign id or a mark
+    before the new day refuses the whole batch."""
+    _no_instructor(p)
+    cohort = await _load(db, p, cohort_id)
+    ids = set(body.enrollment_ids)
+    rows = (
+        (
+            await db.execute(
+                select(Enrollment)
+                .where(Enrollment.cohort_id == cohort.id, Enrollment.id.in_(ids))
+                .order_by(Enrollment.id)
+                .with_for_update()
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(rows) != len(ids):
+        raise DomainError(NOT_FOUND)
+    day = _new_enrolled_on(cohort, body.enrolled_on)
+    changed = 0
+    for e in rows:
+        before = _enrolled_day(e)
+        if day == before:
+            continue
+        if day > before and (first := await _first_mark_before(db, e, day)):
+            raise DomainError(ENROLLED_ON_HAS_MARKS, first_mark=first).for_field(
+                "enrolled_on", "enrolled_on_has_marks"
+            )
+        e.enrolled_at = local_dt(day, time(0, 0))
+        await db.flush()
+        await record(
+            db,
+            p.id,
+            "enrollment.date",
+            "enrollment",
+            e.id,
+            {"enrolled_on": [before.isoformat(), day.isoformat()], "cohort": [None, cohort.code]},
+            branch_id=cohort.branch_id,
+        )
+        changed += 1
+    return {"updated": changed}
 
 
 @router.delete("/enrollments/{enrollment_id}", status_code=204)
