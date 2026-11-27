@@ -243,6 +243,8 @@ export type LessonItem = {
 export type TodayData = {
   date: string;
   today: LessonItem[];
+  /** First lesson after today in scope, null when none is scheduled. */
+  next_lesson: LessonItem | null;
   /** Held lessons of the last 30 days with somebody still unmarked (#21). */
   unfilled: LessonItem[];
   unfilled_by_instructor: { instructor_id: string | null; instructor_name: string | null; lessons: LessonItem[] }[];

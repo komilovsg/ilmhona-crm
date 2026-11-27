@@ -39,6 +39,7 @@ from app.export import MAX_ROWS, Col, Sheet, check_cap, workbook_response, xlsx_
 from app.metrics import (
     enrollment_attendance,
     enrollment_results,
+    next_lesson,
     today_lessons,
     unfilled_lessons,
 )
@@ -726,6 +727,7 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
     marked / total, and the «не заполнено» list (#21): held lessons of the last 30 days with
     somebody still unmarked, also grouped by instructor for the manager."""
     today, items = await _today_rows(db, p)
+    nxt = await next_lesson(db, cohort_filters(p), st.today())
     groups: dict[Any, dict[str, Any]] = {}
     for item in items:
         g = groups.setdefault(
@@ -740,6 +742,7 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
     return {
         "date": st.today(),
         "today": today,
+        "next_lesson": _lesson_item(nxt, {}) if nxt else None,
         "unfilled": items,
         "unfilled_by_instructor": list(groups.values()),
     }
