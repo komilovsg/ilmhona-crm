@@ -186,6 +186,8 @@ class Room(Versioned, Legacy, Base):
     name: Mapped[str] = mapped_column(Text)
     capacity: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    # set: hidden from the room lists, pickers and the board; old cohorts and lessons keep it
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Course(Versioned, Legacy, Base):

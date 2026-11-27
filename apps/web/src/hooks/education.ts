@@ -30,10 +30,14 @@ export function useIsInstructor(): boolean {
   return me?.role.code === "instructor";
 }
 
-export function useRooms(branchId?: string | null) {
+/** Active rooms (the pickers); `includeArchived` adds the archived ones, listed last. */
+export function useRooms(branchId?: string | null, includeArchived = false) {
   return useQuery({
-    queryKey: ["rooms", branchId ?? null],
-    queryFn: () => api<Room[]>("/api/v1/rooms", { params: { branch_id: branchId ?? undefined } }),
+    queryKey: ["rooms", branchId ?? null, includeArchived],
+    queryFn: () =>
+      api<Room[]>("/api/v1/rooms", {
+        params: { branch_id: branchId ?? undefined, include_archived: includeArchived ? "true" : undefined },
+      }),
   });
 }
 

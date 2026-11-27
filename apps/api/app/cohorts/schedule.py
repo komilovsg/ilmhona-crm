@@ -13,9 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.cohorts.status import TZ
+from app.core import clock
 from app.core.errors import DomainError
-from app.education.errors import INSTRUCTOR_BUSY, ROOM_BUSY
-from app.models import Cohort, Lesson
+from app.education.errors import INSTRUCTOR_BUSY, ROOM_ARCHIVED, ROOM_BUSY
+from app.models import Cohort, Lesson, Room
 
 
 def local_dt(day: date, at: time) -> datetime:
@@ -39,9 +40,16 @@ async def check_room_free(
     *,
     ignore_lesson: uuid.UUID | None = None,
 ) -> None:
-    """Raise room_busy (naming the cohort) if any window overlaps a live lesson in the room."""
+    """Raise room_busy (naming the cohort) if any window overlaps a live lesson in the room, and
+    room_archived if an archived room would get a lesson ahead (history may still be fixed)."""
     if not windows:
         return
+    if max(s for s, _ in windows) > clock.now():
+        archived = (
+            await db.execute(select(Room.archived_at).where(Room.id == room_id))
+        ).scalar_one_or_none()
+        if archived is not None:
+            raise DomainError(ROOM_ARCHIVED).for_field("room_id", "room_archived")
     lo = min(s for s, _ in windows)
     hi = max(e for _, e in windows)
     query = (

@@ -6,6 +6,11 @@ COURSE_NAME_HAS_DATE = errors.define(
     "course_name_has_date", 422, "A course name holds no date: the cohort shows it"
 )
 ROOM_IN_USE = errors.define("room_in_use", 409, "Room has cohorts or lessons")
+ROOM_ARCHIVED = errors.define("room_archived", 422, "An archived room cannot be chosen")
+# params: count (live lessons ahead in the room)
+ROOM_HAS_FUTURE_LESSONS = errors.define(
+    "room_has_future_lessons", 409, "Room has lessons ahead: move them before archiving"
+)
 COURSE_IN_USE = errors.define("course_in_use", 409, "Course has cohorts")
 COURSE_GLOBAL_ONLY = errors.define(
     "course_global_only", 403, "Courses are shared: only users without a branch change them"

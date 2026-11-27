@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
+import { Switch } from "@heroui/switch";
 
 import { ScheduleTab } from "./ScheduleTab";
 
@@ -34,8 +35,31 @@ const ACTIONS = [
   { key: "delete", label: "Удалить", icon: "trash", danger: true },
 ];
 
-function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit: (r: Room) => void; onDelete: (r: Room) => void }) {
-  const rooms = useRooms();
+function RoomsList({
+  canChange,
+  showArchived,
+  onEdit,
+  onDelete,
+}: {
+  canChange: boolean;
+  showArchived: boolean;
+  onEdit: (r: Room) => void;
+  onDelete: (r: Room) => void;
+}) {
+  const rooms = useRooms(null, showArchived);
+  const refresh = useRefreshEducation();
+  // an archived room leaves the pickers and the board; a room with lessons ahead is refused (409)
+  const archive = useMutation({
+    mutationFn: (r: Room) => api(`/api/v1/rooms/${r.id}`, { method: "PATCH", body: { archived: !r.archived }, version: r.version }),
+    onSuccess: (_, r) => {
+      void refresh();
+      notify(r.archived ? "Аудитория возвращена" : "Аудитория в архиве");
+    },
+    onError: (e) => {
+      void refresh();
+      notifyError(e);
+    },
+  });
 
   if (rooms.data === undefined || rooms.data.length === 0)
     return (
@@ -52,11 +76,12 @@ function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit
   const menu = (r: Room) =>
     canChange && (
       <RowMenu
-        actions={ACTIONS}
+        actions={[ACTIONS[0], { key: "archive", label: r.archived ? "Вернуть из архива" : "В архив", icon: "archive" }, ACTIONS[1]]}
         label={`Действия: ${r.name}`}
-        onAction={(k) => (k === "edit" ? onEdit(r) : onDelete(r))}
+        onAction={(k) => (k === "edit" ? onEdit(r) : k === "archive" ? archive.mutate(r) : onDelete(r))}
       />
     );
+  const archived = (r: Room) => r.archived && <span className="font-normal text-default-500"> · в архиве</span>;
 
   return (
     <>
@@ -73,7 +98,10 @@ function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit
           <tbody>
             {rooms.data.map((r) => (
               <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-default-50">
-                <td className="px-4 py-3 font-medium">{r.name}</td>
+                <td className="px-4 py-3 font-medium">
+                  {r.name}
+                  {archived(r)}
+                </td>
                 <td className="px-4 py-3">{r.branch_name}</td>
                 <td className="px-4 py-3">{r.capacity}</td>
                 <td className="px-2">{menu(r)}</td>
@@ -85,8 +113,11 @@ function RoomsList({ canChange, onEdit, onDelete }: { canChange: boolean; onEdit
       <ul data-rows className="space-y-3 md:hidden">
         {rooms.data.map((r) => (
           <li key={r.id} className="flex items-start justify-between gap-2 rounded-2xl bg-content1 p-4">
-            <div>
-              <div className="font-medium">{r.name}</div>
+            <div className="min-w-0">
+              <div className="break-words font-medium">
+                {r.name}
+                {archived(r)}
+              </div>
               <div className="text-sm text-default-500">
                 {r.branch_name} · {r.capacity} мест
               </div>
@@ -180,6 +211,7 @@ export default function RoomsPage() {
   const [roomForm, setRoomForm] = useState<Room | "new" | null>(null);
   const [courseForm, setCourseForm] = useState<Course | "new" | null>(null);
   const [removal, setRemoval] = useState<Removal | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const remove = useMutation({
     mutationFn: ({ kind, item }: Removal) => api(`/api/v1/${kind === "room" ? "rooms" : "courses"}/${item.id}`, { method: "DELETE" }),
@@ -200,7 +232,9 @@ export default function RoomsPage() {
       <PageHeader
         actions={
           <>
-            {tab === "rooms" && <ExportButton path="/api/v1/rooms/export" />}
+            {tab === "rooms" && (
+              <ExportButton params={{ include_archived: showArchived ? "true" : undefined }} path="/api/v1/rooms/export" />
+            )}
             {tab === "courses" && <ExportButton path="/api/v1/courses/export" />}
             {(tab === "courses" ? canChangeCourses : canChange) && tab !== "schedule" && (
               <Button
@@ -228,7 +262,19 @@ export default function RoomsPage() {
       />
       {tab === "schedule" && <ScheduleTab />}
       {tab === "rooms" && (
-        <RoomsList canChange={canChange} onDelete={(item) => setRemoval({ kind: "room", item })} onEdit={setRoomForm} />
+        <>
+          <div className="mb-4 flex justify-end">
+            <Switch isSelected={showArchived} size="sm" onValueChange={setShowArchived}>
+              Показать архив
+            </Switch>
+          </div>
+          <RoomsList
+            canChange={canChange}
+            showArchived={showArchived}
+            onDelete={(item) => setRemoval({ kind: "room", item })}
+            onEdit={setRoomForm}
+          />
+        </>
       )}
       {tab === "courses" && (
         <CoursesList canChange={canChangeCourses} onDelete={(item) => setRemoval({ kind: "course", item })} onEdit={setCourseForm} />
