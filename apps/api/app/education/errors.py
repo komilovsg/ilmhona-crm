@@ -36,8 +36,16 @@ ALREADY_ENROLLED = errors.define("already_enrolled", 409, "Student is already in
 COHORT_CLOSED = errors.define("cohort_closed", 409, "Cohort is finished or cancelled")
 LESSON_CANCELLED = errors.define("lesson_cancelled", 409, "Lesson is cancelled")
 LESSON_NOT_HELD = errors.define("lesson_not_held", 409, "Lesson is on a later day")
+# params: enrolled (the enrollment day as «дд.мм»)
 ENROLLED_AFTER_LESSON = errors.define(
     "enrolled_after_lesson", 422, "The student was enrolled after that lesson"
+)
+ENROLLED_ON_FUTURE = errors.define(
+    "enrolled_on_future", 422, "The enrollment day cannot be after today"
+)
+# params: first_mark (the earliest lesson with a mark before the new day)
+ENROLLED_ON_HAS_MARKS = errors.define(
+    "enrolled_on_has_marks", 422, "The student has marks before the new enrollment day"
 )
 COHORT_NOT_ACTIVE = errors.define("cohort_not_active", 409, "Only an active cohort can be finished")
 COHORT_NOT_DONE = errors.define("cohort_not_done", 409, "Cohort is not finished")

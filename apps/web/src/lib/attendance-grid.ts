@@ -56,6 +56,11 @@ export function cellMarkable(lesson: { date: string; writable: boolean }, studen
   return lesson.writable && student.enrolled_on <= lesson.date;
 }
 
+/** Not markable only because the student was enrolled after the lesson: moving the enrollment day unlocks it. */
+export function cellLocked(lesson: { date: string; writable: boolean }, student: { enrolled_on: string }): boolean {
+  return lesson.writable && student.enrolled_on > lesson.date;
+}
+
 export type Mark = { present: boolean; excused?: boolean; reason: string | null };
 
 export function statusOf(mark: { present: boolean; excused?: boolean } | undefined): Status | undefined {

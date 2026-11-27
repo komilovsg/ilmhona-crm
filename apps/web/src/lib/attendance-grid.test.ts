@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { arrowStep, cellMarkable, defaultMonth, keyMark, lessonsOfMonth, monthLabel, monthsOf, withMark } from "./attendance-grid.ts";
+import { arrowStep, cellLocked, cellMarkable, defaultMonth, keyMark, lessonsOfMonth, monthLabel, monthsOf, withMark } from "./attendance-grid.ts";
 
 const L = (date: string, held: boolean, cancelled = false) => ({ date, held, cancelled });
 
@@ -46,6 +46,17 @@ test("markable: writable lesson and enrolled by its date", () => {
   assert.equal(cellMarkable(lesson, { enrolled_on: "2026-09-05" }), true);
   assert.equal(cellMarkable(lesson, { enrolled_on: "2026-09-06" }), false);
   assert.equal(cellMarkable({ ...lesson, writable: false }, { enrolled_on: "2026-01-01" }), false);
+});
+
+test("a cell is locked only by an enrollment after the lesson", () => {
+  const lesson = { date: "2026-09-05", writable: true };
+
+  assert.equal(cellLocked(lesson, { enrolled_on: "2026-09-06" }), true);
+  assert.equal(cellLocked(lesson, { enrolled_on: "2026-09-05" }), false);
+  // a cancelled or future lesson is not markable for anybody: no offer to move the day
+  assert.equal(cellLocked({ ...lesson, writable: false }, { enrolled_on: "2026-09-06" }), false);
+  for (const s of [{ enrolled_on: "2026-09-04" }, { enrolled_on: "2026-09-06" }])
+    assert.notEqual(cellLocked(lesson, s), cellMarkable(lesson, s));
 });
 
 test("withMark sets and removes one cell", () => {

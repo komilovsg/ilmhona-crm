@@ -177,7 +177,11 @@ class Browser(httpx.AsyncClient):
             return
         if parts[-2] == "attendance":  # a cell has no version: last write wins
             return
-        if parts[-1] in ("review", "funding"):  # /enrollments/<id>/… edits the enrollment row
+        if parts[-1] in (
+            "review",
+            "funding",
+            "enrolled-on",
+        ):  # /enrollments/<id>/… edits the enrollment row
             rows = await sql("SELECT version FROM enrollment WHERE id = :i", i=parts[-2])
             kw["headers"] = {**headers, "X-Record-Version": str(rows[0][0] if rows else 1)}
             return

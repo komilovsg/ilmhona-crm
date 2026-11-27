@@ -22,7 +22,7 @@ import { useIsInstructor, useRefreshEducation } from "@/hooks/education";
 import { useCanPay, useSeesPayments } from "@/hooks/money";
 import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
-import { ENROLLMENT_STATUSES, EXPELLED, expelledLast, formatPrice } from "@/lib/education";
+import { ENROLLMENT_STATUSES, EXPELLED, expelledLast, formatPrice, fullDate, todayIso } from "@/lib/education";
 import type { CohortPayments } from "@/lib/money-types";
 import { studentFunding, withDonors } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
@@ -33,6 +33,7 @@ import { lazyModal } from "@/lib/lazy-modal";
 
 const EnrollModal = lazyModal(() => import("./modals").then((m) => m.EnrollModal));
 const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
+const EnrollDateModal = lazyModal(() => import("@/components/EnrollDateModal").then((m) => m.EnrollDateModal));
 const PaymentFormModal = lazyModal(() => import("../../payments/PaymentFormModal").then((m) => m.PaymentFormModal));
 
 function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: string) => void }) {
@@ -90,6 +91,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const [enrolling, setEnrolling] = useState(false);
   const [removing, setRemoving] = useState<EnrollmentRow | null>(null);
   const [paying, setPaying] = useState<string | null>(null);
+  const [dating, setDating] = useState<EnrollmentRow | null>(null);
   const seesMoney = useSeesPayments();
   const canPay = useCanPay();
   const open = cohort.status === "набор" || cohort.status === "активный";
@@ -181,6 +183,25 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     ) : (
       "—"
     );
+  // the enrollment day (Dushanbe): lessons before it take no marks; who may enrol may move it
+  const enrolledOn = (r: EnrollmentRow) => todayIso(new Date(r.enrolled_at));
+  const enrolled = (r: EnrollmentRow) => (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap tabular-nums">
+      {fullDate(enrolledOn(r))}
+      {(canChange || instructor) && (
+        <Button
+          isIconOnly
+          aria-label={`Изменить дату зачисления: ${r.student_name}`}
+          className="size-8 min-w-8"
+          size="sm"
+          variant="light"
+          onPress={() => setDating(r)}
+        >
+          <Icon name="pen" size={14} />
+        </Button>
+      )}
+    </span>
+  );
   const statusOnly = (r: EnrollmentRow) =>
     canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s, version: r.version })} /> : <PersonStatus status={r.status} />;
   const funding = (r: EnrollmentRow) =>
@@ -289,6 +310,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   <th className="w-10 px-2 py-3 text-center font-medium">№</th>
                   <th className="px-4 py-3 font-medium">Студент</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
+                  <th className="px-4 py-3 font-medium">Зачислен</th>
                   <th className="px-4 py-3 font-medium">Статус</th>
                   {seesMoney && (
                     <>
@@ -305,7 +327,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                   <Fragment key={r.id}>
                   {i === firstExpelled && (
                     <tr className="border-y-2 border-divider bg-default-50 text-xs text-default-500">
-                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 8 : 5} scope="colgroup">
+                      <th className="px-4 py-2 text-left font-medium" colSpan={seesMoney ? 9 : 6} scope="colgroup">
                         {expelledTitle}
                       </th>
                     </tr>
@@ -319,6 +341,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                       {flag(r)}
                     </td>
                     <td className="px-4 py-3">{phone(r)}</td>
+                    <td className="px-4 py-1">{enrolled(r)}</td>
                     <td className="px-4 py-2">{status(r)}</td>
                     {seesMoney && (
                       <>
@@ -350,6 +373,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                 </div>
                 {flag(r)}
                 <div className="mt-1 text-sm">{phone(r)}</div>
+                <div className="text-sm text-default-600">Зачислен {enrolled(r)}</div>
                 <div className="mt-2">{status(r)}</div>
                 {seesMoney && (
                   <div className="mt-3 flex items-end justify-between gap-2 border-t border-divider pt-3 text-sm">
@@ -367,6 +391,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
         </>
       </QueryState>
 
+      {dating && (
+        <EnrollDateModal
+          cohortStart={cohort.start_date}
+          enrollment={{ ...dating, enrolled_on: enrolledOn(dating) }}
+          onClose={() => setDating(null)}
+        />
+      )}
       {paying && <PaymentFormModal enrollmentId={paying} payment={null} onClose={() => setPaying(null)} />}
       {enrolling &&
         (instructor ? (

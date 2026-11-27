@@ -297,6 +297,7 @@ export type LessonAttendance = {
     id: string;
     cohort_id: string;
     cohort_code: string;
+    cohort_start: string;
     course_name: string;
     room_name: string;
     date: string;
@@ -310,6 +311,8 @@ export type LessonAttendance = {
   prev_id: string | null;
   next_id: string | null;
   students: MarkRow[];
+  /** enrolled after this lesson: not markable until their enrollment day moves */
+  late: { enrollment_id: string; version: number; student_name: string; enrolled_on: string }[];
   marked: number;
   total: number;
 };
@@ -334,12 +337,13 @@ export type GridStudent = AttendanceStats & {
   student_id: string;
   student_name: string;
   status: string;
+  version: number;
   enrolled_at: string;
   enrolled_on: string;
   marks: Record<string, { present: boolean; excused?: boolean; reason: string | null }>;
 };
 
-export type AttendanceGrid = { cohort_id: string; cohort_code: string; lessons: GridLessonCol[]; students: GridStudent[] };
+export type AttendanceGrid = { cohort_id: string; cohort_code: string; start_date: string; lessons: GridLessonCol[]; students: GridStudent[] };
 
 export type GradeRow = {
   enrollment_id: string;

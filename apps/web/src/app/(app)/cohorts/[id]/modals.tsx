@@ -19,7 +19,7 @@ import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
-import { MAX_DATE, MIN_DATE, timeProblem } from "@/lib/education";
+import { MAX_DATE, MIN_DATE, timeProblem, todayIso } from "@/lib/education";
 import { withDonors } from "@/lib/funding";
 import { can } from "@/lib/permissions";
 import { useSubmit } from "@/lib/submit";
@@ -154,6 +154,11 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
     cohort.funding === "донор" && activeDonors.length === 1 ? activeDonors[0].id : null,
   );
   const funded = withDonors(cohort.funding) ? { donor_id: donorId } : {};
+  // a running cohort: the day the student really started (lessons before it take no marks)
+  const today = todayIso();
+  const running = cohort.start_date < today;
+  const [enrolledOn, setEnrolledOn] = useState(today);
+  const dated = running && enrolledOn && enrolledOn !== today ? { enrolled_on: enrolledOn } : {};
   const term = q.trim();
 
   const found = useQuery({
@@ -164,7 +169,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const enroll = useMutation({
     mutationFn: (body: { student_id: string } | { new_student: { full_name: string; phone: string | null; gender: string | null } }) =>
-      api<EnrollmentRow>(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body: { ...body, ...funded } }),
+      api<EnrollmentRow>(`/api/v1/cohorts/${cohort.id}/enrollments`, { method: "POST", body: { ...body, ...funded, ...dated } }),
     onSuccess: (row) => {
       void refresh();
       notify(`Студент зачислен${overToast(row.over_capacity)}`);
@@ -174,7 +179,7 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
 
   const exceeds = wouldExceed(cohort.fill);
   const newBody = { new_student: { full_name: name, phone: phone.trim() || null, gender } };
-  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender", "donor_id"]);
+  const fe = useFieldErrors(enroll.error, ["full_name", "phone", "gender", "donor_id", "enrolled_on"]);
   const submitNew = useSubmit(() => enroll.mutateAsync(newBody), !name.trim());
 
   const modes = [
@@ -225,6 +230,17 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
               fe.clear("donor_id");
               setDonorId(v);
             }}
+          />
+        )}
+        {running && (
+          <DateField
+            isRequired
+            description="Уроки до этой даты нельзя отметить"
+            label="Дата зачисления"
+            max={today}
+            min={cohort.start_date}
+            value={enrolledOn}
+            {...fe.field("enrolled_on", setEnrolledOn)}
           />
         )}
         {modes.length > 1 && <Segmented label="Способ" options={modes} value={mode} onChange={setMode} />}

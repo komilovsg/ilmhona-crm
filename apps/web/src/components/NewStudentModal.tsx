@@ -6,6 +6,7 @@ import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { AppModal } from "./AppModal";
+import { DateField } from "./DateField";
 import { LoadingButton } from "./LoadingButton";
 import { Segmented } from "./Segmented";
 
@@ -16,6 +17,7 @@ import { useRefreshEducation } from "@/hooks/education";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
+import { todayIso } from "@/lib/education";
 import { withDonors } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
@@ -62,6 +64,11 @@ export function NewStudentModal({
   const pickDonor = !!funding && withDonors(funding) && !(funding === "донор" && donors.length === 1) && donors.length > 0;
   const donorMissing = funding === "донор" && donors.length > 1;
   const [donorId, setDonorId] = useState<string | null>(null);
+  // a running cohort: the day the student really started (kept for «добавить ещё»)
+  const today = todayIso();
+  const start = cohort.data?.start_date;
+  const running = !!start && start < today;
+  const [enrolledOn, setEnrolledOn] = useState(today);
 
   const save = useMutation({
     mutationFn: () =>
@@ -70,6 +77,7 @@ export function NewStudentModal({
         body: {
           new_student: { full_name: name, phone: phone.trim() || null, gender: gender === "none" ? null : gender },
           ...(pickDonor ? { donor_id: donorId } : {}),
+          ...(running && enrolledOn && enrolledOn !== today ? { enrolled_on: enrolledOn } : {}),
         },
       }),
     onSuccess: (row) => {
@@ -84,7 +92,7 @@ export function NewStudentModal({
       nameRef.current?.focus();
     },
   });
-  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender", "donor_id"]);
+  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender", "donor_id", "enrolled_on"]);
   const valid = !!name.trim() && !(donorMissing && !donorId);
   const submit = useSubmit(() => save.mutateAsync(), !valid);
   const run = (more: boolean) => {
@@ -175,6 +183,17 @@ export function NewStudentModal({
               fe.clear("donor_id");
               setDonorId(v);
             }}
+          />
+        )}
+        {running && (
+          <DateField
+            isRequired
+            description="Уроки до этой даты нельзя отметить"
+            label="Дата зачисления"
+            max={today}
+            min={start}
+            value={enrolledOn}
+            {...fe.field("enrolled_on", setEnrolledOn)}
           />
         )}
         <OverCapacityNotice fill={fill} />

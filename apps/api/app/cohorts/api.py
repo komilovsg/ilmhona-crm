@@ -52,6 +52,8 @@ from app.education.errors import (
     COHORT_NOT_ACTIVE,
     COHORT_NOT_CANCELLED,
     COHORT_NOT_DONE,
+    ENROLLED_ON_FUTURE,
+    ENROLLED_ON_HAS_MARKS,
     ENROLLMENT_HAS_RECORDS,
     ENROLLMENT_NOT_YOURS,
     FINISH_CHANGED,
@@ -74,7 +76,13 @@ from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks, over_capacity_of
 from app.metrics.donors import cohort_funding_counts
-from app.metrics.money import cohort_income, cohort_payers, debt_summary
+from app.metrics.money import (
+    billed,
+    cohort_income,
+    cohort_payers,
+    debt_summary,
+    enrollment_money_rows,
+)
 from app.metrics.stale import DAYS, warning_clause, warnings_for
 from app.models import (
     AppUser,
@@ -222,12 +230,18 @@ class EnrollIn(Strict):
     new_student: NewStudent | None = None
     # «за счёт донора»: one of the cohort's donors (a «донор» cohort with one donor sets it itself)
     donor_id: uuid.UUID | None = None
+    # a student who joins a running cohort: the day they actually started (cohort start .. today)
+    enrolled_on: Day | None = None
 
     @model_validator(mode="after")
     def _one(self) -> Self:
         if (self.student_id is None) == (self.new_student is None):
             raise ValueError("give student_id or new_student")
         return self
+
+
+class EnrollmentDate(Strict):
+    enrolled_on: Day
 
 
 class EnrollmentReview(Strict):
@@ -1173,7 +1187,7 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
 
 @router.post("/cohorts/{cohort_id}/enrollments", status_code=201)
 async def enroll(cohort_id: uuid.UUID, body: EnrollIn, p: Enroller, db: DB) -> dict[str, Any]:
-    return await enroll_into(db, p, cohort_id, body)
+    return await enroll_into(db, p, cohort_id, body, enrolled_on=body.enrolled_on)
 
 
 async def enroll_into(
@@ -1193,6 +1207,8 @@ async def enroll_into(
             raise DomainError(FORBIDDEN, section="students", level="view")
     elif body.new_student is not None and not allows(p.level("students"), "change"):
         raise DomainError(FORBIDDEN, section="students", level="change")
+    if enrolled_on is not None and enrolled_on > st.today():
+        raise DomainError(ENROLLED_ON_FUTURE).for_field("enrolled_on", "enrolled_on_future")
     cohort = await _load(db, p, cohort_id, lock=True)
     if cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)
@@ -1383,6 +1399,102 @@ async def set_enrollment_review(
         branch_id=cohort.branch_id,
     )
     return _enrollment_out(enrollment, student)
+
+
+# ---- enrollment date ---------------------------------------------------------------------
+# A student added to a running cohort gets today as the enrollment day, so the lessons before it
+# take no marks (`enrolled_by`). The day can be moved back to when they really started (not
+# before the cohort start, not after today). Same rights as enrolling: an instructor in their own
+# cohort. Moving it later never drops marks: a mark before the new day refuses the change.
+# Back-dating adds the months since then to the debt (`expected_months`): the preview and the
+# answer show it to who sees payments.
+
+
+def _enrolled_day(e: Enrollment) -> date:
+    return e.enrolled_at.astimezone(st.TZ).date()
+
+
+def _new_enrolled_on(cohort: Cohort, day: date) -> date:
+    if day > st.today():
+        raise DomainError(ENROLLED_ON_FUTURE).for_field("enrolled_on", "enrolled_on_future")
+    return max(day, cohort.start_date)
+
+
+async def _debt_change(
+    db: AsyncSession, p: Principal, e: Enrollment, cohort: Cohort, day: date
+) -> dict[str, Decimal] | None:
+    """{before, after}: the debt now and with the enrollment day `day`; None for who does not
+    see payments and for a student who owes nothing anyway (free cohort, donor)."""
+    since, price = billed(e, cohort)
+    if not can_view_payments(p) or price <= 0:
+        return None
+    moved = local_dt(day, time(0, 0))
+    after_since = max(moved, e.pays_from) if e.pays_from else moved
+    rows = [
+        (e.id, s, e.status, price, cohort.start_date, cohort.end_date) for s in (since, after_since)
+    ]
+    before = (await enrollment_money_rows(db, rows[:1]))[e.id]["debt"]
+    after = (await enrollment_money_rows(db, rows[1:]))[e.id]["debt"]
+    return {"before": before, "after": after}
+
+
+async def _first_mark_before(db: AsyncSession, e: Enrollment, day: date) -> date | None:
+    return await db.scalar(
+        select(func.min(Lesson.lesson_date))
+        .join(Attendance, Attendance.lesson_id == Lesson.id)
+        .where(Attendance.enrollment_id == e.id, Lesson.lesson_date < day)
+    )
+
+
+@router.get("/enrollments/{enrollment_id}/enrolled-on")
+async def preview_enrollment_date(
+    enrollment_id: uuid.UUID, enrolled_on: date, p: Enroller, db: DB
+) -> dict[str, Any]:
+    """What the change would do: the day it lands on (clamped to the cohort start) and the debt."""
+    enrollment, _, cohort = await _enrollment(db, p, enrollment_id)
+    day = _new_enrolled_on(cohort, enrolled_on)
+    return {
+        "enrolled_on": day,
+        "first_mark": await _first_mark_before(db, enrollment, day),
+        "debt": await _debt_change(db, p, enrollment, cohort, day),
+    }
+
+
+@router.patch("/enrollments/{enrollment_id}/enrolled-on")
+async def set_enrollment_date(
+    enrollment_id: uuid.UUID, body: EnrollmentDate, version: Version, p: Enroller, db: DB
+) -> dict[str, Any]:
+    enrollment, student, cohort = await _enrollment(db, p, enrollment_id, lock=True)
+    await check_version(
+        db,
+        enrollment,
+        version,
+        "enrollment",
+        lambda: _enrollment_out(enrollment, student),
+        changes=body.model_dump(mode="json"),
+    )
+    day = _new_enrolled_on(cohort, body.enrolled_on)
+    before = _enrolled_day(enrollment)
+    if day == before:
+        return {**_enrollment_out(enrollment, student, p.id), "debt": None}
+    if day > before and (first := await _first_mark_before(db, enrollment, day)):
+        raise DomainError(ENROLLED_ON_HAS_MARKS, first_mark=first).for_field(
+            "enrolled_on", "enrolled_on_has_marks"
+        )
+    debt = await _debt_change(db, p, enrollment, cohort, day)
+    enrollment.enrolled_at = local_dt(day, time(0, 0))
+    await db.flush()
+    await record(
+        db,
+        p.id,
+        "enrollment.date",
+        "enrollment",
+        enrollment.id,
+        {"enrolled_on": [before.isoformat(), day.isoformat()], "cohort": [None, cohort.code]},
+        branch_id=cohort.branch_id,
+    )
+    busy = await _with_records(db, [enrollment.id])
+    return {**_enrollment_out(enrollment, student, p.id, enrollment.id in busy), "debt": debt}
 
 
 @router.delete("/enrollments/{enrollment_id}", status_code=204)
