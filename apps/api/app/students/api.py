@@ -10,7 +10,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -149,8 +149,17 @@ def _student_where(
     status: str | None,
     branch_id: uuid.UUID | None,
     needs_review: bool | None = None,
+    donor_id: uuid.UUID | None = None,
 ) -> list[Any]:
     where: list[Any] = list(student_filters(p))
+    if donor_id:  # funded by that donor in a cohort the user may see
+        where.append(
+            exists().where(
+                Enrollment.student_id == Student.id,
+                Enrollment.donor_id == donor_id,
+                Enrollment.cohort_id.in_(select(Cohort.id).where(*cohort_filters(p))),
+            )
+        )
     if needs_review is not None:
         where.append(Student.needs_review == needs_review)
     if branch_id:
@@ -179,10 +188,11 @@ async def list_students(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     needs_review: bool | None = None,
+    donor_id: uuid.UUID | None = None,
     page: Page = 1,
     page_size: PageSize = 25,
 ) -> dict[str, Any]:
-    where = _student_where(p, q, status, branch_id, needs_review)
+    where = _student_where(p, q, status, branch_id, needs_review, donor_id)
     total = (await db.execute(select(func.count()).select_from(Student).where(*where))).scalar_one()
     rows = (
         await db.execute(_student_select(where).limit(page_size).offset((page - 1) * page_size))
@@ -215,8 +225,9 @@ async def export_students(
     status: str | None = None,
     branch_id: uuid.UUID | None = None,
     needs_review: bool | None = None,
+    donor_id: uuid.UUID | None = None,
 ) -> Response:
-    where = _student_where(p, q, status, branch_id, needs_review)
+    where = _student_where(p, q, status, branch_id, needs_review, donor_id)
     rows = (await db.execute(_student_select(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     counts = await _counts(db, p, [s.id for s, _, _ in rows])
@@ -228,7 +239,7 @@ async def export_students(
         title="Студенты",
         columns=STUDENT_COLUMNS,
         rows=[_out(s, b, st, counts.get(s.id, 0)) for s, b, st in rows],
-        filters={"q": q, "status": status, "branch_id": branch_id},
+        filters={"q": q, "status": status, "branch_id": branch_id, "donor_id": donor_id},
     )
 
 

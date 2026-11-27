@@ -66,6 +66,7 @@ export const NAV_ITEMS: NavItem[] = [
   // instructor sees the scheme of their cohort on the cohort page)
   { section: "cert_templates", group: "study", href: "/settings/certificates", label: "Шаблоны сертификатов", icon: "certificate" },
   { section: "attendance", group: "admin", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
+  { section: "donors", group: "admin", href: "/settings/donors", label: "Доноры", icon: "students", audience: "staff" },
 ];
 
 function forRole(item: NavItem, roleCode: string | null | undefined, teaches?: boolean): boolean {

@@ -33,6 +33,11 @@ from tests.conftest import SERVER_URL, TEST_DB
         ("SMM (03.12.2025) ", "SMM"),
         ("Python (базовый) (10 мар)", "Python (базовый)"),
         ("  Веб   дизайн (10мар)", "Веб дизайн"),
+        # the shapes the old system left in production
+        ("AI в дизайне (Aug", "AI в дизайне"),
+        ("Frontend с ИИ (Sep 26) (Sep", "Frontend с ИИ"),
+        ("Python - базовый уровень остатки (Jul", "Python - базовый уровень остатки"),
+        ("Маркетинг Pro (August 2025)", "Маркетинг Pro"),
     ],
 )
 def test_trailing_date_is_cut(name: str, clean: str) -> None:
@@ -53,6 +58,8 @@ def test_trailing_date_is_cut(name: str, clean: str) -> None:
         "SMM (32.01)",
         "SMM (12.13)",
         "Робототехника (дети 7-10)",
+        "Курс (Mayor)",
+        "Python (базовый",
     ],
 )
 def test_other_brackets_stay(name: str) -> None:
@@ -98,6 +105,27 @@ SEED = [
     ("solo", "Дизайн (5 мая 2025)", "2025-01-01", None, 100),
     ("pair", "Python", "2025-01-01", None, 100),
     ("pair2", "python", "2025-02-01", None, 100),
+    # case-only twins: the oldest is small-lettered, so the capitalised one with most cohorts
+    # names the course («SQL» and «Sql» both have 2: the older «SQL» wins)
+    ("sql", "sql", "2025-01-01", None, 100),
+    ("sql_up", "SQL", "2025-02-01", None, 100),
+    ("sql_cap", "Sql", "2025-03-01", None, 100),
+    # one course runs three times on Monday and once every day, plus its dated twin
+    ("robo", "Робототехника (5 фев)", "2025-01-01", None, 100),
+    ("robo2", "Робототехника", "2025-02-01", None, 100),
+]
+# (course key, weekdays, start, end); each cohort gets its own room
+SCHEDULES = [
+    ("robo", "{1}", "09:00", "10:30"),
+    ("robo", "{1}", "12:00", "13:30"),
+    ("robo", "{1}", "15:00", "16:30"),
+    ("robo", "{1,2,3,4,5,6,7}", "18:00", "19:00"),
+    ("robo2", "{2,4}", "10:00", "11:00"),
+    ("sql", "{1}", "10:00", "11:00"),
+    ("sql_up", "{2}", "10:00", "11:00"),
+    ("sql_up", "{3}", "10:00", "11:00"),
+    ("sql_cap", "{4}", "10:00", "11:00"),
+    ("sql_cap", "{5}", "10:00", "11:00"),
 ]
 
 
@@ -113,12 +141,18 @@ async def _seed(conn: Any) -> dict[str, uuid.UUID]:
             {"id": ids[key], "n": name, "c": created, "l": legacy, "p": price},
         )
     branch = (await conn.execute(text("SELECT id FROM branch LIMIT 1"))).scalar_one()
-    room = (
-        await conn.execute(
-            text("INSERT INTO room (branch_id, name, capacity) VALUES (:b, 'R', 10) RETURNING id"),
-            {"b": branch},
-        )
-    ).scalar_one()
+    rooms = [
+        (
+            await conn.execute(
+                text(
+                    "INSERT INTO room (branch_id, name, capacity) VALUES (:b, :n, 10) RETURNING id"
+                ),
+                {"b": branch, "n": f"R{n}"},
+            )
+        ).scalar_one()
+        for n in range(len(SCHEDULES))
+    ]
+    room = rooms[0]
     user = (
         await conn.execute(
             text(
@@ -146,6 +180,47 @@ async def _seed(conn: Any) -> dict[str, uuid.UUID]:
                 ),
                 {"c": ids[key], "b": branch, "r": room, "i": i},
             )
+    for n, (key, days, start, end) in enumerate(SCHEDULES):
+        cohort = (
+            await conn.execute(
+                text(
+                    "INSERT INTO cohort (course_id, branch_id, room_id, instructor_id, start_date, "
+                    "end_date, weekdays, start_time, end_time, capacity, price_month, status) "
+                    "VALUES (:c, :b, :r, :u, DATE '2026-02-02', DATE '2026-04-30', "
+                    "CAST(CAST(:d AS text) AS integer[]), CAST(CAST(:s AS text) AS time), CAST(CAST(:e AS text) AS time), 10, 100, 'активный') "
+                    "RETURNING id"
+                ),
+                {
+                    "c": ids[key],
+                    "b": branch,
+                    "r": rooms[n],
+                    "u": user if key == "robo" else None,
+                    "d": days,
+                    "s": start,
+                    "e": end,
+                },
+            )
+        ).scalar_one()
+        for day in range(2):  # two lessons each, on the first Monday / Tuesday
+            await conn.execute(
+                text(
+                    "INSERT INTO lesson (cohort_id, room_id, lesson_date, starts_at, ends_at) "
+                    "VALUES (:h, :r, DATE '2026-02-02' + CAST(:d AS integer), "
+                    "((DATE '2026-02-02' + CAST(:d AS integer)) + CAST(CAST(:s AS text) AS time)) AT TIME ZONE 'Asia/Dushanbe', "
+                    "((DATE '2026-02-02' + CAST(:d AS integer)) + CAST(CAST(:e AS text) AS time)) AT TIME ZONE 'Asia/Dushanbe')"
+                ),
+                {"h": cohort, "r": rooms[n], "d": day, "s": start, "e": end},
+            )
+        student = (
+            await conn.execute(
+                text("INSERT INTO student (full_name, branch_id) VALUES (:n, :b) RETURNING id"),
+                {"n": f"Студент {n}", "b": branch},
+            )
+        ).scalar_one()
+        await conn.execute(
+            text("INSERT INTO enrollment (student_id, cohort_id) VALUES (:s, :h)"),
+            {"s": student, "h": cohort},
+        )
     for key in ("mar", "mar", "basic"):
         await conn.execute(
             text("INSERT INTO lead (full_name, branch_id, course_id) VALUES ('Л', :b, :c)"),
@@ -179,6 +254,15 @@ async def _state(conn: Any) -> dict[str, Any]:
         return [tuple(r) for r in (await conn.execute(text(q))).all()]
 
     return {
+        # every cohort row except its course: id, code, schedule, room, dates, instructor
+        "cohort_rows": await rows(
+            "SELECT id, code, branch_id, room_id, instructor_id, start_date, end_date, weekdays, "
+            "start_time, end_time, capacity, price_month, status FROM cohort ORDER BY id"
+        ),
+        "lessons": await rows(
+            "SELECT id, cohort_id, room_id, lesson_date, starts_at, ends_at FROM lesson ORDER BY id"
+        ),
+        "enrollments": await rows("SELECT id, student_id, cohort_id FROM enrollment ORDER BY id"),
         "courses": await rows("SELECT name, legacy_ref FROM course ORDER BY name"),
         "cohorts": await rows(
             "SELECT c.name, count(*) FROM cohort h JOIN course c ON c.id = h.course_id "
@@ -213,12 +297,27 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
     cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
     engine = create_async_engine(url)
     try:
-        await asyncio.to_thread(command.upgrade, cfg, "0030")
+        await asyncio.to_thread(command.upgrade, cfg, "0031")
         async with engine.begin() as conn:
             ids = await _seed(conn)
+        async with engine.connect() as conn:
+            before = await _state(conn)
         await asyncio.to_thread(command.upgrade, cfg, "0033")
         async with engine.connect() as conn:
             after = await _state(conn)
+        # merging only moves cohort.course_id: no cohort, lesson or enrollment changes or goes
+        for key in ("cohort_rows", "lessons", "enrollments"):
+            assert after[key] == before[key], key
+        assert len(after["cohort_rows"]) == 8 + len(SCHEDULES)
+        async with engine.connect() as conn:
+            robo = (
+                await conn.execute(
+                    text(
+                        "SELECT h.weekdays, h.start_time::text FROM cohort h JOIN course c "
+                        "ON c.id = h.course_id WHERE c.name = 'Робототехника' ORDER BY 2"
+                    )
+                )
+            ).all()
             survivor = (
                 await conn.execute(
                     text(
@@ -226,19 +325,29 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
                     )
                 )
             ).one()
+        assert [(list(d), t) for d, t in robo] == [
+            ([1], "09:00:00"),
+            ([2, 4], "10:00:00"),
+            ([1], "12:00:00"),
+            ([1], "15:00:00"),
+            ([1, 2, 3, 4, 5, 6, 7], "18:00:00"),
+        ]
         assert set(after["courses"]) == {
-            ("Python", None),
+            ("Python", None),  # «python» merged into the older «Python»
             ("Python (базовый)", None),
-            ("python", None),  # an old case-only twin without a date is left alone
+            ("SQL", None),
             ("Дизайн", None),
             ("Программирование", "COURSES:5"),
+            ("Робототехника", None),
         }
         # the oldest («23 янв») survives with its own price, under the undated name
         assert survivor == (ids["jan"], 100)
         assert after["cohorts"] == [
             ("Python (базовый)", 1),
+            ("SQL", 5),
             ("Дизайн", 1),
             ("Программирование", 6),
+            ("Робототехника", 5),
         ]
         assert after["leads"] == [("Python (базовый)", 1), ("Программирование", 2)]
         assert after["campaigns"] == [("Программирование",)]
@@ -246,17 +355,28 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
         assert after["rules"] == [("Программирование", False), ("Программирование", True)]
         merges = [(a, lab, d) for a, lab, d in after["audit"] if a == "course.merge"]
         renames = [(lab, d["name"]) for a, lab, d in after["audit"] if a == "course.update"]
-        assert [(lab, d["cohorts"][1]) for _, lab, d in merges] == [
-            ("Программирование", 1),
-            ("программирование  (10.03)", 3),
-        ]
-        assert merges[0][2]["differs"] == {"default_price_month": ["200.00", "100.00"]}
-        assert sorted(renames) == [
-            ("Дизайн", ["Дизайн (5 мая 2025)", "Дизайн"]),
-            ("Программирование", ["Программирование (23 янв)", "Программирование"]),
-        ]
+        assert sorted((lab, d["cohorts"][1]) for _, lab, d in merges) == sorted(
+            [
+                ("Программирование", 1),
+                ("программирование  (10.03)", 3),
+                ("python", 0),
+                ("SQL", 2),
+                ("Sql", 2),
+                ("Робототехника", 1),
+            ]
+        )
+        plain = next(d for _, lab, d in merges if lab == "Программирование")
+        assert plain["differs"] == {"default_price_month": ["200.00", "100.00"]}
+        assert sorted(renames) == sorted(
+            [
+                ("Дизайн", ["Дизайн (5 мая 2025)", "Дизайн"]),
+                ("Программирование", ["Программирование (23 янв)", "Программирование"]),
+                ("Робототехника", ["Робототехника (5 фев)", "Робототехника"]),
+                ("SQL", ["sql", "SQL"]),
+            ]
+        )
         # down is a no-op, up again changes nothing
-        await asyncio.to_thread(command.downgrade, cfg, "0030")
+        await asyncio.to_thread(command.downgrade, cfg, "0031")
         await asyncio.to_thread(command.upgrade, cfg, "head")
         async with engine.connect() as conn:
             assert await _state(conn) == after

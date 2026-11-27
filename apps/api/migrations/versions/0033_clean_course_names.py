@@ -4,7 +4,8 @@
 course «Программирование»; the date shows in the cohort title (from the cohort's start date).
 
 Per group of courses whose names match once the trailing date is cut (trimmed, spaces collapsed,
-case ignored), and only for groups with at least one dated name:
+case ignored): a group with a dated name or with more than one course (case-only twins such as
+«Python» / «python» merge too):
 - the survivor is the oldest course (created_at, then id); its price, duration, format and
   direction stay; the merged courses' differing values are kept in the audit entry;
 - every reference moves to the survivor: cohort, lead, campaign, note, certificate,
@@ -12,8 +13,9 @@ case ignored), and only for groups with at least one dated name:
   is dropped);
 - the survivor takes a merged course's legacy_ref when it has none, so a re-run of the import
   finds it;
-- the merged courses are deleted, the survivor gets the clean name (an undated name in the group
-  wins, else the survivor's own name without the date);
+- the merged courses are deleted; the survivor keeps its own name without the date, unless that
+  starts with a small letter and another course of the group is capitalised: then the
+  capitalised variant with the most cohorts wins (a tie: the oldest);
 - one audit entry per merged course («course.merge») and per rename («course.update»).
 
 The pattern is a frozen copy of app/education/course_names.py.
@@ -28,18 +30,22 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0033"
-down_revision = "0030"
+down_revision = "0031"
 
 log = logging.getLogger("alembic.runtime.migration")
 
 _MONTH = (
     r"(?:янв(?:ар[ья])?|фев(?:рал[ья])?|мар(?:та?)?|апр(?:ел[ья])?|ма[йя]|июн[ья]?|июл[ья]?"
-    r"|авг(?:уста?)?|сен(?:т(?:ябр[ья])?)?|окт(?:ябр[ья])?|ноя(?:бр[ья])?|дек(?:абр[ья])?)\.?"
+    r"|авг(?:уста?)?|сен(?:т(?:ябр[ья])?)?|окт(?:ябр[ья])?|ноя(?:бр[ья])?|дек(?:абр[ья])?"
+    # the old system wrote English months: «AI в дизайне (Aug», «Frontend (Sep 26) (Sep»
+    r"|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?"
+    r"|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\.?(?![a-zа-яё])"
 )
 _YEAR = r"(?:\s*(?:\d{4}|\d{2})(?:\s*г\.?)?)?"
-_WORD_DATE = rf"\d{{1,2}}\s*{_MONTH}{_YEAR}"
+_WORD_DATE = rf"(?:\d{{1,2}}\s*)?{_MONTH}(?:\s*\d{{1,2}}(?!\d))?{_YEAR}"
 _NUM_DATE = r"(?:0[1-9]|[12]\d|3[01])\.(?:0[1-9]|1[0-2])(?:\.(?:\d{4}|\d{2}))?"
-TRAILING_DATE = re.compile(rf"\s*\(\s*(?:{_WORD_DATE}|{_NUM_DATE})\s*\)\s*$", re.IGNORECASE)
+# one or more trailing dates; the last bracket may be open (cut off in the old system)
+TRAILING_DATE = re.compile(rf"(?:\s*\(\s*(?:{_WORD_DATE}|{_NUM_DATE})\s*\)?)+\s*$", re.IGNORECASE)
 
 # table -> the audit diff key counting its moved rows
 MOVED = {
@@ -49,7 +55,7 @@ MOVED = {
     "certificate": "certificates",
     "note": "notes",
 }
-FIELDS = ("direction", "default_price_month", "duration_months", "format")
+FIELDS = ("direction", "default_price_month", "duration_months", "format")  # kept on survivor
 NO_INSTRUCTOR = "'00000000-0000-0000-0000-000000000000'::uuid"
 
 
@@ -71,11 +77,28 @@ def _audit(conn: sa.Connection, action: str, entity_id: Any, label: str, diff: d
     )
 
 
+def _capitalised(name: str) -> bool:
+    return name[:1].isupper()
+
+
+def _final_name(members: list[dict[str, Any]]) -> str:
+    """The survivor's clean name, or the capitalised variant with the most cohorts (a tie: the
+    oldest; `members` come oldest first) when the survivor's starts with a small letter."""
+    survivor = members[0]
+    if _capitalised(survivor["clean"]):
+        return str(survivor["clean"])
+    proper = [m for m in members if _capitalised(m["clean"])]
+    if not proper:
+        return str(survivor["clean"])
+    return str(max(proper, key=lambda m: m["cohorts"])["clean"])  # max keeps the first on a tie
+
+
 def upgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(
         sa.text(
-            "SELECT id, name, legacy_ref, direction, default_price_month, duration_months, format "
+            "SELECT id, name, legacy_ref, direction, default_price_month, duration_months, format, "
+            "(SELECT count(*) FROM cohort h WHERE h.course_id = course.id) AS cohorts "
             "FROM course ORDER BY created_at, id"
         )
     ).mappings()
@@ -87,11 +110,10 @@ def upgrade() -> None:
         groups.setdefault(clean.casefold(), []).append({**row, "clean": clean})
 
     for members in groups.values():
-        if not any(TRAILING_DATE.search(m["name"]) for m in members):
-            continue  # no dated name here: nothing to clean
+        if len(members) == 1 and members[0]["clean"] == members[0]["name"]:
+            continue  # a single course with a clean name: nothing to do
         survivor, merged = members[0], members[1:]
-        undated = [m for m in members if not TRAILING_DATE.search(m["name"])]
-        new_name = _tidy(undated[0]["name"]) if undated else survivor["clean"]
+        new_name = _final_name(members)
         sid = survivor["id"]
         legacy = survivor["legacy_ref"]
         for m in merged:

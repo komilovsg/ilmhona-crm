@@ -25,6 +25,7 @@ from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.dashboard.api import router as dashboard_cards_router
 from app.dashboard.prefs import router as dashboard_prefs_router
+from app.donors.api import router as donors_router
 from app.employment.api import router as employment_router
 from app.export import XLSX
 from app.goals.api import academy_router as academy_goal_router
@@ -104,6 +105,7 @@ for router in (
     grading_router,
     dashboard_cards_router,
     dashboard_prefs_router,
+    donors_router,
 ):
     app.include_router(router)
 

@@ -36,6 +36,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "certificates": ("certificate",),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
+    "donors": ("donor", "donor_report"),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -130,6 +131,10 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "note.delete": ("удалена", "заметка"),
     "dashboard_pref.update": ("изменены", "настройки дашборда"),
     "dashboard_pref.reset": ("сброшены", "настройки дашборда"),
+    "donor.create": ("добавлен", "донор"),
+    "donor.update": ("изменён", "донор"),
+    "donor.archive": ("перенесён в архив", "донор"),
+    "donor.unarchive": ("возвращён из архива", "донор"),
 }
 CERT_IMAGE_SENTENCES = {
     "cert_settings.signature_upload": "загружена подпись директора",
@@ -178,6 +183,8 @@ TABLES: dict[str, str] = {
     "academy_goal": "цель академии",
     "goal": "цели",
     "note": "заметки",
+    "donor": "доноры",
+    "donor_report": "отчёт по донорам",
 }
 FILTERS = {
     "q": "поиск",
@@ -198,6 +205,8 @@ FILTERS = {
     "period": "период",
     "instructor_id": "инструктор",
     "student": "студент",
+    "donor": "донор",
+    "donor_id": "донор",
 }
 MONEY = {
     "default_price_month",
@@ -278,6 +287,10 @@ FIELDS: dict[str, str] = {
     "target_retention": "цель по удержанию, %",
     "target_attendance": "цель по посещаемости, %",
     "target_pass_rate": "цель по проходным, %",
+    "funding": "финансирование",
+    "donors": "доноры",
+    "donor": "донор",
+    "donors_assigned": "студентов передано донору",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -532,7 +545,13 @@ def sentence(
         student, cohort = _pair(e.diff.get("student"))[1], _pair(e.diff.get("cohort"))[1]
         over = _pair(e.diff.get("over_capacity"))[1]
         tail = f" — сверх плана: {over['enrolled']} из {over['capacity']}" if over else ""
+        if donor := _pair(e.diff.get("donor"))[1]:
+            tail = f" за счёт донора {donor}{tail}"
         return f"{who}: зачислен студент {student} в поток {cohort}{tail}"
+    if a == "enrollment.funding":
+        student, cohort = _pieces(lab)
+        old, new = _pair(e.diff.get("funding"))
+        return f"{who}: изменено финансирование студента {student} в потоке {cohort}: {old} → {new}"
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
         lost = []

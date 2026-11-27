@@ -16,6 +16,7 @@ from app.models import (
     CertTemplate,
     Cohort,
     Course,
+    Donor,
     Employment,
     Enrollment,
     Goal,
@@ -38,6 +39,7 @@ _NAME_FIELD = {
     "campaign": "name",
     "goal": "title",
     "cert_template": "name",
+    "donor": "name",
 }
 # entity -> (id column, name column)
 _NAME_COLUMN = {
@@ -51,6 +53,7 @@ _NAME_COLUMN = {
     "campaign": (Campaign.id, Campaign.name),
     "goal": (Goal.id, Goal.title),
     "cert_template": (CertTemplate.id, CertTemplate.name),
+    "donor": (Donor.id, Donor.name),
 }
 
 
