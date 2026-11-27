@@ -389,11 +389,7 @@ html[data-sidebar="collapsed"] .sb-dot {
   background: hsl(var(--h) 70% 50% / calc(var(--lesson-tint) + 0.09));
 }
 
-/* Sidebar: a quiet group heading, air between groups, the open page marked by a short accent bar. */
-.sb-group + .sb-group {
-  margin-top: 14px;
-}
-
+/* Sidebar: the open section is marked by a short accent bar. */
 .sb-active::before {
   content: "";
   position: absolute;
@@ -403,17 +399,6 @@ html[data-sidebar="collapsed"] .sb-dot {
   width: 3px;
   border-radius: 0 3px 3px 0;
   background: #38bdf0;
-}
-
-/* collapsed rail: no headings, a hairline where a group starts */
-html[data-sidebar="collapsed"] .sb-group + .sb-group {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(255 255 255 / 0.08);
-}
-
-html[data-sidebar="collapsed"] .sb-group > button {
-  display: none;
 }
 
 /* «Сегодня» tour (driver.js): the popover wears the theme, light and dark */
