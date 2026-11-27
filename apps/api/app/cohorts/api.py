@@ -1207,6 +1207,8 @@ async def enroll_into(
             raise DomainError(FORBIDDEN, section="students", level="view")
     elif body.new_student is not None and not allows(p.level("students"), "change"):
         raise DomainError(FORBIDDEN, section="students", level="change")
+    if enrolled_on is not None and enrolled_on < st.today():
+        _no_instructor(p)
     if enrolled_on is not None and enrolled_on > st.today():
         raise DomainError(ENROLLED_ON_FUTURE).for_field("enrolled_on", "enrolled_on_future")
     cohort = await _load(db, p, cohort_id, lock=True)
@@ -1446,11 +1448,18 @@ async def _first_mark_before(db: AsyncSession, e: Enrollment, day: date) -> date
     )
 
 
+def _no_instructor(p: Principal) -> None:
+    """Moving the enrollment day is for admin and manager; an instructor sees it read-only."""
+    if is_instructor(p):
+        raise DomainError(FORBIDDEN, section="cohorts", level="change")
+
+
 @router.get("/enrollments/{enrollment_id}/enrolled-on")
 async def preview_enrollment_date(
     enrollment_id: uuid.UUID, enrolled_on: date, p: Enroller, db: DB
 ) -> dict[str, Any]:
     """What the change would do: the day it lands on (clamped to the cohort start) and the debt."""
+    _no_instructor(p)
     enrollment, _, cohort = await _enrollment(db, p, enrollment_id)
     day = _new_enrolled_on(cohort, enrolled_on)
     return {
@@ -1464,6 +1473,7 @@ async def preview_enrollment_date(
 async def set_enrollment_date(
     enrollment_id: uuid.UUID, body: EnrollmentDate, version: Version, p: Enroller, db: DB
 ) -> dict[str, Any]:
+    _no_instructor(p)
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id, lock=True)
     await check_version(
         db,

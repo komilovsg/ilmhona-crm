@@ -30,11 +30,11 @@ export function useIsInstructor(): boolean {
   return me?.role.code === "instructor";
 }
 
-/** May move a student's enrollment day: the rights of adding one (an instructor in their own cohorts). */
+/** May move a student's enrollment day: admin and manager (cohorts change), never an instructor. */
 export function useCanEnroll(): boolean {
   const canChange = useCanChange("cohorts");
 
-  return useIsInstructor() || canChange;
+  return !useIsInstructor() && canChange;
 }
 
 /** Active rooms (the pickers); `includeArchived` adds the archived ones, listed last. */
