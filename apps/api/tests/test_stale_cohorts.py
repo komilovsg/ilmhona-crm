@@ -317,7 +317,9 @@ async def test_warning_list_filter_and_dashboard_match_sql(
     tiles = {t["key"]: t for t in (await admin.get(f"{CARDS}/queues")).json()["tiles"]}
     assert tiles["closing_cohorts"]["count"] == 2
     # a manager sees the tile too
-    role = await make_role("Менеджер потоков", {"dashboard": "view", "cohorts": "view", "leads": "view"})
+    role = await make_role(
+        "Менеджер потоков", {"dashboard": "view", "cohorts": "view", "leads": "view"}
+    )
     mgr = await login_as("mia", role, branch="Душанбе")
     tiles = {t["key"]: t for t in (await mgr.get(f"{CARDS}/queues")).json()["tiles"]}
     assert tiles["closing_cohorts"]["count"] == 2
