@@ -67,6 +67,7 @@ async def graduates_by_students(
     employed: bool | None = None,
     certificate: bool | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
     page: Page = 1,
@@ -75,6 +76,7 @@ async def graduates_by_students(
     where = _where(
         p, branch_id, date_from, date_to, course_id=course_id, instructor_id=instructor_id,
         employed=employed, certificate=certificate, q=q, donor_id=donor_id,
+        not_paying=not_paying,
     )  # fmt: skip
     total = await graduate_count(db, where)
     rows = await graduate_rows(db, where, page_size, (page - 1) * page_size)
@@ -113,12 +115,14 @@ async def export_graduates_by_students(
     employed: bool | None = None,
     certificate: bool | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
 ) -> Response:
     where = _where(
         p, branch_id, date_from, date_to, course_id=course_id, instructor_id=instructor_id,
         employed=employed, certificate=certificate, q=q, donor_id=donor_id,
+        not_paying=not_paying,
     )  # fmt: skip
     rows = await graduate_rows(db, where, MAX_ROWS + 1)
     check_cap(rows)
@@ -133,6 +137,7 @@ async def export_graduates_by_students(
         filters={
             "q": q, "branch_id": branch_id, "course_id": course_id, "instructor_id": instructor_id,
             "date_from": date_from, "date_to": date_to, "donor_id": donor_id,
+            "not_paying": not_paying,
         },
     )  # fmt: skip
 

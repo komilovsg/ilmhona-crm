@@ -32,6 +32,8 @@ import { lazyModal } from "@/lib/lazy-modal";
 const StudentFormModal = lazyModal(() => import("./StudentFormModal").then((m) => m.StudentFormModal));
 
 const PAGE_SIZE = 25;
+// «Не платит» is one more option of the donor filter
+const NOT_PAYING = "not_paying";
 
 function Phone({ value }: { value: string | null }) {
   return value ? (
@@ -80,7 +82,8 @@ export default function StudentsPage() {
           q: q.trim() || undefined,
           status: status ?? undefined,
           branch_id: branch ?? undefined,
-          donor_id: donor ?? undefined,
+          donor_id: donor && donor !== NOT_PAYING ? donor : undefined,
+          not_paying: donor === NOT_PAYING ? "true" : undefined,
           needs_review: review ? "true" : undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
@@ -101,7 +104,7 @@ export default function StudentsPage() {
       <PageHeader
         actions={
           <>
-            <ExportButton params={{ q: q.trim(), status, branch_id: branch, donor_id: donor, needs_review: review ? "true" : null }} path="/api/v1/students/export" />
+            <ExportButton params={{ q: q.trim(), status, branch_id: branch, donor_id: donor && donor !== NOT_PAYING ? donor : null, not_paying: donor === NOT_PAYING ? "true" : null, needs_review: review ? "true" : null }} path="/api/v1/students/export" />
             {canChange && (
               <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
                 Студент
@@ -175,19 +178,17 @@ export default function StudentsPage() {
             }}
           />
         )}
-        {donors.length > 0 && (
-          <SelectField filter
+        <SelectField filter
             allLabel="Все доноры"
             className="w-full md:w-48"
             label="Донор"
-            options={donors.map((d) => ({ key: d.id, label: d.name }))}
+            options={[...donors.map((d) => ({ key: d.id, label: d.name })), { key: NOT_PAYING, label: "Не платит" }]}
             value={donor}
             onChange={(d) => {
               setFilters({ donor: d });
               setPage(1);
             }}
           />
-        )}
       </div>
 
       <QueryState

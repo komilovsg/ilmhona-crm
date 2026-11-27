@@ -179,6 +179,7 @@ def graduate_where(
     certificate: bool | None = None,
     q: str | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
 ) -> list[ColumnElement[bool]]:
     """The one `where` of graduates: the dashboard count, both lists and the Excel files."""
     where: list[ColumnElement[bool]] = [
@@ -200,6 +201,8 @@ def graduate_where(
         )
     if donor_id:
         where.append(Enrollment.donor_id == donor_id)
+    if not_paying is not None:
+        where.append(Enrollment.not_paying == not_paying)
     if q and q.strip():
         where.append(search_clause(q, (Student.full_name,), (Student.phone,)))
     return where
