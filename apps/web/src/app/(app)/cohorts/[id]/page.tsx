@@ -25,7 +25,7 @@ import { useCanIssueCerts } from "@/hooks/certs";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
 import { useIsSuperadmin } from "@/hooks/goals";
 import { api } from "@/lib/api";
-import { daysLabel, formatPrice, fullDate } from "@/lib/education";
+import { cohortTitle, daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -191,7 +191,7 @@ export default function CohortPage() {
               </Chip>
             )}
           </div>
-          <p className="text-default-600">{c.course_name}</p>
+          <p className="text-default-600">{cohortTitle(c)}</p>
           {c.stale && (
             <div className="mt-2">
               <StaleChip stale={c.stale} />

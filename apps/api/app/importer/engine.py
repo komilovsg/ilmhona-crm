@@ -32,6 +32,7 @@ from app.cohorts.status import (
     status_for,
 )
 from app.cohorts.status import today as today_local
+from app.education.course_names import without_date
 from app.importer import parse as p
 from app.importer.report import Recon, Report
 from app.leads.hygiene import neutral
@@ -286,7 +287,7 @@ class Importer:
         rep = self.rep
         groups: dict[str, list[Row]] = defaultdict(list)
         for r in self.rows("COURSES"):
-            name, _ = p.name_of(r.get("course_name"))
+            name = p.course_name_of(r.get("course_name"))
             if not p.text(r.get("course_name")) or not p.text(r.get("course_id")):
                 rep.drop("COURSES", "нет названия или ID", p.text(r.get("course_id")))
                 continue
@@ -294,7 +295,7 @@ class Importer:
         for norm, rows in groups.items():
             rep.merged["COURSES"] += len(rows) - 1
             head = rows[0]
-            name = p.name_of(head.get("course_name"))[0]
+            name = p.course_name_of(head.get("course_name"))
             old_id = p.text(head.get("course_id"))
             ref = p.make_ref("COURSES", old_id)
             price = next(
@@ -669,7 +670,7 @@ class Importer:
     async def _new_course_from_cohort(
         self, old_id: str, course_text: str, rows: list[Row], cost: Decimal | None
     ) -> uuid.UUID:
-        name = p.name_of(course_text)[0]
+        name = p.course_name_of(course_text)
         norm = p.norm_name(name)
         if norm in self.course_lookup:
             return self.course_lookup[norm]
@@ -1454,7 +1455,7 @@ class Importer:
             comment_parts = [neutral(p.text(r.get("comments")))]
             if source_raw == "Электронная почта":
                 comment_parts.append("источник в старой системе: электронная почта")
-            course_text = p.text(r.get("Название компании"))
+            course_text = without_date(p.text(r.get("Название компании")))
             lead = Lead(
                 id=uuid.uuid4(), full_name=name, raw_name=p.clip(p.text(r.get("full_name")), 300),
                 phone=phone or p.clip(neutral(raw), 40), phone_raw=p.clip(raw, 40) or None,

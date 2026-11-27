@@ -38,6 +38,7 @@ export const apiErrors: Record<string, string> = {
   role_system: "Системную роль нельзя удалить.",
   room_name_taken: "Аудитория с таким названием уже есть в этом филиале.",
   course_name_taken: "Курс с таким названием уже есть.",
+  course_name_has_date: "Не пишите дату в названии курса — дата видна у потока.",
   room_in_use: "В аудитории есть потоки или уроки. Удалить нельзя.",
   course_in_use: "По курсу есть потоки. Удалить нельзя.",
   cohort_in_use: "В потоке есть студенты. Сначала уберите их или отмените поток.",
@@ -155,6 +156,7 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "string_too_long") return `Не длиннее ${num("max_length")} символов`;
   if (code === "string_too_short" || code === "too_short")
     return Number(ctx?.min_length) > 1 ? `Не короче ${num("min_length")} символов` : "Заполните поле";
+  if (code === "course_name_has_date") return "Не пишите дату в названии курса — дата видна у потока";
   if (code === "discount_reason_required") return "Укажите причину скидки";
   if (code === "payment_amount_zero") return "Больше 0 (сумма 0 — только при скидке 100%)";
   if (code === "discount_no_price") return "У потока нет цены";

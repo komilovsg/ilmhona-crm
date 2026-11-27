@@ -75,6 +75,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "course.create": ("создан", "курс"),
     "course.update": ("изменён", "курс"),
     "course.delete": ("удалён", "курс"),
+    "course.merge": ("объединён", "курс"),
     "user.create": ("создан", "пользователь"),
     "user.update": ("изменён", "пользователь"),
     "user.delete": ("удалён", "пользователь"),
@@ -629,6 +630,22 @@ def sentence(
             names,
             sections,
         )
+    if a == "course.merge":
+        # migration 0033: a dated duplicate («Python (23 янв)») folded into the course «Python»
+        _, into = _pair(e.diff.get("into"))
+        moved = []
+        for key, forms in (
+            ("cohorts", ("поток", "потока", "потоков")),
+            ("leads", ("лид", "лида", "лидов")),
+            ("campaigns", ("кампания", "кампании", "кампаний")),
+            ("certificates", ("сертификат", "сертификата", "сертификатов")),
+            ("notes", ("заметка", "заметки", "заметок")),
+        ):
+            n = int(_pair(e.diff.get(key))[1] or 0)
+            if n:
+                moved.append(_count(n, *forms))
+        tail = f" — перенесено: {', '.join(moved)}" if moved else ""
+        return f"{who}: курс {lab} объединён с курсом {into}{tail}"
     if a == "cohort.finish":
         grads = _pair(e.diff.get("graduates"))[1]
         done = _pair(e.diff.get("completed"))[1]

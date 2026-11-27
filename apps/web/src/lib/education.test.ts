@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   addDays,
   formatPrice,
+  cohortTitle,
   cohortTone,
   dayTitle,
   daysLabel,
@@ -11,6 +12,7 @@ import {
   isoWeekday,
   mondayOf,
   scheduleProblem,
+  shortDate,
   timeProblem,
   todayIso,
   weekOf,
@@ -87,4 +89,17 @@ test("expelled students close the list", async () => {
   const rows = [{ id: 1, status: "отчислен" }, { id: 2, status: "активный" }, { id: 3, status: "отчислен" }, { id: 4, status: "выпускник" }];
 
   assert.deepEqual(expelledLast(rows).map((r) => r.id), [2, 4, 1, 3]);
+});
+
+test("shortDate: short Russian month, the year only outside the current one", () => {
+  assert.equal(shortDate("2030-01-23", "2030-06-01"), "23\u00a0янв");
+  assert.equal(shortDate("2030-05-05", "2030-06-01"), "5\u00a0мая");
+  assert.equal(shortDate("2029-12-01", "2030-06-01"), "1\u00a0дек\u00a02029");
+});
+
+test("cohortTitle puts the start date in brackets after the course name", () => {
+  assert.equal(
+    cohortTitle({ course_name: "Программирование", start_date: "2030-01-23" }, "2030-02-01"),
+    "Программирование (23\u00a0янв)",
+  );
 });

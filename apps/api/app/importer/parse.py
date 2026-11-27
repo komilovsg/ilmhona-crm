@@ -7,6 +7,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from zoneinfo import ZoneInfo
 
+from app.education.course_names import without_date
 from app.leads.hygiene import clean_name, normalise_phone, phone_key
 
 TZ = ZoneInfo("Asia/Dushanbe")
@@ -129,6 +130,11 @@ def name_of(value: object) -> tuple[str, bool]:
     cleaned = clean_name(text(value)[: MAX_NAME * 2])
     name = clip(cleaned.name, MAX_NAME) or cleaned.name
     return name, cleaned.needs_review or name != cleaned.name
+
+
+def course_name_of(value: object) -> str:
+    """A course name from the old system without a trailing intake date («(23 янв)»)."""
+    return without_date(name_of(value)[0])
 
 
 def phone_of(value: object) -> tuple[str | None, str]:

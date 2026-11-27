@@ -2,6 +2,9 @@ from app.core.errors import NOT_FOUND, VALIDATION_FAILED, errors
 
 ROOM_NAME_TAKEN = errors.define("room_name_taken", 409, "Room name already used in the branch")
 COURSE_NAME_TAKEN = errors.define("course_name_taken", 409, "Course name already used")
+COURSE_NAME_HAS_DATE = errors.define(
+    "course_name_has_date", 422, "A course name holds no date: the cohort shows it"
+)
 ROOM_IN_USE = errors.define("room_in_use", 409, "Room has cohorts or lessons")
 COURSE_IN_USE = errors.define("course_in_use", 409, "Course has cohorts")
 COURSE_GLOBAL_ONLY = errors.define(
