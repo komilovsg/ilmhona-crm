@@ -646,11 +646,14 @@ def sentence(
             f"(выпускников {grads}, завершили {done}, отменено уроков: {freed or 0})"
         )
     if a == "academy_settings.update":
-        old, new = _pair(e.diff.get("stale_days"))
-        return (
-            f"{who}: изменены настройки академии: автозакрытие потоков без отметок, "
-            f"дней {old} → {new}"
-        )
+        parts = []
+        if "stale_days" in e.diff:
+            old, new = _pair(e.diff.get("stale_days"))
+            parts.append(f"дней без отметок {old} → {new}")
+        if "stale_auto_close" in e.diff:
+            on = _pair(e.diff.get("stale_auto_close"))[1]
+            parts.append("автозакрытие потоков без отметок " + ("включено" if on else "выключено"))
+        return f"{who}: изменены настройки академии: " + ", ".join(parts)
     if a == "cohort.reopen":
         n = _pair(e.diff.get("restored"))[1]
         back = _pair(e.diff.get("lessons_restored"))[1]

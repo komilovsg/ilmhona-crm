@@ -2,8 +2,8 @@
 
 `lesson.cancelled_by_finish` marks the lessons a finish cancelled (after the finish date, no
 attendance marks) so that reopening restores exactly those. `academy_settings` (one row, id = 1)
-holds `stale_days`: an активный cohort with no attendance marks for that many days is closed by
-the nightly job.
+holds `stale_days`: an активный cohort with no attendance marks for that many days is flagged, and
+`stale_auto_close` (off by default): whether the nightly job then closes it.
 """
 
 from alembic import op
@@ -28,6 +28,7 @@ def upgrade() -> None:
           id smallint PRIMARY KEY DEFAULT 1 CONSTRAINT academy_settings_single_row CHECK (id = 1),
           stale_days integer NOT NULL DEFAULT 60
             CONSTRAINT academy_settings_stale_days_check CHECK (stale_days BETWEEN 20 AND 730),
+          stale_auto_close boolean NOT NULL DEFAULT false,
           version integer NOT NULL DEFAULT 1,
           updated_by uuid REFERENCES app_user (id) ON DELETE SET NULL,
           updated_at timestamptz NOT NULL DEFAULT now()

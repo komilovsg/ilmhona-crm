@@ -12,6 +12,7 @@ import { Bone } from "@/components/Skeletons";
 import { useRefreshEducation } from "@/hooks/education";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, isApiError, messageOf } from "@/lib/api";
+import { formatPrice } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, FinishItem, FinishPreview } from "@/lib/types";
@@ -118,6 +119,12 @@ export function FinishModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
               Будет освобождено уроков: <b className="tabular-nums">{data.lessons_to_free}</b>
               {data.lessons_to_free > 0 ? " — аудитория и инструктор освободятся." : "."}
             </p>
+            {!!data.debtors && (
+              <p className="rounded-xl bg-warning/10 p-3 text-sm text-default-700" data-testid="finish-debt">
+                Должники: <b className="tabular-nums">{data.debtors}</b> на сумму{" "}
+                <b className="tabular-nums">{formatPrice(data.debt ?? 0)}</b> — долг останется в разделе «Должники».
+              </p>
+            )}
             <div className="grid grid-cols-3 gap-3 text-center" aria-label="Итог завершения">
               <div className="rounded-xl bg-success/10 p-3">
                 <div className="font-display text-2xl font-bold tabular-nums">{data.graduates}</div>

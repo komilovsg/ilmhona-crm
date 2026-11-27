@@ -1,6 +1,6 @@
-"""Academy settings: `stale_days`, the days without attendance marks after which the nightly job
-closes an активный cohort. Everybody signed in reads it (the warning on a cohort names the
-closing date); only the superadmin changes it, versioned and audited."""
+"""Academy settings: `stale_days`, the days without attendance marks after which a cohort is
+flagged, and `stale_auto_close` (off by default): whether the nightly job then closes it.
+Everybody signed in reads them; only the superadmin changes them, versioned and audited."""
 
 from typing import Annotated, Any
 
@@ -25,7 +25,8 @@ router = APIRouter(
 
 class SettingsIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    stale_days: Annotated[int, Field(ge=20, le=730)]
+    stale_days: Annotated[int, Field(ge=20, le=730)] | None = None
+    stale_auto_close: bool | None = None
 
 
 async def _row(db: AsyncSession) -> AcademySettings:
@@ -38,6 +39,7 @@ async def _out(db: AsyncSession, p: Principal, row: AcademySettings) -> dict[str
     ).scalar_one_or_none()
     return {
         "stale_days": row.stale_days,
+        "stale_auto_close": row.stale_auto_close,
         "warn_days": WARN_DAYS,
         "can_edit": p.is_superadmin,
         "version": row.version,
@@ -58,17 +60,14 @@ async def update_settings(
     if not p.is_superadmin:
         raise DomainError(FORBIDDEN, section="academy_settings", level="superadmin")
     row = await _row(db)
+    changes = body.model_dump(exclude_none=True)
     await check_version(
-        db,
-        row,
-        version,
-        "academy_settings",
-        lambda: _out(db, p, row),
-        changes={"stale_days": body.stale_days},
+        db, row, version, "academy_settings", lambda: _out(db, p, row), changes=changes
     )
-    before = row.stale_days
-    if before != body.stale_days:
-        row.stale_days = body.stale_days
+    diff = {k: [getattr(row, k), v] for k, v in changes.items() if getattr(row, k) != v}
+    if diff:
+        for k, (_, v) in diff.items():
+            setattr(row, k, v)
         row.updated_by, row.updated_at = p.id, clock.now()
         await db.flush()
         await record(
@@ -77,7 +76,7 @@ async def update_settings(
             "academy_settings.update",
             "academy_settings",
             str(row.id),
-            {"stale_days": [before, body.stale_days]},
+            diff,
             label="настройки академии",
         )
     return await _out(db, p, row)

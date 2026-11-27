@@ -19,7 +19,6 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { CardGridSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { CohortStatus, OverdueChip, StaleChip } from "@/components/StatusChip";
-import { CohortStatus, OverdueChip } from "@/components/StatusChip";
 import { useDonorOptions } from "@/hooks/donors";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useSeesPayments } from "@/hooks/money";
@@ -57,7 +56,7 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
         label="Срок"
         options={[
           { key: "1", label: "Срок вышел, не завершён" },
-          { key: "closing", label: "Скоро закроется" },
+          { key: "closing", label: "Без отметок" },
         ]}
         value={filters.overdue ? "1" : filters.closing ? "closing" : null}
         onChange={(v) => set({ ...filters, overdue: v === "1", closing: v === "closing" })}

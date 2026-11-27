@@ -137,12 +137,19 @@ async def attention(p: Dashboard, db: DB, branch_id: uuid.UUID | None = None) ->
         if closing:
             n = len(closing)
             first = closing[0]
-            when = first["closes_on"].strftime("%d.%m")
+            auto = first["closes_on"] is not None
+            tail = f" — закроется {first['closes_on']:%d.%m}" if auto else ""
             title = (
                 f"{first['cohort_code']}: нет отметок {first['idle_days']} "
-                f"{plural(first['idle_days'], 'день', 'дня', 'дней')} — закроется {when}"
+                f"{plural(first['idle_days'], 'день', 'дня', 'дней')}{tail}"
                 if n == 1
-                else f"{n} {plural(n, 'поток', 'потока', 'потоков')} скоро закроются: нет отметок"
+                else f"{n} {plural(n, 'поток', 'потока', 'потоков')} без отметок"
+                + (", скоро закроются" if auto else "")
+            )
+            hint = (
+                "Отметьте посещаемость, иначе поток закроется автоматически"
+                if auto
+                else "Отметьте посещаемость"
             )
             codes = ", ".join(c["cohort_code"] for c in closing[:5])
             alerts.append(
@@ -150,9 +157,7 @@ async def attention(p: Dashboard, db: DB, branch_id: uuid.UUID | None = None) ->
                     "closing",
                     "warning",
                     title,
-                    "Отметьте посещаемость, иначе поток закроется автоматически"
-                    if n == 1
-                    else codes + (" …" if n > 5 else ""),
+                    hint if n == 1 else codes + (" …" if n > 5 else ""),
                     f"/cohorts/{first['cohort_id']}" if n == 1 else "/cohorts?closing=1",
                 )
             )

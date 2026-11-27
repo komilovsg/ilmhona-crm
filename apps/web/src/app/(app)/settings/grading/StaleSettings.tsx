@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Input } from "@heroui/input";
+import { Switch } from "@heroui/switch";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ConflictDialog } from "@/components/ConflictDialog";
@@ -15,13 +16,14 @@ import { notify } from "@/lib/toast";
 
 type AcademySettings = {
   stale_days: number;
+  stale_auto_close: boolean;
   warn_days: number;
   can_edit: boolean;
   version: number;
   updated_at: string;
   updated_by_name: string | null;
 };
-type Values = { stale_days: string };
+type Values = { stale_days: string; stale_auto_close: boolean };
 
 const KEY = ["academy-settings"];
 const PATH = "/api/v1/academy-settings";
@@ -36,7 +38,7 @@ export function StaleSettings() {
   );
 }
 
-const pick = (r: AcademySettings): Values => ({ stale_days: String(r.stale_days) });
+const pick = (r: AcademySettings): Values => ({ stale_days: String(r.stale_days), stale_auto_close: r.stale_auto_close });
 
 function StaleForm({ settings }: { settings: AcademySettings }) {
   const qc = useQueryClient();
@@ -48,8 +50,8 @@ function StaleForm({ settings }: { settings: AcademySettings }) {
     values: v,
     toValues: pick,
     apply: setV,
-    request: (_, version) => api<AcademySettings>(PATH, { method: "PATCH", body: { stale_days: days }, version }),
-    labels: { stale_days: "Дней без отметок" },
+    request: (_, version) => api<AcademySettings>(PATH, { method: "PATCH", body: { stale_days: days, stale_auto_close: v.stale_auto_close }, version }),
+    labels: { stale_days: "Дней без отметок", stale_auto_close: "Закрывать автоматически" },
     onSaved: (r) => {
       if (r) {
         qc.setQueryData(KEY, r);
@@ -63,13 +65,26 @@ function StaleForm({ settings }: { settings: AcademySettings }) {
   return (
     <section className="space-y-4 rounded-2xl bg-content1 p-4 md:p-5">
       <div>
-        <h2 className="text-lg font-semibold">Автозакрытие потоков</h2>
+        <h2 className="text-lg font-semibold">Потоки без отметок</h2>
         <p className="text-sm text-default-500">
-          Активный поток, в котором нет отметок посещаемости столько дней, закрывается сам: студенты получают итог по
-          проходному баллу, будущие уроки без отметок отменяются и освобождают аудиторию. Если отметок не было совсем,
-          дни считаются от даты старта. За {settings.warn_days} дней до закрытия поток помечается предупреждением.
+          Активный поток, в котором нет отметок посещаемости столько дней, получает предупреждение. За{" "}
+          {settings.warn_days} дней до срока оно появляется в списке потоков, на карточке и на главной. Если отметок не
+          было совсем, дни считаются от даты старта.
         </p>
       </div>
+      <Switch
+        isDisabled={!settings.can_edit}
+        isSelected={v.stale_auto_close}
+        size="sm"
+        onValueChange={(on) => setV({ ...v, stale_auto_close: on })}
+      >
+        Закрывать автоматически
+      </Switch>
+      <p className="-mt-2 text-sm text-default-500">
+        {v.stale_auto_close
+          ? "Поток закроется сам: студенты получат итог по проходному баллу, будущие уроки без отметок отменятся и освободят аудиторию. Долги останутся в разделе «Должники»."
+          : "Выключено: потоки только помечаются, сами не закрываются."}
+      </p>
       <Input
         className="max-w-xs"
         description="От 20 до 730 дней"
@@ -77,7 +92,7 @@ function StaleForm({ settings }: { settings: AcademySettings }) {
         isDisabled={!settings.can_edit}
         label="Дней без отметок"
         value={v.stale_days}
-        {...fe.field("stale_days", (x) => setV({ stale_days: x.replace(/\D/g, "") }))}
+        {...fe.field("stale_days", (x) => setV({ ...v, stale_days: x.replace(/\D/g, "") }))}
       />
       {fe.message && (
         <p className="text-sm text-danger" role="alert">
@@ -87,7 +102,7 @@ function StaleForm({ settings }: { settings: AcademySettings }) {
       {settings.can_edit ? (
         <LoadingButton
           color="primary"
-          isDisabled={!valid || v.stale_days === String(settings.stale_days)}
+          isDisabled={!valid || (v.stale_days === String(settings.stale_days) && v.stale_auto_close === settings.stale_auto_close)}
           isLoading={save.pending}
           onPress={() => void save.save(v)}
         >

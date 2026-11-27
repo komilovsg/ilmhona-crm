@@ -31,17 +31,17 @@ export function OverdueChip() {
 
 const ddmm = (iso: string) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
-/** Нет отметок давно: поток закроется сам (настройка «дней без отметок» у суперадмина). */
-export function StaleChip({ stale }: { stale: { idle_days: number; closes_on: string } }) {
+/** Нет отметок давно; «закроется» только когда суперадмин включил автозакрытие. */
+export function StaleChip({ stale }: { stale: { idle_days: number; closes_on: string | null } }) {
   return (
     <Chip
       classNames={{ base: "h-auto max-w-full py-0.5", content: "whitespace-normal" }}
       color="warning"
       size="sm"
-      title="Отметьте посещаемость, иначе поток закроется автоматически"
+      title={stale.closes_on ? "Отметьте посещаемость, иначе поток закроется автоматически" : "Отметьте посещаемость"}
       variant="flat"
     >
-      Нет отметок {stale.idle_days} {plural(stale.idle_days, "день", "дня", "дней")} — закроется {ddmm(stale.closes_on)}
+      Нет отметок {stale.idle_days} {plural(stale.idle_days, "день", "дня", "дней")}{stale.closes_on ? ` — закроется ${ddmm(stale.closes_on)}` : ""}
     </Chip>
   );
 }

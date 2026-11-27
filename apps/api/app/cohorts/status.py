@@ -224,9 +224,11 @@ async def finish(
 async def auto_close_stale(db: AsyncSession, on: date | None = None) -> int:
     """The nightly job: close every активный cohort with no attendance marks for `stale_days`
     (`app.metrics.stale`) by the same finish as the manual one. Returns how many it closed; a
-    second run finds nothing left."""
-    from app.metrics.stale import due_clause, due_cohorts
+    second run finds nothing left. Does nothing while the superadmin's setting is off."""
+    from app.metrics.stale import auto_close_on, due_clause, due_cohorts
 
+    if not await auto_close_on(db):
+        return 0
     on = on or today()
     days, due = await due_cohorts(db, on)
     closed = 0

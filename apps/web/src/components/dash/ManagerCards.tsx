@@ -40,8 +40,8 @@ function viewOf(t: Tile): TileView {
       };
     case "closing_cohorts":
       return {
-        label: "Скоро закроются",
-        hint: t.count ? "нет отметок — отметьте посещаемость" : "все потоки с отметками",
+        label: "Без отметок",
+        hint: t.count ? "отметьте посещаемость" : "все потоки с отметками",
         href: "/cohorts?closing=1",
         accent: "border-t-warning",
       };

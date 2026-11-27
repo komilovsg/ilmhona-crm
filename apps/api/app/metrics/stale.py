@@ -1,17 +1,19 @@
 """Stale cohorts: an активный cohort with no attendance marks for `stale_days` (a setting, 60 by
-default) is closed by the nightly job. One definition for the job, the warning on the cohort, the
-dashboard alert and the list filter, so they can never disagree.
+default) is flagged, and closed by the nightly job when `stale_auto_close` is on (off by default).
+One definition for the job, the warning on the cohort, the dashboard alert and the list filter, so
+they can never disagree.
 
 The clock of a cohort starts on the date of its last marked lesson, or on its start date when
-nothing was ever marked. Idle days = today - that date. Closed at `stale_days` idle days; the
-warning shows from `stale_days - WARN_DAYS` and names the closing date.
+nothing was ever marked. Idle days = today - that date. With auto-close on, closed at `stale_days`
+idle days; the warning shows from `stale_days - WARN_DAYS` and names the closing date. With it off
+nothing is closed: the warning shows from `stale_days - WARN_DAYS` on and never names a date.
 """
 
 import uuid
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import ColumnElement, Date, and_, cast, func, select
+from sqlalchemy import ColumnElement, Date, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
@@ -23,10 +25,15 @@ ACTIVE = "активный"
 
 # the setting as a SQL value, so a list of cohorts needs no query of its own for it
 DAYS = select(AcademySettings.stale_days).scalar_subquery()
+AUTO = select(AcademySettings.stale_auto_close).scalar_subquery()
 
 
 async def stale_days(db: AsyncSession) -> int:
     return int(await db.scalar(select(AcademySettings.stale_days)) or 60)
+
+
+async def auto_close_on(db: AsyncSession) -> bool:
+    return bool(await db.scalar(select(AcademySettings.stale_auto_close)))
 
 
 def clock_start() -> ColumnElement[date]:
@@ -48,11 +55,12 @@ def due_clause(days: Any, on: date) -> ColumnElement[bool]:
 
 
 def warning_clause(days: Any, on: date) -> ColumnElement[bool]:
-    """An активный cohort in the last WARN_DAYS before it is closed."""
+    """An активный cohort in the last WARN_DAYS before it is closed; with auto-close off, any
+    активный cohort that long without marks."""
     return and_(
         Cohort.status == ACTIVE,
         clock_start() <= cast(on, Date) - (days - WARN_DAYS),
-        clock_start() > cast(on, Date) - days,
+        or_(AUTO.is_(False), clock_start() > cast(on, Date) - days),
     )
 
 
@@ -65,7 +73,7 @@ async def closing_soon(
     on = on or clock.today()
     start = clock_start()
     rows = await db.execute(
-        select(Cohort.id, Cohort.code, start, DAYS)
+        select(Cohort.id, Cohort.code, start, DAYS, AUTO)
         .where(*cohort_where, warning_clause(DAYS, on))
         .order_by(start, Cohort.code)
     )
@@ -74,9 +82,9 @@ async def closing_soon(
             "cohort_id": i,
             "cohort_code": c,
             "idle_days": (on - s).days,
-            "closes_on": s + timedelta(days=int(days)),
+            "closes_on": s + timedelta(days=int(days)) if auto else None,
         }
-        for i, c, s, days in rows
+        for i, c, s, days, auto in rows
     ]
 
 

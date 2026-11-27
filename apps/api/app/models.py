@@ -618,12 +618,13 @@ class CertSettings(Versioned, Base):
 
 
 class AcademySettings(Versioned, Base):
-    """The one row (id = 1): `stale_days`, the days without attendance marks after which the
-    nightly job closes an активный cohort."""
+    """The one row (id = 1): `stale_days`, the days without attendance marks after which a cohort
+    is flagged, and `stale_auto_close`: whether the nightly job then closes it (off by default)."""
 
     __tablename__ = "academy_settings"
     id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
     stale_days: Mapped[int] = mapped_column(Integer, server_default=text("60"))
+    stale_auto_close: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     updated_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )

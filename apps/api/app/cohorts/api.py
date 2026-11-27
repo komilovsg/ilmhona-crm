@@ -73,7 +73,7 @@ from app.graduates.errors import CERTIFICATE_ISSUED
 from app.leads.hygiene import ManualPhone
 from app.metrics import cohort_enrolled, cohort_fill, has_marks, over_capacity_of
 from app.metrics.donors import cohort_funding_counts
-from app.metrics.money import cohort_income, cohort_payers
+from app.metrics.money import cohort_income, cohort_payers, debt_summary
 from app.metrics.stale import DAYS, warning_clause, warnings_for
 from app.models import (
     AppUser,
@@ -807,7 +807,12 @@ async def finish_preview(cohort_id: uuid.UUID, p: Change, db: DB) -> dict[str, A
     cohort = await _load(db, p, cohort_id)
     if cohort.status != st.ACTIVE:
         raise DomainError(COHORT_NOT_ACTIVE)
-    return await st.finish_preview(db, cohort)
+    out = await st.finish_preview(db, cohort)
+    # a finish keeps the debts (they stay in the debtors list); shown to who may see payments
+    if can_view_payments(p):
+        debtors, debt = await debt_summary(db, [Cohort.id == cohort.id])
+        out["debtors"], out["debt"] = debtors, debt
+    return out
 
 
 @router.post("/cohorts/{cohort_id}/finish")

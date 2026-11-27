@@ -7,15 +7,24 @@ from datetime import date, timedelta
 from typing import Any
 
 import httpx
+import pytest
 
 from app.cli import daily
 from app.cohorts.status import today
 from tests.conftest import SignedIn, make_role, sql
 from tests.edu import C, body, make_cohort, make_course, make_room
-from tests.money import enroll
+from tests.money import enroll, running_cohort
 
+DEBTORS = "/api/v1/payments/debtors"
+SCHEDULE = "/api/v1/rooms/schedule"
 SETTINGS = "/api/v1/academy-settings"
 CARDS = "/api/v1/dashboard/cards"
+
+
+@pytest.fixture(autouse=True)
+async def auto_close_on() -> None:
+    """The setting is off by default; these tests run with it on unless one turns it off."""
+    await sql("UPDATE academy_settings SET stale_auto_close = true")
 
 
 async def stale_cohort(
@@ -313,7 +322,7 @@ async def test_warning_list_filter_and_dashboard_match_sql(
     assert (await admin.get(f"{C}/{cohorts[n - warn - 1]['id']}")).json()["stale"] is None
     alerts = (await admin.get(f"{CARDS}/attention")).json()["items"]
     closing = next(a for a in alerts if a["key"] == "closing")
-    assert "2 потока скоро закроются" in closing["title"]
+    assert "2 потока без отметок, скоро закроются" in closing["title"]
     tiles = {t["key"]: t for t in (await admin.get(f"{CARDS}/queues")).json()["tiles"]}
     assert tiles["closing_cohorts"]["count"] == 2
     # a manager sees the tile too
@@ -353,11 +362,102 @@ async def test_setting_is_superadmin_only_versioned_and_audited(
     assert (await set_days(admin, 90)).json()["stale_days"] == 90
     log = (await admin.get("/api/v1/audit", params={"action": "academy_settings.update"})).json()
     assert log["total"] == 1
-    assert (
-        "изменены настройки академии: автозакрытие потоков без отметок, дней 60 → 90"
-        in (log["items"][0]["text"])
-    )
+    assert "изменены настройки академии: дней без отметок 60 → 90" in (log["items"][0]["text"])
     # the same value again writes nothing
     await set_days(admin, 90)
     log = (await admin.get("/api/v1/audit", params={"action": "academy_settings.update"})).json()
     assert log["total"] == 1
+
+
+# ---- auto-close is a switch, off by default ---------------------------------------------
+
+
+async def test_auto_close_is_off_by_default_and_the_job_does_nothing(
+    admin: httpx.AsyncClient,
+) -> None:
+    await sql("UPDATE academy_settings SET stale_auto_close = false")
+    got = (await admin.get(SETTINGS)).json()
+    assert got["stale_auto_close"] is False
+    cohort = await stale_cohort(admin, "OFF", marked_ago=90)
+    assert await daily() == 0
+    assert await status_of(cohort["id"]) == "активный"
+    assert (await lessons_state(cohort["id"]))["ahead"][1] == 0  # nothing was freed either
+    log = (await admin.get("/api/v1/audit", params={"action": "cohort.auto_close"})).json()
+    assert log["total"] == 0
+
+
+async def test_switching_on_closes_and_is_audited(admin: httpx.AsyncClient) -> None:
+    await sql("UPDATE academy_settings SET stale_auto_close = false")
+    cohort = await stale_cohort(admin, "SW", marked_ago=90)
+    version = (await admin.get(SETTINGS)).json()["version"]
+    r = await admin.patch(
+        SETTINGS, json={"stale_auto_close": True}, headers={"X-Record-Version": str(version)}
+    )
+    assert r.status_code == 200 and r.json()["stale_auto_close"] is True
+    assert r.json()["stale_days"] == 60  # the other value is untouched
+    assert await daily() == 1
+    assert await status_of(cohort["id"]) == "завершён"
+    assert await daily() == 0
+    log = (await admin.get("/api/v1/audit", params={"action": "academy_settings.update"})).json()
+    assert "автозакрытие потоков без отметок включено" in log["items"][0]["text"]
+    closed = (await admin.get("/api/v1/audit", params={"action": "cohort.auto_close"})).json()
+    assert closed["total"] == 1 and "закрыт автоматически" in closed["items"][0]["text"]
+
+
+async def test_warning_stays_but_promises_no_closing_when_off(admin: httpx.AsyncClient) -> None:
+    await sql("UPDATE academy_settings SET stale_auto_close = false")
+    soon = await stale_cohort(admin, "S1", start_ago=50)  # inside the last 15 days
+    old = await stale_cohort(admin, "S2", start_ago=90)  # past stale_days: still flagged
+    fresh = await stale_cohort(admin, "S3", start_ago=10)
+    got = (await admin.get(f"{C}/{soon['id']}")).json()["stale"]
+    assert got == {"idle_days": 50, "closes_on": None}
+    assert (await admin.get(f"{C}/{old['id']}")).json()["stale"] == {
+        "idle_days": 90,
+        "closes_on": None,
+    }
+    assert (await admin.get(f"{C}/{fresh['id']}")).json()["stale"] is None
+    listed = (await admin.get(C, params={"closing": "true"})).json()
+    assert {i["id"] for i in listed["items"]} == {soon["id"], old["id"]}
+    alerts = (await admin.get(f"{CARDS}/attention")).json()["items"]
+    closing = next(a for a in alerts if a["key"] == "closing")
+    assert "закроются" not in closing["title"] and "закроется" not in closing["title"]
+    assert "автоматически" not in closing["hint"]
+
+
+# ---- a finish keeps the debts and frees the room ----------------------------------------
+
+
+async def test_finish_keeps_debts_and_frees_the_room(admin: httpx.AsyncClient) -> None:
+    cohort = await running_cohort(admin, name="DEBT", back=2, price=500)
+    for name in ("Должник Один", "Должник Два"):
+        await enroll(admin, cohort, name)
+    before = (await admin.get(DEBTORS, params={"cohort_id": cohort["id"]})).json()
+    assert before["total"] == 2 and float(before["total_debt"]) > 0
+    week = {"date_from": (today() + timedelta(days=1)).isoformat()}
+    board = (
+        await admin.get(
+            SCHEDULE, params={**week, "date_to": (today() + timedelta(days=30)).isoformat()}
+        )
+    ).json()
+    assert any(le["cohort_id"] == cohort["id"] for le in board["lessons"])
+
+    preview = (await admin.get(f"{C}/{cohort['id']}/finish-preview")).json()
+    assert preview["debtors"] == 2 and preview["debt"] == before["total_debt"]
+    version = (await admin.get(f"{C}/{cohort['id']}")).json()["version"]
+    r = await admin.post(
+        f"{C}/{cohort['id']}/finish",
+        json={"graduates": preview["graduates"], "completed": preview["completed"]},
+        headers={"X-Record-Version": str(version)},
+    )
+    assert r.status_code == 200 and r.json()["status"] == "завершён"
+
+    after = (await admin.get(DEBTORS, params={"cohort_id": cohort["id"]})).json()
+    assert after["total"] == before["total"] and after["total_debt"] == before["total_debt"]
+    pairs = lambda r: sorted((i["student_name"], i["debt"]) for i in r["items"])  # noqa: E731
+    assert pairs(after) == pairs(before)
+    board = (
+        await admin.get(
+            SCHEDULE, params={**week, "date_to": (today() + timedelta(days=30)).isoformat()}
+        )
+    ).json()
+    assert not any(le["cohort_id"] == cohort["id"] for le in board["lessons"])
