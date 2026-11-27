@@ -18,6 +18,8 @@ export type Overview = {
   students_total: number;
   // money is null without the section it comes from (payments / instructors / marketing)
   income: string | null;
+  /** Discounts of the confirmed payments: not money received, its own line. */
+  discounts: string | null;
   active_cohorts: number;
   recruiting_cohorts: number;
   cohorts_total: number;
@@ -49,6 +51,7 @@ export type Overview = {
 export type MonthRow = {
   month: string;
   income: string | null;
+  discounts: string | null;
   payroll: string | null;
   ads: string | null;
   profit: string | null;
@@ -105,6 +108,8 @@ export type GraduateRow = {
   score_legacy: boolean;
   paid: string | null;
   certificate_no: string | null;
+  /** the valid certificate of the registry, null when there is none */
+  certificate_id: string | null;
   employed: boolean;
   organization: string | null;
 };

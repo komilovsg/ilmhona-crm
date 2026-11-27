@@ -27,3 +27,17 @@ CERT_RULE_INVALID = errors.define(
 )
 errors.on_constraint("cert_template_name_key", CERT_TEMPLATE_NAME_TAKEN)
 errors.on_constraint("cert_template_rule_target_key", CERT_RULE_DUPLICATE)
+
+CERT_ALREADY_ISSUED = errors.define(
+    "cert_already_issued", 409, "A valid certificate already exists for the enrollment"
+)
+CERT_NOT_READY = errors.define("cert_not_ready", 422, "Some enrollments cannot be certified yet")
+CERT_NOT_VALID = errors.define("cert_not_valid", 409, "Only a valid certificate can be changed")
+CERT_COMMENT_REQUIRED = errors.define("cert_comment_required", 422, "A comment is required")
+CERT_CUSTOM_INVALID = errors.define("cert_custom_invalid", 422, "A custom value is not acceptable")
+CERT_DIRECTOR_OVERFLOW = errors.define(
+    "cert_director_overflow", 422, "The director's name or title does not fit a template"
+)
+COHORT_NOT_FINISHED = errors.define(
+    "cohort_not_finished", 409, "Certificates are issued only for a finished cohort"
+)

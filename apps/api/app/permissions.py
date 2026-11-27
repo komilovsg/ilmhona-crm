@@ -27,6 +27,7 @@ SECTIONS: dict[str, str] = {
     "users": "Пользователи и роли",
     "audit": "Журнал",
     "cert_templates": "Шаблоны сертификатов",
+    "certificates": "Выдача сертификатов и реестр",
 }
 
 SUPERADMIN_CODE = "superadmin"

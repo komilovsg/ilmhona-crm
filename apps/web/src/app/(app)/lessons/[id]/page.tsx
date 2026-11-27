@@ -27,7 +27,7 @@ import type { LessonAttendance, MarkRow } from "@/lib/types";
 
 const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
 
-type Cell = { present: boolean; reason: string | null; state: "saving" | "saved" | "error" };
+type Cell = { present: boolean; excused: boolean; reason: string | null; state: "saving" | "saved" | "error" };
 
 const QUICK_REASONS = ["Болезнь", "Работа", "Семья"];
 
@@ -64,13 +64,14 @@ function Toggle({
   label,
   onPress,
 }: {
-  kind: "yes" | "no";
+  kind: "yes" | "no" | "excused";
   active: boolean;
   disabled: boolean;
   label: string;
   onPress: () => void;
 }) {
   const yes = kind === "yes";
+  const excused = kind === "excused";
   const icon = useRef<HTMLSpanElement>(null);
   const reduced = useReducedMotion();
 
@@ -79,14 +80,18 @@ function Toggle({
       aria-label={label}
       aria-pressed={active}
       className={clsx(
-        "flex h-12 w-14 items-center justify-center rounded-xl border-2 transition-colors disabled:opacity-60 sm:w-16",
+        "flex h-12 w-full items-center justify-center rounded-xl border-2 transition-colors disabled:opacity-60 sm:w-16",
         active
           ? yes
             ? "border-success bg-success text-white"
-            : "border-danger bg-danger text-white"
+            : excused
+              ? "border-warning bg-warning text-warning-foreground"
+              : "border-danger bg-danger text-white"
           : yes
             ? "border-default-300 text-default-500 hover:border-success hover:text-success-700 dark:hover:text-success"
-            : "border-default-300 text-default-500 hover:border-danger hover:text-danger",
+            : excused
+              ? "border-default-300 text-default-500 hover:border-warning hover:text-warning-700 dark:hover:text-warning"
+              : "border-default-300 text-default-500 hover:border-danger hover:text-danger",
       )}
       disabled={disabled}
       transition={SPRING_SNAPPY}
@@ -100,7 +105,11 @@ function Toggle({
       }}
     >
       <span ref={icon} className="flex">
-        <Icon name={yes ? "check" : "x"} size={26} strokeWidth={2.6} />
+        {excused ? (
+          <span aria-hidden className="text-xl font-semibold leading-none">У</span>
+        ) : (
+          <Icon name={yes ? "check" : "x"} size={26} strokeWidth={2.6} />
+        )}
       </span>
     </motion.button>
   );
@@ -108,18 +117,21 @@ function Toggle({
 
 function StudentRow({
   row,
+  n,
   cell,
   canMark,
   disabled,
   onMark,
 }: {
   row: MarkRow;
+  n: number;
   cell: Cell | undefined;
   canMark: boolean;
   disabled: boolean;
-  onMark: (present: boolean, reason: string | null) => void;
+  onMark: (present: boolean, reason: string | null, excused?: boolean) => void;
 }) {
   const present = cell ? cell.present : row.present;
+  const excused = cell ? cell.excused : !!row.excused;
   const reason = cell ? cell.reason : row.reason;
   const [draft, setDraft] = useState<string | null>(null);
   const shown = draft ?? reason ?? "";
@@ -127,17 +139,20 @@ function StudentRow({
     setDraft(null);
     const next = text.trim() || null;
 
-    if (next !== (reason ?? null)) onMark(false, next);
+    if (next !== (reason ?? null)) onMark(false, next, excused);
   };
 
   return (
     <li className="rounded-2xl bg-content1 p-4">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <div className="truncate text-base font-medium">{row.student_name}</div>
-          <Indicator cell={cell} onRetry={() => onMark(present ?? true, reason)} />
+          <div className="break-words text-base font-medium sm:truncate">
+            <span className="mr-2 text-sm font-normal tabular-nums text-default-500">{n}.</span>
+            {row.student_name}
+          </div>
+          <Indicator cell={cell} onRetry={() => onMark(present ?? true, reason, excused)} />
         </div>
-        <div className="flex shrink-0 gap-2" role="group" aria-label={`Отметка: ${row.student_name}`}>
+        <div className="grid grid-cols-3 gap-2 sm:flex sm:shrink-0" role="group" aria-label={`Отметка: ${row.student_name}`}>
           <Toggle
             active={present === true}
             disabled={!canMark || disabled}
@@ -146,11 +161,18 @@ function StudentRow({
             onPress={() => onMark(true, null)}
           />
           <Toggle
-            active={present === false}
+            active={present === false && !excused}
             disabled={!canMark || disabled}
             kind="no"
             label={`${row.student_name}: отсутствует`}
-            onPress={() => onMark(false, reason)}
+            onPress={() => onMark(false, reason, false)}
+          />
+          <Toggle
+            active={present === false && excused}
+            disabled={!canMark || disabled}
+            kind="excused"
+            label={`${row.student_name}: уважительная причина`}
+            onPress={() => onMark(false, reason, true)}
           />
         </div>
       </div>
@@ -207,12 +229,12 @@ function LessonMark({ data }: { data: LessonAttendance }) {
   const [late, setLate] = useState<{ id: string; name: string }[]>([]);
 
   const patchCache = useCallback(
-    (enrollmentId: string, present: boolean, reason: string | null) =>
+    (enrollmentId: string, present: boolean, reason: string | null, excused: boolean) =>
       queryClient.setQueryData<LessonAttendance>(key, (old) =>
         old
           ? {
               ...old,
-              students: old.students.map((s) => (s.enrollment_id === enrollmentId ? { ...s, present, reason } : s)),
+              students: old.students.map((s) => (s.enrollment_id === enrollmentId ? { ...s, present, excused, reason } : s)),
             }
           : old,
       ),
@@ -221,21 +243,21 @@ function LessonMark({ data }: { data: LessonAttendance }) {
   );
 
   // One tap = one request for that one cell, queued behind the previous tap of the same row.
-  const mark = (enrollmentId: string, present: boolean, reason: string | null) => {
+  const mark = (enrollmentId: string, present: boolean, reason: string | null, excused = false) => {
     const seq = (seqs.current[enrollmentId] = (seqs.current[enrollmentId] ?? 0) + 1);
     const sent = present ? null : reason;
 
-    setCells((c) => ({ ...c, [enrollmentId]: { present, reason: sent, state: "saving" } }));
+    setCells((c) => ({ ...c, [enrollmentId]: { present, excused, reason: sent, state: "saving" } }));
     const run = async () => {
       try {
         await api(`/api/v1/lessons/${lesson.id}/attendance/${enrollmentId}`, {
           method: "PUT",
-          body: { present, reason: sent },
+          body: { present, excused, reason: sent },
         });
-        patchCache(enrollmentId, present, sent);
+        patchCache(enrollmentId, present, sent, excused);
         void refreshAttendance();
         if (seqs.current[enrollmentId] !== seq) return;
-        setCells((c) => ({ ...c, [enrollmentId]: { present, reason: sent, state: "saved" } }));
+        setCells((c) => ({ ...c, [enrollmentId]: { present, excused, reason: sent, state: "saved" } }));
         setTimeout(() => {
           if (seqs.current[enrollmentId] !== seq) return;
           setCells((c) => {
@@ -246,7 +268,7 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         }, 2200);
       } catch (e) {
         if (seqs.current[enrollmentId] !== seq) return;
-        setCells((c) => ({ ...c, [enrollmentId]: { present, reason: sent, state: "error" } }));
+        setCells((c) => ({ ...c, [enrollmentId]: { present, excused, reason: sent, state: "error" } }));
         if (isApiError(e) && e.status !== 0) notifyError(e);
       }
     };
@@ -352,14 +374,15 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">На этом уроке нет студентов.</p>
       ) : (
         <ul data-rows className="space-y-2">
-          {data.students.map((s) => (
+          {data.students.map((s, i) => (
             <StudentRow
               key={s.enrollment_id}
+              n={i + 1}
               canMark={canMark}
               cell={cells[s.enrollment_id]}
               disabled={disabled}
               row={s}
-              onMark={(present, reason) => mark(s.enrollment_id, present, reason)}
+              onMark={(present, reason, excused) => mark(s.enrollment_id, present, reason, excused)}
             />
           ))}
         </ul>

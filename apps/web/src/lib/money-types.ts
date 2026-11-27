@@ -25,12 +25,17 @@ export type PaymentRow = {
   confirmed_by_name: string | null;
   confirmed_at: string | null;
   note: string | null;
+  /** «Со скидкой»: percent of the month's price and what it took off (server-computed). */
+  discount_percent: number | null;
+  discount_amount: Money;
   created_at: string;
 };
 
 export type PaymentTotals = {
   confirmed: Money;
   pending: Money;
+  confirmed_discount: Money;
+  pending_discount: Money;
   confirmed_count: number;
   pending_count: number;
   count: number;
@@ -73,6 +78,8 @@ export type EnrollmentOption = {
   next_month: number;
   /** Months whose pending + confirmed payments reach the price: they take no more payments. */
   full_months: number[];
+  /** The discount percent of the enrollment's latest payment: the form's «Со скидкой» default. */
+  last_discount_percent: number | null;
   paid: Money;
   paid_months: number[];
   expected: Money;

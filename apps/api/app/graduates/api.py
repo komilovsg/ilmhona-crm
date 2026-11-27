@@ -7,11 +7,11 @@ paid and employment come from `app.metrics`.
 """
 
 import uuid
-from datetime import UTC, date, datetime
+from datetime import date
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Response
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from app.audit.log import record
 from app.auth.deps import Principal, require_csrf_header
@@ -21,7 +21,8 @@ from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
-from app.graduates.errors import CERTIFICATE_ISSUED, NOT_GRADUATE
+from app.graduates.errors import CERTIFICATE_ISSUED
+from app.graduates.numbering import assign_number
 from app.leads.scope import reader, writer
 from app.metrics.reports import (
     Scope,
@@ -199,15 +200,9 @@ async def issue_certificate(enrollment_id: uuid.UUID, p: Change, db: DB) -> dict
         raise DomainError(NOT_FOUND)
     enrollment, student, cohort = row
     p.check_scope(cohort.branch_id)
-    if enrollment.status != GRADUATE:
-        raise DomainError(NOT_GRADUATE)
-    if enrollment.certificate_no:
+    if enrollment.status == GRADUATE and enrollment.certificate_no:
         raise DomainError(CERTIFICATE_ISSUED)
-    now = datetime.now(UTC)
-    n = (await db.execute(text("SELECT nextval('certificate_no_seq')"))).scalar_one()
-    enrollment.certificate_no = f"CERT-{now.year}-{n:04d}"
-    enrollment.certificate_issued_at = now
-    await db.flush()
+    await assign_number(db, enrollment)
     await pin_default_version(db, enrollment, cohort.course_id, cohort.instructor_id)
     await record(
         db,

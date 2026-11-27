@@ -415,3 +415,96 @@ html[data-sidebar="collapsed"] .sb-group + .sb-group {
 html[data-sidebar="collapsed"] .sb-group > button {
   display: none;
 }
+
+/* «Сегодня» tour (driver.js): the popover wears the theme, light and dark */
+.driver-popover.ilm-tour {
+  background-color: hsl(var(--heroui-content1));
+  color: hsl(var(--heroui-foreground));
+  border-radius: 16px;
+  padding: 16px;
+  max-width: min(320px, calc(100vw - 32px));
+  box-shadow: 0 0 0 1px hsl(var(--heroui-divider) / 0.6), 0 12px 32px rgb(0 0 0 / 0.25);
+  font-family: inherit;
+}
+
+.ilm-tour .driver-popover-title {
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.ilm-tour .driver-popover-description {
+  font-size: 14px;
+  color: hsl(var(--heroui-default-600));
+}
+
+.ilm-tour .driver-popover-progress-text {
+  color: hsl(var(--heroui-default-500));
+}
+
+.ilm-tour .driver-popover-close-btn {
+  color: hsl(var(--heroui-default-500));
+}
+
+.ilm-tour .driver-popover-close-btn:hover,
+.ilm-tour .driver-popover-close-btn:focus-visible {
+  color: hsl(var(--heroui-foreground));
+}
+
+.ilm-tour .driver-popover-footer {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ilm-tour .driver-popover-footer-btn,
+.ilm-tour-skip {
+  all: unset;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: hsl(var(--heroui-foreground));
+  background-color: hsl(var(--heroui-default-100));
+}
+
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn {
+  color: #fff;
+  background-color: #0a7fb0;
+}
+
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn:hover,
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-next-btn:focus-visible {
+  background-color: #086a94;
+}
+
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-prev-btn:hover,
+.driver-popover.ilm-tour .driver-popover-footer .driver-popover-prev-btn:focus-visible {
+  background-color: hsl(var(--heroui-default-200));
+}
+
+.ilm-tour-skip {
+  background: none;
+  color: hsl(var(--heroui-default-500));
+  margin-inline-end: auto;
+}
+
+.ilm-tour .driver-popover-footer-btn:focus-visible,
+.ilm-tour-skip:focus-visible {
+  outline: 2px solid hsl(var(--heroui-primary));
+  outline-offset: 2px;
+}
+
+.ilm-tour .driver-popover-arrow {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .driver-fade .driver-overlay,
+  .driver-fade .driver-popover {
+    animation: none;
+  }
+}

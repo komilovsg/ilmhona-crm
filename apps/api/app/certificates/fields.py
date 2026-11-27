@@ -68,6 +68,7 @@ class Context:
     values: dict[str, str | date] = field(default_factory=dict)
     gender: str | None = None  # 'male' | 'female' | None
     verify_code: str = ""  # goes into the QR link
+    verify_base: str = ""  # origin of the QR link; empty = the configured default
     signature_ref: str | None = None  # asset id of the director's signature
     seal_ref: str | None = None  # asset id of the company seal
     instructor_signature_ref: str | None = None  # asset id of the cohort instructor's signature
@@ -180,3 +181,37 @@ async def enrollment_context(
         ctx.instructor_signature_ref = str(instructor.signature_asset_id)
     apply_settings(ctx, await load_settings(db), lang)
     return ctx, cohort, course, instructor, enrollment
+
+
+DATE_KEYS = ("cohort.start_date", "cohort.end_date", "certificate.issued_date")
+
+
+def snapshot_of(ctx: Context, lang: str, custom: dict[str, str] | None = None) -> dict[str, Any]:
+    """Everything a render of `ctx` needs, as JSON: stored with the certificate, so a later PDF
+    does not depend on the student, the cohort, the settings or the instructor as they are then."""
+    return {
+        "values": {k: (v.isoformat() if isinstance(v, date) else v) for k, v in ctx.values.items()},
+        "gender": ctx.gender,
+        "verify_code": ctx.verify_code,
+        "verify_base": ctx.verify_base,
+        "signature_ref": ctx.signature_ref,
+        "seal_ref": ctx.seal_ref,
+        "instructor_signature_ref": ctx.instructor_signature_ref,
+        "lang": lang,
+        "custom": custom or {},
+    }
+
+
+def context_of(data: dict[str, Any]) -> Context:
+    values: dict[str, str | date] = {
+        k: (date.fromisoformat(v) if k in DATE_KEYS and v else v) for k, v in data["values"].items()
+    }
+    return Context(
+        values=values,
+        gender=data.get("gender"),
+        verify_code=data.get("verify_code", ""),
+        verify_base=data.get("verify_base", ""),
+        signature_ref=data.get("signature_ref"),
+        seal_ref=data.get("seal_ref"),
+        instructor_signature_ref=data.get("instructor_signature_ref"),
+    )

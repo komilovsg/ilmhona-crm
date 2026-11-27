@@ -275,6 +275,8 @@ class Enrollment(Versioned, Legacy, Base):
     # CERT-YYYY-NNNN, only for a graduate (certificate_no_seq)
     certificate_no: Mapped[str | None] = mapped_column(Text)
     certificate_issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # numbered although not a graduate (superadmin's switch in the certificate settings)
+    certificate_non_graduate: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     # the published template version the certificate is drawn from: a later publish never changes it
     certificate_version_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("cert_template_version.id", ondelete="SET NULL")
@@ -302,6 +304,8 @@ class Attendance(Base):
         PG_UUID, ForeignKey("enrollment.id", ondelete="CASCADE"), primary_key=True
     )
     present: Mapped[bool] = mapped_column(Boolean)
+    # «уважительная»: an absence that is left out of the held count (never together with present)
+    excused: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     reason: Mapped[str | None] = mapped_column(Text)
     marked_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
@@ -386,6 +390,9 @@ class Payment(Versioned, Legacy, Base):
     )
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     note: Mapped[str | None] = mapped_column(Text)
+    # a discount of the month's price (1–100 %) and what it takes off, computed by the server
+    discount_percent: Mapped[int | None] = mapped_column(SmallInteger)
+    discount_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
     idempotency_key: Mapped[UUID] = mapped_column(PG_UUID, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
@@ -575,6 +582,9 @@ class CertSettings(Versioned, Base):
     seal_asset_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("cert_asset.id", ondelete="SET NULL")
     )
+    # https origin of the public check page; empty = the QR still encodes the number
+    verify_base_url: Mapped[str | None] = mapped_column(Text)
+    allow_non_graduate: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     updated_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )
@@ -637,4 +647,38 @@ class CertTemplateRule(Base):
     )
     template_id: Mapped[UUID] = mapped_column(
         PG_UUID, ForeignKey("cert_template.id", ondelete="CASCADE")
+    )
+
+
+class Certificate(Base):
+    """An issued certificate: the template version and the values it shows, frozen at issue."""
+
+    __tablename__ = "certificate"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    number: Mapped[str] = mapped_column(Text)
+    verify_code: Mapped[str] = mapped_column(Text, unique=True)
+    enrollment_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
+    cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
+    course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
+    instructor_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    template_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cert_template.id"))
+    template_version_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("cert_template_version.id")
+    )
+    lang: Mapped[str] = mapped_column(Text)
+    data: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(Text, server_default=text("'valid'"))
+    replaced_by_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("certificate.id"))
+    comment: Mapped[str | None] = mapped_column(Text)
+    revoke_reason: Mapped[str | None] = mapped_column(Text)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    issued_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )

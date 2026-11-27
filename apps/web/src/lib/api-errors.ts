@@ -65,6 +65,10 @@ export const apiErrors: Record<string, string> = {
   idempotency_key_reused: "Эта оплата уже сохранена с другими данными. Обновите форму и повторите.",
   enrollment_has_payments: "У зачисления есть оплаты. Убрать студента из потока нельзя.",
   cohort_no_instructor: "У потока нет инструктора.",
+  discount_reason_required: "Укажите причину скидки в заметке.",
+  discount_no_price: "У потока не указана цена: скидку не от чего считать.",
+  month_discount_exists: "За месяц {month_no} скидка уже дана: {percent}%.",
+  payment_amount_zero: "Сумма 0 — только при скидке 100%.",
   payout_period_invalid: "Поток в этом месяце не идёт.",
   payout_exists: "За этот месяц по этому потоку выплата уже отмечена.",
   lead_converted: "Лид уже записан студентом: его статус не меняется.",
@@ -100,6 +104,13 @@ export const apiErrors: Record<string, string> = {
   cert_nothing_to_publish: "Нечего публиковать: черновик совпадает с последней версией.",
   cert_rule_duplicate: "Для этого курса и инструктора правило уже есть.",
   cert_rule_invalid: "В правиле указан несуществующий курс, инструктор или неактивный шаблон.",
+  cert_already_issued: "Сертификат этому студенту уже выдан.",
+  cert_not_ready: "Часть студентов не готова к выдаче сертификата.",
+  cert_not_valid: "Сертификат уже заменён или отозван.",
+  cohort_not_finished: "Сертификаты выдаются только после завершения потока.",
+  cert_comment_required: "Укажите комментарий.",
+  cert_custom_invalid: "Значение поля сертификата заполнено неверно.",
+  cert_director_overflow: "Имя или должность директора не помещаются в шаблон.",
   cohort_not_completed: "Поток ещё не завершён: статусы выпускников определятся при завершении.",
 };
 
@@ -132,6 +143,9 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "string_too_long") return `Не длиннее ${num("max_length")} символов`;
   if (code === "string_too_short" || code === "too_short")
     return Number(ctx?.min_length) > 1 ? `Не короче ${num("min_length")} символов` : "Заполните поле";
+  if (code === "discount_reason_required") return "Укажите причину скидки";
+  if (code === "payment_amount_zero") return "Больше 0 (сумма 0 — только при скидке 100%)";
+  if (code === "discount_no_price") return "У потока нет цены";
   if (code === "deadline_before_start") return "Срок должен быть позже начала";
   if (code === "percent_over_100") return "От 1 до 100";
   if (code === "target_not_above_baseline") return "План должен быть больше стартового значения";

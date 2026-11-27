@@ -40,6 +40,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "marketing": ("campaign",),
     "graduates": ("employment", "graduate", "graduate_course"),
     "cert_templates": ("cert_template", "cert_settings", "cert_asset", "cert_template_rule"),
+    "certificates": ("certificate",),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
 }
@@ -112,6 +113,10 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "cert_settings.update": ("изменены", "настройки сертификатов"),
     "academy_settings.update": ("изменены", "настройки академии"),
     "cohort.auto_close": ("закрыт автоматически", "поток"),
+    "certificate.issue": ("выдан", "сертификат"),
+    "certificate.reissue": ("перевыпущен", "сертификат"),
+    "certificate.revoke": ("отозван", "сертификат"),
+    "certificate.pdf": ("скачан", "сертификат"),
     "cert_settings.signature_upload": ("загружена", "подпись директора"),
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
     "cert_settings.seal_upload": ("загружена", "печать"),
@@ -208,6 +213,7 @@ MONEY = {
     "default_rate",
     "instructor_rate",
     "budget",
+    "discount_amount",
 }
 
 FIELDS: dict[str, str] = {
@@ -251,6 +257,8 @@ FIELDS: dict[str, str] = {
     "method": "способ",
     "paid_at": "дата оплаты",
     "note": "заметка",
+    "discount_percent": "скидка, %",
+    "discount_amount": "скидка",
     "default_rate": "ставка по умолчанию",
     "instructor_rate": "ставка инструктора",
     "source": "источник",
@@ -420,6 +428,23 @@ def _with_changes(
     return f"{head} — {shown}" + (f" и ещё {more}" if more > 0 else "")
 
 
+def _discount_text(percent: Any, amount: Any) -> str:
+    return "нет" if percent is None else f"{percent} % ({_money(amount)} TJS)"
+
+
+def _payment(head: str, e: Entry, names: dict[str, str], sec: dict[str, str]) -> str:
+    """A payment with a discount names it first: «… — скидка 20 % (100 TJS); сумма …»."""
+    old_p, new_p = _pair(e.diff.get("discount_percent"))
+    old_a, new_a = _pair(e.diff.get("discount_amount"))
+    rest = {k: v for k, v in e.diff.items() if k not in ("discount_percent", "discount_amount")}
+    if e.action == "payment.create":
+        piece = f"скидка {_discount_text(new_p, new_a)}"
+    else:
+        piece = f"скидка {_discount_text(old_p, old_a)} → {_discount_text(new_p, new_a)}"
+    tail = _with_changes("", rest, names, sec)
+    return f"{head} — {piece}" + (f"; {tail.removeprefix(' — ')}" if tail else "")
+
+
 def sentence(
     e: Entry, names: dict[str, str] | None = None, sections: dict[str, str] | None = None
 ) -> str:
@@ -460,9 +485,13 @@ def sentence(
             ("director_title_en", "должность (EN)"),
             ("director_name_tg", "директор (TJ)"),
             ("director_title_tg", "должность (TJ)"),
+            ("verify_base_url", "адрес проверки"),
+            ("allow_non_graduate", "выдача не выпускникам"),
         ):
             old, new = _pair(e.diff.get(key))
             if key in e.diff:
+                if key == "allow_non_graduate":
+                    old, new = ("да" if old else "нет"), ("да" if new else "нет")
                 parts.append(f"{word} {old or '—'} → {new or '—'}")
         return f"{who}: изменены настройки сертификатов: {'; '.join(parts)}"
     if a == "cert_template.publish_version":
@@ -523,6 +552,23 @@ def sentence(
             lost.append(f"сертификат {cert}")
         tail = f"; потеряно: {', '.join(lost)}" if lost else ""
         return f"{who}: студент {student} убран из потока {cohort}{tail}"
+    if a in ("certificate.issue", "certificate.reissue", "certificate.revoke", "certificate.pdf"):
+        student, cohort = _pieces(lab)
+        number = _pair(e.diff.get("number"))[1]
+        if a == "certificate.pdf":
+            return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
+        if a == "certificate.revoke":
+            reason = _pair(e.diff.get("reason"))[1]
+            return (
+                f"{who}: отозван сертификат {number} студента {student} (поток {cohort}): {reason}"
+            )
+        verb = "выдан" if a == "certificate.issue" else "перевыпущен"
+        tail = ""
+        if a == "certificate.issue" and e.diff.get("non_graduate"):
+            tail = ", не выпускнику"
+        if comment := _pair(e.diff.get("comment"))[1]:
+            tail += f": {comment}"
+        return f"{who}: {verb} сертификат {number} студенту {student} (поток {cohort}){tail}"
     if a == "enrollment.certificate_pdf":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))
@@ -607,6 +653,10 @@ def sentence(
         student = _pair(e.diff.get("student"))[1]
         old, new = _pair(e.diff.get("present"))
         _, reason = _pair(e.diff.get("reason"))
+        _, excused = _pair(e.diff.get("excused"))
+        if excused:
+            tail = f", причина: {reason}" if reason else ""
+            return f"{who}: отметил уважительную причину {student} ({code}, {day}){tail}"
         head = (
             f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
         )
@@ -640,6 +690,9 @@ def sentence(
     if a in ACTIONS:
         verb, what = ACTIONS[a]
         head = f"{who}: {verb} {what}{_tail(lab)}"
+        discounted = "discount_percent" in e.diff or "discount_amount" in e.diff
+        if a in ("payment.create", "payment.update") and discounted:
+            return _payment(head, e, names, sections)
         with_changes = a.endswith(".update") or a in WITH_VALUES
         return _with_changes(head, e.diff, names, sections) if with_changes else head
     return f"{who}: {a}{_tail(lab)}"

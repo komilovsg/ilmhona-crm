@@ -473,3 +473,18 @@ def match_names(names: list[str], people: list[Person]) -> list[Match]:
             elif found and i not in ambiguous:
                 ambiguous[i] = tuple(p.name for p in found)
     return [r or Match(None, None, ambiguous.get(i, ())) for i, r in enumerate(result)]
+
+
+def suggest(name: str, people: list[Person], limit: int = 5) -> list[tuple[Any, str, str]]:
+    """The people that may be this journal name, best tier first: (key, name, tier). Used for
+    names that match nobody in the cohort, against the students not in it."""
+    found: list[tuple[Any, str, str]] = []
+    seen: set[Any] = set()
+    for tier, fits in _TIERS:
+        for person in people:
+            if person.key not in seen and fits(name, person.name):
+                seen.add(person.key)
+                found.append((person.key, person.name, tier))
+        if len(found) >= limit:
+            break
+    return found[:limit]

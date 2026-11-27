@@ -76,7 +76,7 @@ test("users section opens both Пользователи and Роли, audit is s
 
 test("every backend section has a nav item", () => {
   const sections = new Set(NAV_ITEMS.map((i) => i.section));
-  assert.equal(sections.size, 14);
+  assert.equal(sections.size, 15);
 });
 
 test("phone: four main items, the rest goes to «Ещё»", () => {
@@ -119,4 +119,11 @@ test("matrix: none rows are dropped, change is one column", () => {
   assert.deepEqual(matrix, { leads: "change", audit: "view", users: "none" });
   const edited: Record<string, MatrixChoice> = { ...toMatrix({ leads: "change", audit: "view" }, sections), audit: "none" };
   assert.deepEqual(fromMatrix(edited), { leads: "change" });
+});
+
+test("the registry is in the nav for a user with the certificates section", () => {
+  assert.equal(visibleNav({ certificates: "view" }).some((i) => i.href === "/certificates"), true);
+  assert.equal(visibleNav({ cert_templates: "view" }).some((i) => i.href === "/certificates"), false);
+  assert.equal(canOpen({ cohorts: "view" }, "/certificates"), false);
+  assert.equal(canOpen({ certificates: "view" }, "/certificates"), true);
 });

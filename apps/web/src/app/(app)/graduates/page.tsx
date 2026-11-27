@@ -21,7 +21,7 @@ import { ListSkeleton } from "@/components/Skeletons";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useCanChangeGraduates, useRefreshReports } from "@/hooks/reports";
-import { getFile, graduateTemplatesPath, saveBlob, type GraduateCertTemplates } from "@/hooks/certs";
+import { fetchCertPdf, getFile, graduateTemplatesPath, saveBlob, saveBytes, useSeesCertRegistry, type GraduateCertTemplates } from "@/hooks/certs";
 import { api } from "@/lib/api";
 import { formatPrice, fullDate } from "@/lib/education";
 import { dushanbeDay } from "@/lib/format";
@@ -55,6 +55,7 @@ function paramsOf(f: Filters) {
 
 export default function GraduatesPage() {
   const canChange = useCanChangeGraduates();
+  const seesRegistry = useSeesCertRegistry();
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
@@ -111,6 +112,23 @@ export default function GraduatesPage() {
     },
     onError: notifyError,
   });
+  const openCert = useMutation({
+    mutationFn: async (g: GraduateRow) => {
+      const { data, name } = await fetchCertPdf(g.certificate_id!);
+
+      saveBytes(data, name ?? `${g.certificate_no}.pdf`, "application/pdf");
+    },
+    onError: notifyError,
+  });
+  // the number opens the PDF of the valid certificate when the user may see the registry
+  const numberOf = (g: GraduateRow) =>
+    g.certificate_id && seesRegistry ? (
+      <button className="text-brand-text hover:underline" type="button" onClick={() => openCert.mutate(g)}>
+        {g.certificate_no}
+      </button>
+    ) : (
+      (g.certificate_no ?? "—")
+    );
   const actions = (g: GraduateRow) => [
     ...(g.certificate_no ? [{ key: "pdf", label: "Скачать PDF", icon: "download" }] : canChange ? [{ key: "cert", label: "Выдать сертификат", icon: "graduates" }] : []),
     ...(canChange ? [{ key: "job", label: "Добавить трудоустройство", icon: "plus" }] : []),
@@ -203,7 +221,7 @@ export default function GraduatesPage() {
                           {g.score_legacy && <div className="text-xs font-normal text-default-500">итог из старой системы</div>}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">{orDash(g.paid, formatPrice)}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{g.certificate_no ?? "—"}</td>
+                        <td className="px-4 py-3 whitespace-nowrap">{numberOf(g)}</td>
                         <td className="px-4 py-3">{g.employed ? g.organization : "—"}</td>
                         <td className="px-2 py-3">{actions(g).length > 0 && <RowMenu actions={actions(g)} label={`Действия: ${g.student_name}`} onAction={(k) => onAction(g, k)} />}</td>
                       </tr>
@@ -230,12 +248,12 @@ export default function GraduatesPage() {
                       </div>
                     </div>
                     <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
-                      {[
+                      {([
                         ["Зачислен", fullDate(dushanbeDay(g.enrolled_at))],
                         ["Оплачено", orDash(g.paid, formatPrice)],
-                        ["Сертификат", g.certificate_no ?? "—"],
+                        ["Сертификат", numberOf(g)],
                         ["Трудоустроен", g.employed ? (g.organization ?? "Да") : "—"],
-                      ].map(([k, v]) => (
+                      ] as [string, React.ReactNode][]).map(([k, v]) => (
                         <div key={k}>
                           <dt className="text-xs text-default-500">{k}</dt>
                           <dd className="font-medium">{v}</dd>

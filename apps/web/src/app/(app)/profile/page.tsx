@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
 
 import { ConflictDialog } from "@/components/ConflictDialog";
@@ -16,6 +17,7 @@ import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, messageOf } from "@/lib/api";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
+import { resetTour } from "@/lib/tour";
 import type { Me } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
 
@@ -159,6 +161,26 @@ function SessionsCard() {
   );
 }
 
+function TourReplay({ userId }: { userId: string }) {
+  const router = useRouter();
+
+  return (
+    <section className="space-y-3 rounded-2xl bg-content1 p-5">
+      <h2 className="text-lg font-semibold">Подсказки</h2>
+      <p className="text-sm text-default-500">Короткий тур по экрану «Сегодня»: где урок, отметка посещаемости и что осталось сделать.</p>
+      <Button
+        variant="flat"
+        onPress={() => {
+          resetTour(userId);
+          router.push("/today");
+        }}
+      >
+        Показать подсказки
+      </Button>
+    </section>
+  );
+}
+
 export default function ProfilePage() {
   const { data: me } = useMe();
 
@@ -167,6 +189,11 @@ export default function ProfilePage() {
       <PageHeader title="Профиль" />
       {me && (
         <div className="grid gap-5 md:grid-cols-2">
+          {me.role.code === "instructor" && (
+            <div className="md:col-span-2">
+              <TourReplay userId={me.id} />
+            </div>
+          )}
           <ProfileForm key={me.id} me={me} />
           <PasswordForm login={me.login} />
           <SessionsCard />

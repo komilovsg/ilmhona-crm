@@ -156,6 +156,8 @@ function OverviewTab({ data, leads }: { data: Overview; leads: boolean }) {
           { label: "Лиды", value: String(data.leads), hint: `Конверсия: ${percentLabel(data.conversion)}` },
           { label: "Активные студенты", value: String(data.active_students), hint: `Всего в базе: ${data.students_total}` },
           data.income != null && { label: "Оплачено", value: formatPrice(data.income), hint: "Подтверждённые оплаты" },
+          data.discounts != null &&
+            Number(data.discounts) > 0 && { label: "Скидки", value: formatPrice(data.discounts), hint: "Не входят в «Оплачено»" },
           debts && {
             label: "Долг",
             value: formatPrice(data.debt ?? 0),

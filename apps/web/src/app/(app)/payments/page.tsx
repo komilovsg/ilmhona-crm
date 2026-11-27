@@ -34,7 +34,7 @@ import { telHref } from "@/lib/format";
 import { methodLabel, monthOf, monthOptions, PAYMENT_METHODS, PAYMENT_STATUSES, paymentTone } from "@/lib/money";
 import type { DebtorRow, DebtorsPage, PaymentRow, PaymentsPage } from "@/lib/money-types";
 import type { DueMonth } from "@/lib/payment-month";
-import { debtLines } from "@/lib/payment-month";
+import { debtLines, discountText } from "@/lib/payment-month";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import { useOverlayMotion } from "@/lib/motion";
@@ -165,6 +165,7 @@ function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean
               <th className="px-4 py-3 font-medium">Поток</th>
               <th className="px-4 py-3 font-medium">Месяц</th>
               <th className="px-4 py-3 font-medium">Сумма</th>
+              <th className="px-4 py-3 font-medium">Скидка</th>
               <th className="px-4 py-3 font-medium">Способ</th>
               <th className="px-4 py-3 font-medium">Статус</th>
               <th className="px-4 py-3 text-right font-medium" />
@@ -186,6 +187,7 @@ function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean
                 </td>
                 <td className="px-4 py-3">{p.month_no}</td>
                 <td className="whitespace-nowrap px-4 py-3 font-medium">{formatPrice(p.amount)}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-default-600">{discountText(p) ?? "—"}</td>
                 <td className="px-4 py-3">{methodLabel(p.method)}</td>
                 <td className="px-4 py-3">
                   <StatusChip status={p.status} />
@@ -216,7 +218,10 @@ function PaymentsList({ rows, canPay, a }: { rows: PaymentRow[]; canPay: boolean
             <div className="mt-2 flex items-center justify-between gap-2">
               <div>
                 <div className="font-semibold">{formatPrice(p.amount)}</div>
-                <div className="text-xs text-default-500">{fullDate(p.paid_at)}</div>
+                <div className="text-xs text-default-500">
+                  {fullDate(p.paid_at)}
+                  {discountText(p) ? ` · скидка ${discountText(p)}` : ""}
+                </div>
               </div>
               <RowActions a={a} canPay={canPay} p={p} />
             </div>
@@ -466,7 +471,12 @@ export default function PaymentsPage() {
       ) : summary ? (
         <StatCards
           stats={[
-            { label: "Подтверждено", value: formatPrice(summary.confirmed), hint: `оплат: ${summary.confirmed_count}`, tone: "success" },
+            {
+              label: "Подтверждено",
+              value: formatPrice(summary.confirmed),
+              hint: `оплат: ${summary.confirmed_count}${Number(summary.confirmed_discount) > 0 ? ` · скидки ${formatPrice(summary.confirmed_discount)}` : ""}`,
+              tone: "success",
+            },
             { label: "Ожидает подтверждения", value: formatPrice(summary.pending), hint: `оплат: ${summary.pending_count}`, tone: "warning" },
             { label: "Транзакций", value: String(summary.count) },
           ]}

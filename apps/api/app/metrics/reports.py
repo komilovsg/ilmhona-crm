@@ -30,6 +30,7 @@ import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import ColumnElement, DateTime, cast, exists, func, literal_column, select
@@ -65,6 +66,7 @@ from app.models import (
     AppUser,
     Branch,
     Campaign,
+    Certificate,
     Cohort,
     Course,
     Employment,
@@ -86,6 +88,7 @@ MONTHS = 12
 # Hidden = null in JSON and no column in Excel.
 MONEY_SECTIONS: dict[str, tuple[str, ...]] = {
     "income": ("payments",),
+    "discounts": ("payments",),
     "ltv": ("payments",),
     "paid": ("payments",),
     "payroll": ("instructors",),
@@ -233,6 +236,19 @@ async def graduate_rows(
     # one query for the enrollments of every cohort together, not one per cohort
     results = await enrollment_results(db, None, enrollment_ids=[e.id for e, *_ in found])
     paid = await enrollment_money(db, [(e, c) for e, _, c, *_ in found])
+    valid_certs: dict[uuid.UUID, uuid.UUID] = {}
+    if found:
+        valid_certs = {
+            eid: cid
+            for eid, cid in (
+                await db.execute(
+                    select(Certificate.enrollment_id, Certificate.id).where(
+                        Certificate.enrollment_id.in_([e.id for e, *_ in found]),
+                        Certificate.status == "valid",
+                    )
+                )
+            ).all()
+        }
     students = list({s.id for _, s, *_ in found})
     jobs: dict[uuid.UUID, list[Employment]] = {}
     if students:
@@ -272,6 +288,7 @@ async def graduate_rows(
                 "score_legacy": res["legacy"],
                 "paid": paid[e.id]["paid"],
                 "certificate_no": e.certificate_no,
+                "certificate_id": valid_certs.get(e.id),
                 "certificate_issued_at": e.certificate_issued_at,
                 "employed": bool(own),
                 "organization": own[0].organization if own else None,
@@ -334,6 +351,7 @@ async def overview(
         "active_students": students["активный"],
         "students_total": students["всего"],
         "income": fin["income"],
+        "discounts": fin["discounts"],
         "active_cohorts": cohorts["активный"],
         "recruiting_cohorts": cohorts["набор"],
         "cohorts_total": cohorts["всего"],
@@ -374,13 +392,21 @@ async def by_month(db: AsyncSession, scope: Scope, on: date | None = None) -> di
     since, until = months[0], month_end(months[-1])
     paid = _in_period(Payment.paid_at, since, until)
     income = await db.execute(
-        select(_ym(Payment.paid_at), func.coalesce(func.sum(Payment.amount), 0))
+        select(
+            _ym(Payment.paid_at),
+            func.coalesce(func.sum(Payment.amount), 0),
+            func.coalesce(func.sum(Payment.discount_amount), 0),
+        )
         .select_from(Payment)
         .join(Enrollment, Enrollment.id == Payment.enrollment_id)
         .join(Cohort, Cohort.id == Enrollment.cohort_id)
         .where(Payment.status == CONFIRMED, *scope.cohort, *paid)
         .group_by(_ym(Payment.paid_at))
     )
+    inc: dict[str, Decimal] = {}
+    off: dict[str, Decimal] = {}
+    for key, got, taken_off in income.all():
+        inc[key], off[key] = money(got), money(taken_off)
     payroll = await db.execute(
         select(_ym(InstructorPayout.paid_at), func.coalesce(func.sum(InstructorPayout.amount), 0))
         .join(Cohort, Cohort.id == InstructorPayout.cohort_id)
@@ -407,7 +433,7 @@ async def by_month(db: AsyncSession, scope: Scope, on: date | None = None) -> di
         .where(*scope.leads(since, until))
         .group_by(_ym_local(Lead.created_at))
     )
-    inc, pay, ad = ({k: money(v) for k, v in r.all()} for r in (income, payroll, ads))
+    pay, ad = ({k: money(v) for k, v in r.all()} for r in (payroll, ads))
     stu: dict[str, int] = dict(students.all())
     led: dict[str, int] = dict(leads.all())
     items = []
@@ -418,6 +444,7 @@ async def by_month(db: AsyncSession, scope: Scope, on: date | None = None) -> di
             {
                 "month": first,
                 "income": i,
+                "discounts": off.get(key, ZERO),
                 "payroll": p_,
                 "ads": a,
                 "profit": i - a - p_,
