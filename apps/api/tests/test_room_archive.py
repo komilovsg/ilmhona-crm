@@ -215,7 +215,7 @@ async def _fresh(name: str) -> tuple[Config, Any]:
     await server.dispose()
     cfg = Config("alembic.ini")
     cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
-    await asyncio.to_thread(command.upgrade, cfg, "0033")
+    await asyncio.to_thread(command.upgrade, cfg, "0035")
     return cfg, create_async_engine(url)
 
 
@@ -269,7 +269,7 @@ async def test_migration_0036_moves_live_cohorts_and_archives_placeholders() -> 
         )
         assert all(user is None for *_, user in audit)  # «Система»
         # down drops the column only; up again finds nothing left to move
-        await asyncio.to_thread(command.downgrade, cfg, "0033")
+        await asyncio.to_thread(command.downgrade, cfg, "0035")
         await asyncio.to_thread(command.upgrade, cfg, "0036")
         async with engine.connect() as conn:
             again = (
@@ -289,6 +289,6 @@ async def test_migration_0036_fails_on_overlap() -> None:
             await asyncio.to_thread(command.upgrade, cfg, "0036")
         async with engine.connect() as conn:
             head = (await conn.execute(text("SELECT version_num FROM alembic_version"))).scalar()
-        assert head == "0033"  # rolled back as a whole
+        assert head == "0035"  # rolled back as a whole
     finally:
         await engine.dispose()
