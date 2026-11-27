@@ -28,6 +28,7 @@ SECTIONS: dict[str, str] = {
     "audit": "Журнал",
     "cert_templates": "Шаблоны сертификатов",
     "certificates": "Выдача сертификатов и реестр",
+    "donors": "Доноры",
 }
 
 SUPERADMIN_CODE = "superadmin"
@@ -44,6 +45,7 @@ MANAGER_DEFAULT: dict[str, Level] = {
     "graduates": "view",
     "master_list": "view",
     "marketing": "view",
+    "donors": "view",
 }
 INSTRUCTOR_DEFAULT: dict[str, Level] = {
     "cohorts": "view",

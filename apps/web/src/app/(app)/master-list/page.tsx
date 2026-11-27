@@ -29,6 +29,8 @@ function paramsOf(f: Filters) {
 
 const NUM = "px-3 py-3 text-right tabular-nums whitespace-nowrap";
 
+const seatsLabel = (r: { paying: number; by_donor: number; free: number }) => `${r.paying} / ${r.by_donor} / ${r.free}`;
+
 export default function MasterListPage() {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
@@ -79,6 +81,7 @@ export default function MasterListPage() {
                     <th className="text-right" title={LEADS_NOTE}>Лиды <span className="font-normal">(за 45 дн. до старта)</span></th>
                     <th className="text-right" title={LEADS_NOTE}>Нулевой урок</th>
                     <th className="text-right">Записались</th>
+                    <th className="text-right" title="Платят сами / за счёт доноров / бесплатно">Платят / донор / бесплатно</th>
                     <th className="text-right">Оплатили мес. 1</th>
                     <th className="text-right">мес. 2</th>
                     <th className="text-right">мес. 3</th>
@@ -107,6 +110,7 @@ export default function MasterListPage() {
                       <td className={NUM}>{r.leads}</td>
                       <td className={NUM}>{r.zero_lesson}</td>
                       <td className={NUM}>{r.enrolled}</td>
+                      <td className={NUM}>{seatsLabel(r)}</td>
                       <td className={NUM}>{r.paid_1}</td>
                       <td className={NUM}>{r.paid_2}</td>
                       <td className={NUM}>{r.paid_3}</td>
@@ -139,6 +143,7 @@ export default function MasterListPage() {
                       ["Лиды (45 дн.)", String(r.leads)],
                       ["Нулевой урок", String(r.zero_lesson)],
                       ["Записались", String(r.enrolled)],
+                      ["Платят/донор/беспл.", seatsLabel(r)],
                       ["Оплатили мес. 1", String(r.paid_1)],
                       ["Мес. 2", String(r.paid_2)],
                       ["Мес. 3", String(r.paid_3)],

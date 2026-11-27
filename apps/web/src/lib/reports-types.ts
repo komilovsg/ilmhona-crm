@@ -81,6 +81,10 @@ export type MasterRow = {
   leads: number;
   zero_lesson: number;
   enrolled: number;
+  /** of the enrolled: pay themselves / paid for by a donor / free */
+  paying: number;
+  by_donor: number;
+  free: number;
   paid_1: number;
   paid_2: number;
   paid_3: number;

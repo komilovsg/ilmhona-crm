@@ -9,6 +9,9 @@
   price_month × months started since enrollment (from the later of the enrollment month and the
   cohort start month, to the earlier of this month and the cohort's last month),
   debt = max(expected − paid − discount, 0). An expelled student owes nothing more: debt 0.
+- Donors (`app.donors.funding`): a donor-funded enrollment owes nothing (its price is 0) and is
+  never a debtor, nor in this month's expected money, nor in the payment form's choices. After a
+  move from a donor to paying themself (`pays_from`) the months count from that month.
 - Discount: a payment may take `discount_percent` of the month's price off (`discount_amount`,
   rounded to the cent, half up; one discount per enrollment month). A month is covered by what is
   paid plus the discount (`COVERED`); income stays the money received, discounts are their own sum.
@@ -30,7 +33,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
@@ -97,9 +100,26 @@ def expected_months(enrolled_on: date, start: date, end: date, on: date) -> int:
 
 
 def debtor_where() -> list[ColumnElement[bool]]:
-    """Enrollments that can owe: not expelled, in a cohort that is not cancelled. The debtors list
-    and the dashboard's total debt share it."""
-    return [Enrollment.status != EXPELLED, Cohort.status != CANCELLED]
+    """Enrollments that can owe: not expelled, not funded by a donor, in a cohort that is not
+    cancelled. The debtors list, the dashboard's total debt, this month's expected money and the
+    payment form's choices share it."""
+    return [
+        Enrollment.status != EXPELLED,
+        Enrollment.donor_id.is_(None),
+        Cohort.status != CANCELLED,
+    ]
+
+
+# what the debt counts from and the price of a month for one enrollment (columns of a MoneyRow):
+# a donor-funded student has no price; after a move to paying themself, months count from then
+BILLED_SINCE = func.greatest(Enrollment.enrolled_at, Enrollment.pays_from)
+BILLED_PRICE = case((Enrollment.donor_id.is_not(None), literal(ZERO)), else_=Cohort.price_month)
+
+
+def billed(e: Enrollment, c: Cohort) -> tuple[datetime, Decimal]:
+    """`BILLED_SINCE` and `BILLED_PRICE` of a loaded enrollment."""
+    since = max(e.enrolled_at, e.pays_from) if e.pays_from else e.enrolled_at
+    return since, (ZERO if e.donor_id is not None else c.price_month)
 
 
 async def debt_summary(
@@ -111,9 +131,9 @@ async def debt_summary(
         await db.execute(
             select(
                 Enrollment.id,
-                Enrollment.enrolled_at,
+                BILLED_SINCE,
                 Enrollment.status,
-                Cohort.price_month,
+                BILLED_PRICE,
                 Cohort.start_date,
                 Cohort.end_date,
             )
@@ -181,7 +201,8 @@ async def payment_totals(db: AsyncSession, where: Sequence[ColumnElement[bool]])
     }
 
 
-# (enrollment id, enrolled_at, status, cohort price_month, cohort start, cohort end)
+# (enrollment id, billed since, status, billed price, cohort start, cohort end): BILLED_SINCE /
+# BILLED_PRICE (`billed`), never the raw enrolled_at / price_month
 MoneyRow = tuple[uuid.UUID, datetime, str, Decimal, date, date]
 
 
@@ -189,11 +210,11 @@ async def enrollment_money(
     db: AsyncSession, rows: Sequence[tuple[Enrollment, Cohort]], on: date | None = None
 ) -> dict[uuid.UUID, dict[str, Any]]:
     """paid, paid months, expected and debt per enrollment (every given enrollment is present)."""
-    return await enrollment_money_rows(
-        db,
-        [(e.id, e.enrolled_at, e.status, c.price_month, c.start_date, c.end_date) for e, c in rows],
-        on,
-    )
+    plain: list[MoneyRow] = []
+    for e, c in rows:
+        since, price = billed(e, c)
+        plain.append((e.id, since, e.status, price, c.start_date, c.end_date))
+    return await enrollment_money_rows(db, plain, on)
 
 
 async def enrollment_money_rows(
