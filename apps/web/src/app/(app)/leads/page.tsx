@@ -17,6 +17,7 @@ import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { InlineSelect } from "@/components/InlineSelect";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
@@ -373,6 +374,7 @@ export default function LeadsPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
+                  <NoTh />
                   <th className="px-4 py-3 font-medium">ФИО</th>
                   <th className="px-4 py-3 font-medium">Телефон</th>
                   <th className="px-4 py-3 font-medium">Курс · источник</th>
@@ -383,8 +385,9 @@ export default function LeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {leads.map((l) => (
+                {leads.map((l, i) => (
                   <tr key={l.id} className="border-b border-divider align-top last:border-0 hover:bg-default-50">
+                    <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                     <td className="px-4 py-3">
                       <NameCell lead={l} />
                       <div className="text-xs text-default-500">{l.branch_name}</div>
@@ -416,10 +419,13 @@ export default function LeadsPage() {
             </table>
           </div>
           <ul data-rows className="space-y-3 md:hidden">
-            {leads.map((l) => (
+            {leads.map((l, i) => (
               <li key={l.id} className="space-y-3 rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">
-                  <NameCell lead={l} />
+                  <div className="flex min-w-0 items-baseline">
+                    <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
+                    <NameCell lead={l} />
+                  </div>
                   {canChange && <RowMenu actions={rowActions(l)} label={`Действия: ${l.full_name}`} onAction={(k) => onAction(l, k)} />}
                 </div>
                 <div className="text-sm text-default-500">

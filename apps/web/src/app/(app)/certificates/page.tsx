@@ -11,6 +11,7 @@ import { ExportButton } from "@/components/ExportButton";
 import { useUrlPage, useUrlState } from "@/hooks/url-state";
 import { FilterInput } from "@/components/FilterInput";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu, type MenuAction } from "@/components/RowMenu";
@@ -154,6 +155,7 @@ export default function CertificatesPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-divider text-xs text-default-500">
                   <tr>
+                    <NoTh />
                     <th className="px-4 py-3 font-medium">Номер</th>
                     <th className="px-4 py-3 font-medium">ФИО</th>
                     <th className="px-4 py-3 font-medium">Курс · поток</th>
@@ -165,8 +167,9 @@ export default function CertificatesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.items.map((r) => (
+                  {d.items.map((r, i) => (
                     <tr key={r.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                      <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                       <td className="px-4 py-3 font-medium whitespace-nowrap">{r.number}</td>
                       <td className="px-4 py-3">
                         <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
@@ -197,12 +200,13 @@ export default function CertificatesPage() {
               </table>
             </div>
             <ul data-rows className="space-y-3 md:hidden">
-              {d.items.map((r) => (
+              {d.items.map((r, i) => (
                 <li key={r.id} className="rounded-2xl bg-content1 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-medium">{r.number}</div>
                       <Link className="block truncate font-medium" href={`/students/${r.student_id}`}>
+                        <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
                         {r.student_name}
                       </Link>
                       <div className="text-sm text-default-500">{[r.course_name, r.cohort_code].join(" · ")}</div>

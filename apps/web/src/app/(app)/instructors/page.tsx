@@ -8,6 +8,7 @@ import { Button } from "@heroui/button";
 
 import type { RateRecord } from "./RateModal";
 
+import { NoPrefix } from "@/components/RowNo";
 import { ActivateUserButton } from "@/components/ActivateUserButton";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
@@ -95,7 +96,7 @@ function Cohorts({ id, canEdit, edit }: { id: string; canEdit: boolean; edit: (e
   );
 }
 
-function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boolean; edit: (e: Editing) => void }) {
+function Card({ card: c, n, canEdit, edit }: { card: InstructorCard; n: number; canEdit: boolean; edit: (e: Editing) => void }) {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
 
@@ -103,7 +104,10 @@ function Card({ card: c, canEdit, edit }: { card: InstructorCard; canEdit: boole
     <section aria-label={c.full_name} className="flex flex-col gap-4 rounded-2xl bg-content1 p-4">
       <div>
         <div className="flex items-start justify-between gap-2">
-          <h2 className="min-w-0 break-words text-base font-semibold">{c.full_name}</h2>
+          <h2 className="min-w-0 break-words text-base font-semibold">
+            <NoPrefix n={n} />
+            {c.full_name}
+          </h2>
           {!c.is_active && <span className="shrink-0 rounded-full bg-default-100 px-2 py-0.5 text-xs">нет доступа</span>}
         </div>
         {/* always mounted: once the account is active the button goes, the password modal stays */}
@@ -220,8 +224,8 @@ export default function InstructorsPage() {
       >
         {(d) => (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {d.items.map((c) => (
-              <Card key={c.id} canEdit={canEdit} card={c} edit={setEditing} />
+            {d.items.map((c, i) => (
+              <Card key={c.id} canEdit={canEdit} card={c} edit={setEditing} n={i + 1} />
             ))}
           </div>
         )}

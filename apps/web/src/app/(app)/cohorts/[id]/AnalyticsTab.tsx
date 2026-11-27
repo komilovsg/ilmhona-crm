@@ -1,5 +1,6 @@
 "use client";
 
+import { NoPrefix } from "@/components/RowNo";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -108,9 +109,10 @@ function Attendance({ data }: { data: CohortAnalytics }) {
   );
 }
 
-function StudentLink({ cohortId, row }: { cohortId: string; row: { enrollment_id: string; student_name: string } }) {
+function StudentLink({ cohortId, row, n }: { cohortId: string; row: { enrollment_id: string; student_name: string }; n?: number }) {
   return (
     <Link className="font-medium text-brand-text hover:underline" href={`/cohorts/${cohortId}?tab=attendance&student=${row.enrollment_id}`} title="Открыть в посещаемости">
+      {n !== undefined && <NoPrefix n={n} />}
       {row.student_name}
     </Link>
   );
@@ -123,10 +125,10 @@ function Risk({ rows, cohortId }: { rows: RiskRow[]; cohortId: string }) {
         <p className="py-8 text-center text-sm text-default-500">Сейчас никто не в зоне риска</p>
       ) : (
         <ul className="space-y-3">
-          {rows.map((r) => (
+          {rows.map((r, i) => (
             <li key={r.enrollment_id} className="rounded-xl border border-divider p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <StudentLink cohortId={cohortId} row={r} />
+                <StudentLink cohortId={cohortId} n={i + 1} row={r} />
                 <Chip color={r.level === "red" ? "danger" : "warning"} size="sm" variant="solid">
                   {r.level === "red" ? "срочно" : "внимание"}
                 </Chip>
@@ -166,9 +168,9 @@ function Top({ rows, data, cohortId }: { rows: TopRow[]; data: CohortAnalytics; 
         <p className="py-8 text-center text-sm text-default-500">Пока таких студентов нет</p>
       ) : (
         <ul className="space-y-2">
-          {rows.map((r) => (
+          {rows.map((r, i) => (
             <li key={r.enrollment_id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-divider p-3 text-sm">
-              <StudentLink cohortId={cohortId} row={r} />
+              <StudentLink cohortId={cohortId} n={i + 1} row={r} />
               <span className="tabular-nums text-default-600">
                 {pct(r.attendance_percent)} · {basis === "actual" ? "итог" : "прогноз"} {r.projected}
               </span>
@@ -214,6 +216,7 @@ function Final({ data, cohortId }: { data: CohortAnalytics; cohortId: string }) 
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
+              <th className="w-10 px-2 py-2 text-center font-medium">№</th>
               <th className="py-2 pr-3 font-medium">Студент</th>
               {f.categories.map((c) => (
                 <th key={c.key} className="px-3 py-2 text-right font-medium">
@@ -225,8 +228,9 @@ function Final({ data, cohortId }: { data: CohortAnalytics; cohortId: string }) 
             </tr>
           </thead>
           <tbody>
-            {f.rows.map((r) => (
+            {f.rows.map((r, i) => (
               <tr key={r.enrollment_id} className="border-b border-divider last:border-0">
+                <td className="px-2 py-2 text-center text-xs tabular-nums text-default-500">{i + 1}</td>
                 <td className="py-2 pr-3">
                   <StudentLink cohortId={cohortId} row={r} />
                 </td>
@@ -245,10 +249,10 @@ function Final({ data, cohortId }: { data: CohortAnalytics; cohortId: string }) 
         </table>
       </div>
       <ul className="space-y-2 md:hidden">
-        {f.rows.map((r) => (
+        {f.rows.map((r, i) => (
           <li key={r.enrollment_id} className="rounded-xl border border-divider p-3 text-sm">
             <div className="flex items-center justify-between gap-2">
-              <StudentLink cohortId={cohortId} row={r} />
+              <StudentLink cohortId={cohortId} n={i + 1} row={r} />
               <span className="text-base font-semibold tabular-nums">{r.total}</span>
             </div>
             <div className="mt-1 text-xs text-default-500">

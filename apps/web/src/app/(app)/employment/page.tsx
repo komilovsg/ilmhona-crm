@@ -11,6 +11,7 @@ import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
@@ -103,6 +104,7 @@ export default function EmploymentPage() {
               <table className="w-full text-left text-sm">
                 <thead className="border-b border-divider text-xs text-default-500">
                   <tr>
+                    <NoTh />
                     <th className="px-4 py-3 font-medium">Студент</th>
                     <th className="px-4 py-3 font-medium">Курс · поток</th>
                     <th className="px-4 py-3 font-medium">Организация</th>
@@ -112,8 +114,9 @@ export default function EmploymentPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {d.items.map((j) => (
+                  {d.items.map((j, i) => (
                     <tr key={j.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                      <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                       <td className="px-4 py-3">
                         <Link className="font-medium hover:text-brand-text" href={`/students/${j.student_id}`}>
                           {j.student_name}
@@ -131,11 +134,12 @@ export default function EmploymentPage() {
               </table>
             </div>
             <ul data-rows className="space-y-3 md:hidden">
-              {d.items.map((j) => (
+              {d.items.map((j, i) => (
                 <li key={j.id} className="rounded-2xl bg-content1 p-4">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <Link className="block truncate font-medium" href={`/students/${j.student_id}`}>
+                        <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
                         {j.student_name}
                       </Link>
                       <div className="text-sm">{j.organization}</div>

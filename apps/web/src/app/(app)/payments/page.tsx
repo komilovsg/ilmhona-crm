@@ -18,6 +18,7 @@ import { Icon } from "@/components/Icon";
 import { MonthStates } from "@/components/MonthStates";
 import { LoadingButton } from "@/components/LoadingButton";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
@@ -244,7 +245,7 @@ function DebtLines({ due }: { due: DueMonth[] }) {
   );
 }
 
-function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boolean; onPay: (d: DebtorRow) => void }) {
+function DebtorsList({ rows, offset, canPay, onPay }: { rows: DebtorRow[]; offset: number; canPay: boolean; onPay: (d: DebtorRow) => void }) {
   const payButton = (d: DebtorRow) =>
     canPay && (
       <Button color="primary" size="sm" startContent={<Icon name="payments" size={16} />} variant="flat" onPress={() => onPay(d)}>
@@ -258,6 +259,7 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
         <table className="w-full text-left text-sm">
           <thead className="border-b border-divider text-xs text-default-500">
             <tr>
+              <NoTh />
               <th className="px-4 py-3 font-medium">Студент</th>
               <th className="px-4 py-3 font-medium">Поток</th>
               <th className="px-4 py-3 font-medium">Месяцы</th>
@@ -268,8 +270,9 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
             </tr>
           </thead>
           <tbody>
-            {rows.map((d) => (
+            {rows.map((d, i) => (
               <tr key={d.enrollment_id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                <NoTd n={offset + i + 1} />
                 <td className="px-4 py-3 font-medium">
                   <Link className="hover:text-brand-text" href={`/students/${d.student_id}`}>
                     {d.student_name}
@@ -303,10 +306,11 @@ function DebtorsList({ rows, canPay, onPay }: { rows: DebtorRow[]; canPay: boole
         </table>
       </div>
       <ul data-rows className="space-y-3 md:hidden">
-        {rows.map((d) => (
+        {rows.map((d, i) => (
           <li key={d.enrollment_id} className="rounded-2xl bg-content1 p-4">
             <div className="flex items-start justify-between gap-2">
               <Link className="min-w-0 truncate font-medium" href={`/students/${d.student_id}`}>
+                <NoPrefix n={offset + i + 1} />
                 {d.student_name}
               </Link>
               <span className="shrink-0 font-semibold text-danger">{formatPrice(d.debt)}</span>
@@ -531,7 +535,7 @@ export default function PaymentsPage() {
         >
           {(d) => (
             <>
-              <DebtorsList canPay={canPay} rows={d.items} onPay={(x) => setForm({ payment: null, enrollmentId: x.enrollment_id })} />
+              <DebtorsList canPay={canPay} offset={(page - 1) * PAGE_SIZE} rows={d.items} onPay={(x) => setForm({ payment: null, enrollmentId: x.enrollment_id })} />
               <Pager page={page} pageSize={PAGE_SIZE} total={d.total} onChange={setPage} />
             </>
           )}

@@ -16,6 +16,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportButton } from "@/components/ExportButton";
 import { Icon } from "@/components/Icon";
 import { PageHeader } from "@/components/PageHeader";
+import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
@@ -344,6 +345,7 @@ export default function UsersPage() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-divider text-xs text-default-500">
                 <tr>
+                  <NoTh />
                   <th className="px-4 py-3 font-medium">ФИО</th>
                   <th className="px-4 py-3 font-medium">Логин</th>
                   <th className="px-4 py-3 font-medium">Роль</th>
@@ -354,8 +356,9 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
+                {users.map((u, i) => (
                   <tr key={u.id} className="border-b border-divider last:border-0 hover:bg-default-50">
+                    <NoTd n={rowNo(page, PAGE_SIZE, i)} />
                     <td className="px-4 py-3 font-medium">{u.full_name}</td>
                     <td className="px-4 py-3 text-default-600">{u.login}</td>
                     <td className="px-4 py-3">{u.role_name}</td>
@@ -388,11 +391,14 @@ export default function UsersPage() {
           </div>
 
           <ul data-rows className="space-y-3 md:hidden">
-            {users.map((u) => (
+            {users.map((u, i) => (
               <li key={u.id} className="rounded-2xl bg-content1 p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{u.full_name}</div>
+                    <div className="truncate font-medium">
+                      <NoPrefix n={rowNo(page, PAGE_SIZE, i)} />
+                      {u.full_name}
+                    </div>
                     <div className="text-sm text-default-500">{u.login}</div>
                   </div>
                   {menu(u)}
