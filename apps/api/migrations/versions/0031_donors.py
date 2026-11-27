@@ -14,7 +14,7 @@ default, the superadmin has every section anyway.
 from alembic import op
 
 revision = "0031"
-down_revision = "0029"
+down_revision = "0030"
 
 OLD_SECTIONS = (
     "dashboard", "leads", "students", "cohorts", "attendance", "payments", "rooms", "graduates",
