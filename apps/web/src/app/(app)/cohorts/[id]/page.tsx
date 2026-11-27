@@ -174,7 +174,7 @@ export default function CohortPage() {
         <Icon name="chevron-left" size={16} />
         Потоки
       </Link>
-      <div className="mb-5 flex items-start justify-between gap-3">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold">{c.code}</h1>
@@ -193,7 +193,7 @@ export default function CohortPage() {
           </div>
           <p className="text-default-600">{c.course_name}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {canChange && c.status === "активный" && (
             <Button
               color={c.overdue ? "primary" : "default"}
