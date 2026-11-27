@@ -1,11 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import Link from "next/link";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Chip } from "@heroui/chip";
 
+import { DirectorTab } from "@/components/cert/DirectorTab";
+import { IssueSettingsTab } from "@/components/cert/IssueSettingsTab";
+import { RulesTab } from "@/components/cert/RulesTab";
+import { TemplatesTab } from "@/components/cert/TemplatesTab";
 import { CertCommentModal } from "@/components/certs/CertCommentModal";
 import { DateField } from "@/components/DateField";
 import { ExportButton } from "@/components/ExportButton";
@@ -16,10 +20,12 @@ import { NoPrefix, NoTd, NoTh, rowNo } from "@/components/RowNo";
 import { Pager } from "@/components/Pager";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu, type MenuAction } from "@/components/RowMenu";
+import { Segmented } from "@/components/Segmented";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton } from "@/components/Skeletons";
 import { fetchCertPdf, saveBytes, toastNotReady, useCanIssueCerts, useRefreshIssued, useTemplates } from "@/hooks/certs";
 import { useCourses, useInstructors } from "@/hooks/education";
+import { useIsSuperadmin } from "@/hooks/goals";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { STATUS_LABEL, STATUS_TONE, type CertRow, type CertStatus } from "@/lib/certs";
@@ -76,9 +82,59 @@ function Who({ r, block }: { r: CertRow; block?: boolean }) {
   );
 }
 
+const TAB_DEFAULT = { tab: "issued" as Tab };
+
 type Pending = { row: CertRow; kind: "reissue" | "revoke" };
 
+type Tab = "issued" | "templates" | "director" | "rules" | "issue";
+
 export default function CertificatesPage() {
+  const { data: me } = useMe();
+  const superadmin = useIsSuperadmin();
+  const [{ tab }, setUrl] = useUrlState<{ tab: Tab }>(TAB_DEFAULT);
+
+  if (!me) return null;
+
+  const seesRegistry = can(me.permissions, "certificates", "view");
+  const seesSettings = can(me.permissions, "cert_templates", "view");
+  const options: { key: Tab; label: string }[] = [
+    ...(seesRegistry ? [{ key: "issued" as const, label: "Выданные" }] : []),
+    ...(seesSettings
+      ? [
+          { key: "templates" as const, label: "Шаблоны" },
+          { key: "director" as const, label: "Директор и печать" },
+          { key: "rules" as const, label: "Правила" },
+          ...(superadmin ? [{ key: "issue" as const, label: "Выдача" }] : []),
+        ]
+      : []),
+  ];
+  const active = options.find((o) => o.key === tab)?.key ?? options[0]?.key;
+  const tabs =
+    options.length > 1 ? (
+      <Segmented
+        className="mb-5"
+        label="Раздел"
+        options={options}
+        value={active ?? "issued"}
+        onChange={(key) => setUrl({ tab: key })}
+      />
+    ) : null;
+
+  if (active === "issued" || !active) return <Registry tabs={tabs} />;
+
+  return (
+    <>
+      <PageHeader title="Сертификаты" />
+      {tabs}
+      {active === "templates" && <TemplatesTab />}
+      {active === "director" && <DirectorTab />}
+      {active === "rules" && <RulesTab />}
+      {active === "issue" && <IssueSettingsTab />}
+    </>
+  );
+}
+
+function Registry({ tabs }: { tabs: ReactNode }) {
   const { data: me } = useMe();
   const canChange = useCanIssueCerts();
   const { data: branches = [] } = useBranches();
@@ -149,16 +205,12 @@ export default function CertificatesPage() {
                 Выдать из Excel
               </Button>
             )}
-            {seesTemplates && (
-              <Button as={Link} href="/settings/certificates" variant="flat">
-                Настройки
-              </Button>
-            )}
             <ExportButton label="Выгрузить в Excel" params={{ ...paramsOf(f), format: "xlsx" }} path="/api/v1/certificates" />
           </div>
         }
         title="Сертификаты"
       />
+      {tabs}
       {f.batch && (
         <div className="mb-3">
           <Chip variant="flat" onClose={() => set({ ...f, batch: null })}>

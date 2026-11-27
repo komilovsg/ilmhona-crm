@@ -75,7 +75,7 @@ test("users section opens both Пользователи and Роли, audit is s
 });
 
 test("every backend section has a nav item", () => {
-  const sections = new Set(NAV_ITEMS.map((i) => i.section));
+  const sections = new Set(NAV_ITEMS.flatMap((i) => [i.section, ...(i.alsoSection ? [i.alsoSection] : [])]));
   assert.equal(sections.size, 16);
 });
 
@@ -123,7 +123,16 @@ test("matrix: none rows are dropped, change is one column", () => {
 
 test("the registry is in the nav for a user with the certificates section", () => {
   assert.equal(visibleNav({ certificates: "view" }).some((i) => i.href === "/certificates"), true);
-  assert.equal(visibleNav({ cert_templates: "view" }).some((i) => i.href === "/certificates"), false);
+  assert.equal(visibleNav({ cert_templates: "view" }).some((i) => i.href === "/certificates"), true);
   assert.equal(canOpen({ cohorts: "view" }, "/certificates"), false);
   assert.equal(canOpen({ certificates: "view" }, "/certificates"), true);
+});
+
+test("certificates: one menu item, shown for registry or templates right", () => {
+  const hrefs = (p: Record<string, "view" | "change">) => visibleNav(p, "manager").map((i) => i.href);
+  assert.deepEqual(hrefs({ certificates: "view" }), ["/certificates"]);
+  assert.deepEqual(hrefs({ cert_templates: "view" }), ["/certificates"]);
+  assert.equal(NAV_ITEMS.some((i) => i.href === "/settings/certificates"), false);
+  assert.equal(canOpen({ cert_templates: "view" }, "/settings/certificates/abc", "manager"), true);
+  assert.equal(canOpen({ certificates: "view" }, "/settings/certificates", "manager"), false);
 });
