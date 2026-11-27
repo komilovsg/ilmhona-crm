@@ -1,9 +1,10 @@
 """Donors (Настройки → Доноры) and the donor report.
 
 Rights: the list for choosing (cohort form, filters) needs view on `donors`, `cohorts`, `students`
-or `graduates`; the directory with notes and the report need `donors` view; add / edit / archive
-`donors` change (never the instructor role). Donors are shared by both branches; the report counts
-only the cohorts the user may see (branch scope). Numbers come from `app.metrics.donors`.
+or `graduates` (an instructor gets the donors of their own cohorts only); the directory with notes
+and the report need `donors` view; add / edit / archive `donors` change (never the instructor
+role). Donors are shared by both branches; the report counts only the cohorts the user may see
+(branch scope). Numbers come from `app.metrics.donors`.
 """
 
 import uuid
@@ -20,7 +21,7 @@ from app.core import clock
 from app.core.db import DB
 from app.core.errors import NOT_FOUND, DomainError
 from app.core.versioning import Version, check_version
-from app.education.scope import cohort_filters, require_any, writer
+from app.education.scope import cohort_filters, is_instructor, require_any, writer
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics.donors import donor_report, donor_totals
 from app.models import Cohort, CohortDonor, Donor, Enrollment
@@ -114,11 +115,16 @@ async def list_donors(p: View, db: DB, archived: bool | None = None) -> list[dic
 
 
 @router.get("/options")
-async def donor_options(_: Picker, db: DB) -> list[dict[str, Any]]:
-    """Every donor by name (archived last, flagged): the choices of the cohort form and filters."""
-    rows = await db.execute(select(Donor.id, Donor.name, Donor.archived).order_by(
-        Donor.archived, Donor.name
-    ))  # fmt: skip
+async def donor_options(p: Picker, db: DB) -> list[dict[str, Any]]:
+    """Every donor by name (archived last, flagged): the choices of the cohort form and filters.
+    An instructor gets only the donors of their own cohorts, not the whole list."""
+    query = select(Donor.id, Donor.name, Donor.archived).order_by(Donor.archived, Donor.name)
+    if is_instructor(p):
+        own = select(Cohort.id).where(*cohort_filters(p))
+        query = query.where(
+            Donor.id.in_(select(CohortDonor.donor_id).where(CohortDonor.cohort_id.in_(own)))
+        )
+    rows = await db.execute(query)
     return [{"id": i, "name": n, "archived": a} for i, n, a in rows.all()]
 
 

@@ -109,7 +109,8 @@ async def _cohort_body(admin: httpx.AsyncClient) -> dict[str, Any]:
 
 async def test_donor_rights(admin: httpx.AsyncClient, login_as: SignedIn) -> None:
     d = await donor(admin)
-    plain = await login_as("mgr", await make_role("М", dict(MANAGER_DEFAULT)), branch="Душанбе")
+    no_donors = {k: v for k, v in MANAGER_DEFAULT.items() if k != "donors"}
+    plain = await login_as("mgr", await make_role("М", no_donors), branch="Душанбе")
     # no `donors` right: no directory, no report, no writes; the picker follows `cohorts`
     assert (await plain.get(DON)).status_code == 403
     assert (await plain.get(f"{DON}/report")).status_code == 403
@@ -125,7 +126,74 @@ async def test_donor_rights(admin: httpx.AsyncClient, login_as: SignedIn) -> Non
     assert (await editor.post(DON, json={"name": "Новый"})).status_code == 201
     teacher = await login_as("ins", "instructor")
     assert (await teacher.post(DON, json={"name": "Ещё"})).status_code == 403
-    assert (await teacher.get(f"{DON}/options")).status_code == 200  # cohorts view: picker only
+    assert (await teacher.get(DON)).status_code == 403
+    assert (await teacher.get(f"{DON}/report")).status_code == 403
+    # cohorts view: the picker only, and only the donors of their own cohorts (none yet)
+    r = await teacher.get(f"{DON}/options")
+    assert r.status_code == 200 and r.json() == []
+
+
+async def test_seeded_manager_role_views_donors_and_report(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    d = await donor(admin, "Фонд М")
+    cohort = await running_cohort(admin, funding="донор", donor_ids=[d], capacity=30)
+    await enroll_donor(admin, cohort, "Студент М", d)
+    rights = await sql(
+        "SELECT rp.level FROM role_permission rp JOIN role r ON r.id = rp.role_id "
+        "WHERE r.code = 'manager' AND rp.section = 'donors'"
+    )
+    assert rights == [("view",)]
+    mgr = await login_as("mgr", "manager", branch="Душанбе")
+    r = await mgr.get(DON)
+    assert r.status_code == 200 and [x["name"] for x in r.json()] == ["Фонд М"]
+    r = await mgr.get(f"{DON}/report")
+    assert r.status_code == 200, r.text
+    assert [(x["donor_name"], x["enrolled"]) for x in r.json()["items"]] == [("Фонд М", 1)]
+    assert (await mgr.get(f"{DON}/report/export")).status_code == 200
+    assert (await mgr.post(DON, json={"name": "Нельзя"})).status_code == 403
+
+
+NEW_STUDENT = {"new_student": {"full_name": "Новый Студент", "phone": None, "gender": None}}
+
+
+async def test_instructor_enrolls_with_a_donor_of_own_cohort_only(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    """The instructor's add-student form: the donor picker of a donor cohort with several donors.
+    Own cohort only; the donor must fund that cohort; the picker lists no other cohort's donor."""
+    d1, d2, d3 = await donor(admin, "Д1"), await donor(admin, "Д2"), await donor(admin, "Д3")
+    ins = await login_as("ins", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    own = await running_cohort(
+        admin, name="O", funding="донор", donor_ids=[d1, d2], capacity=30, instructor_id=me
+    )
+    other = await running_cohort(admin, name="X", funding="донор", donor_ids=[d1, d3], capacity=30)
+    # the picker: the donors of the instructor's cohorts only, never the whole list
+    r = await ins.get(f"{DON}/options")
+    assert r.status_code == 200 and sorted(o["name"] for o in r.json()) == ["Д1", "Д2"]
+    r = await ins.get(f"{C}/{own['id']}")
+    assert r.status_code == 200 and sorted(x["name"] for x in r.json()["donors"]) == ["Д1", "Д2"]
+    assert (await ins.get(f"{C}/{other['id']}")).status_code == 404
+    # several donors: one must be chosen
+    url = f"{C}/{own['id']}/enrollments"
+    r = await ins.post(url, json=NEW_STUDENT)
+    assert (r.status_code, r.json()["code"]) == (422, "donor_required")
+    # a donor that does not fund this cohort (it funds another one) is refused
+    r = await ins.post(url, json={**NEW_STUDENT, "donor_id": d3})
+    assert (r.status_code, r.json()["code"]) == (422, "donor_not_in_cohort")
+    r = await ins.post(url, json={**NEW_STUDENT, "donor_id": d2})
+    assert r.status_code == 201 and r.json()["donor_id"] == d2
+    # another instructor's cohort: not found, nothing written
+    r = await ins.post(f"{C}/{other['id']}/enrollments", json={**NEW_STUDENT, "donor_id": d1})
+    assert r.status_code == 404
+    assert await sql("SELECT count(*) FROM enrollment WHERE cohort_id = :c", c=other["id"]) == [
+        (0,)
+    ]
+    # an existing student stays a manager's choice, donor or not
+    sid = await make_student("Старый")
+    r = await ins.post(url, json={"student_id": str(sid), "donor_id": d1})
+    assert r.status_code == 403
 
 
 # ---- cohort funding ------------------------------------------------------------------------

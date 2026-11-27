@@ -207,12 +207,13 @@ export function EnrollModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
     >
       <div className="space-y-4">
         <OverCapacityNotice fill={cohort.fill} />
-        {withDonors(cohort.funding) && (
+        {/* a donor cohort with one donor sets it itself: no field to fill */}
+        {withDonors(cohort.funding) && !(cohort.funding === "донор" && activeDonors.length === 1) && (
           <SelectField
             allLabel={cohort.funding === "смешанный" ? "Платит сам" : undefined}
             isRequired={cohort.funding === "донор"}
-            label="Кто платит"
-            options={activeDonors.map((d) => ({ key: d.id, label: `Донор: ${d.name}` }))}
+            label={cohort.funding === "донор" ? "Донор" : "Кто платит"}
+            options={activeDonors.map((d) => ({ key: d.id, label: cohort.funding === "донор" ? d.name : `Донор: ${d.name}` }))}
             value={donorId}
             {...fe.hint("donor_id")}
             onChange={(v) => {

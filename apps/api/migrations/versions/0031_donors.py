@@ -7,7 +7,8 @@ by one of the cohort's donors) or смешанный (each student either pays o
 must be one of the cohort's donors (composite FK). A donor-funded enrollment owes nothing.
 `enrollment.pays_from`: when the student switched from a donor to paying themself; the debt
 counts from that month. Old cohorts become «платный», those with a price of 0 «бесплатный».
-Section `donors` in the rights matrix.
+Section `donors` in the rights matrix; the seeded manager role views it (list and report) by
+default, the superadmin has every section anyway.
 """
 
 from alembic import op
@@ -30,6 +31,10 @@ def upgrade() -> None:
     op.execute(
         "ALTER TABLE role_permission ADD CONSTRAINT role_permission_section_check "
         f"CHECK ({_check((*OLD_SECTIONS, 'donors'))})"
+    )
+    op.execute(
+        "INSERT INTO role_permission (role_id, section, level) "
+        "SELECT id, 'donors', 'view' FROM role WHERE code = 'manager'"
     )
     op.execute(
         """

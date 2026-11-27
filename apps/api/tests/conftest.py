@@ -107,6 +107,8 @@ async def clean(migrated_database: None) -> None:
             "DELETE FROM enrollment",
             "DELETE FROM cohort_donor",
             "DELETE FROM cohort",
+            # codes are 'G-' + 3 digits: a long run past 999 cohorts would repeat G-100
+            "ALTER SEQUENCE cohort_code_seq RESTART",
             "DELETE FROM donor",
             "DELETE FROM student",
             "DELETE FROM course",

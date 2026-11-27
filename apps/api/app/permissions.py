@@ -45,6 +45,7 @@ MANAGER_DEFAULT: dict[str, Level] = {
     "graduates": "view",
     "master_list": "view",
     "marketing": "view",
+    "donors": "view",
 }
 INSTRUCTOR_DEFAULT: dict[str, Level] = {
     "cohorts": "view",
