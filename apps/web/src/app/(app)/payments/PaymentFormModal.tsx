@@ -5,6 +5,7 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
+import { Switch } from "@heroui/switch";
 import clsx from "clsx";
 
 import { AppModal } from "@/components/AppModal";
@@ -24,6 +25,9 @@ import { amountText, methodLabel, newKey, PAYMENT_METHODS, validAmount } from "@
 import type { EnrollmentOption, PaymentRow } from "@/lib/money-types";
 import {
   defaultMonth,
+  discountLine,
+  discountOf,
+  discountText,
   holdText,
   monthConflictText,
   monthOptionLabel,
@@ -31,6 +35,7 @@ import {
   paidCountLabel,
   paidText,
   partialAmountOk,
+  percentOf,
   statusText,
   tjs,
   type MonthStatus,
@@ -113,7 +118,10 @@ function MonthHistory({ status: s }: { status: MonthStatus }) {
                   {statusText(p.status)}
                 </span>
               </span>
-              <span className="shrink-0 font-medium">{tjs(p.amount)}</span>
+              <span className="shrink-0 text-right font-medium">
+                {tjs(p.amount)}
+                {discountText(p) && <span className="block text-xs font-normal text-default-500">скидка {discountText(p)}</span>}
+              </span>
             </li>
           ))}
         </ul>
@@ -159,6 +167,9 @@ export function PaymentFormModal({
   const [note, setNote] = useState(payment?.note ?? "");
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"full" | "partial">("full");
+  // «Со скидкой»: null = follow the default (the payment's own, or the student's previous payment)
+  const [discountChoice, setDiscountChoice] = useState<boolean | null>(payment ? payment.discount_percent !== null : null);
+  const [percentChoice, setPercentChoice] = useState<string | null>(payment?.discount_percent ? String(payment.discount_percent) : null);
   const creating = !payment;
 
   const options = useQuery({
@@ -176,19 +187,36 @@ export function PaymentFormModal({
   const live = usePaymentMonth(eid, month, creating && !!option && month !== null);
   const st = live.status;
   const capped = !!st && Number(st.price) > 0; // a cohort without a price has no «Полностью»
+  const price = st?.price ?? option?.price_month ?? 0;
+  // one discount per month: a month that has one takes the rest of its payments without
+  const monthDiscounted = creating && !!st && Number(st.discount ?? 0) > 0;
+  // an edit keeps showing the payment's own discount while the price loads
+  const canDiscount = creating ? Number(price) > 0 && !monthDiscounted : Number(price) > 0 || payment.discount_percent !== null;
+  const lastPercent = option?.last_discount_percent ?? null;
+  const discountOn = canDiscount && (discountChoice ?? lastPercent !== null);
+  const percentText = percentChoice ?? (lastPercent !== null ? String(lastPercent) : "");
+  const percent = discountOn ? percentOf(percentText) : null;
+  const discount = percent !== null ? discountOf(price, percent) : 0;
+  const left = st ? Math.max(Number(st.remaining) - discount, 0) : 0;
   const amount = creating
     ? st && capped && mode === "full"
-      ? amountText(st.remaining)
+      ? amountText(left)
       : (amountChoice ?? "")
     : (amountChoice ?? (payment ? amountText(payment.amount) : ""));
   const dateOk = paidAt >= MIN_DATE && paidAt <= MAX_DATE;
   const monthOk = month !== null && month >= 1 && (!option || month <= option.months);
   const allPaid = creating && !!option && month === null;
   const heldBy = st && !st.full ? st.held_by : null;
-  const amountOk = validAmount(amount) && (!creating || !st || !capped || partialAmountOk(amountText(amount), st.remaining));
+  // a 100 % discount is a payment of 0
+  const zeroOk = discount > 0 && amount.trim() !== "" && Number(amountText(amount)) === 0 && amountText(amount) !== "";
+  const amountValid = validAmount(amount) || zeroOk;
+  const discountTooBig = creating && !!st && capped && discount > Number(st.remaining);
+  const amountOk =
+    amountValid && !discountTooBig && (!creating || !st || !capped || zeroOk || partialAmountOk(amountText(amount), String(left)));
+  const discountOk = !discountOn || (percent !== null && note.trim() !== "");
   const valid = creating
-    ? !!eid && !!option && !!st && !st.full && !heldBy && amountOk && dateOk && monthOk
-    : !!eid && validAmount(amount) && dateOk && monthOk;
+    ? !!eid && !!option && !!st && !st.full && !heldBy && amountOk && discountOk && dateOk && monthOk
+    : !!eid && amountValid && discountOk && dateOk && monthOk;
   const suggestion = st?.full && option && month !== null ? nextOpenMonth(option.months, fullMonths, month) : null;
 
   const pick = (o: EnrollmentOption | null) => {
@@ -203,7 +231,14 @@ export function PaymentFormModal({
     setError(null);
   };
 
-  const values = { month_no: month ?? 1, amount: amountText(amount), method, paid_at: paidAt, note: note.trim() || null };
+  const values = {
+    month_no: month ?? 1,
+    amount: amountText(amount),
+    method,
+    paid_at: paidAt,
+    note: note.trim() || null,
+    discount_percent: discountOn ? percent : null,
+  };
   const done = () => {
     void refresh();
     notify(payment ? "Оплата сохранена" : "Оплата добавлена");
@@ -232,6 +267,7 @@ export function PaymentFormModal({
       method: p.method,
       paid_at: p.paid_at,
       note: p.note ?? null,
+      discount_percent: p.discount_percent ?? null,
     }),
     apply: (v) => {
       setMonthChoice(v.month_no);
@@ -239,17 +275,20 @@ export function PaymentFormModal({
       setMethod(v.method);
       setPaidAt(v.paid_at);
       setNote(v.note ?? "");
+      setDiscountChoice(v.discount_percent !== null);
+      setPercentChoice(v.discount_percent === null ? "" : String(v.discount_percent));
     },
     request: (changed, version) => api(`/api/v1/payments/${payment?.id}`, { method: "PATCH", body: changed, version }),
-    labels: { month_no: "Месяц", amount: "Сумма", method: "Способ", paid_at: "Дата", note: "Заметка" },
+    labels: { month_no: "Месяц", amount: "Сумма", method: "Способ", paid_at: "Дата", note: "Заметка", discount_percent: "Скидка, %" },
     show: {
       amount: (a: string) => formatPrice(a),
       method: (m: string) => methodLabel(m),
       note: (n: string | null) => n || "—",
+      discount_percent: (d: number | null) => (d === null ? "нет" : `${d}%`),
     },
     onSaved: done,
   });
-  const fe = useFieldErrors(payment ? edit.failure : create.error, ["month_no", "amount", "method", "paid_at", "note"]);
+  const fe = useFieldErrors(payment ? edit.failure : create.error, ["month_no", "amount", "method", "paid_at", "note", "discount_percent"]);
   const submit = useSubmit(() => (payment ? edit.save(values) : create.mutateAsync()), !valid);
 
   return (
@@ -387,11 +426,11 @@ export function PaymentFormModal({
               <Input
                 isRequired
                 className={option ? "col-span-2" : undefined}
-                description={creating && st && capped && mode === "full" && Number(st.paid) > 0 ? "Остаток месяца" : undefined}
+                description={creating && st && capped && mode === "full" && (Number(st.paid) > 0 || discount > 0) ? "К оплате" : undefined}
                 endContent={<span className="text-xs text-default-500">TJS</span>}
                 errorMessage={
                   fe.hint("amount").errorMessage ??
-                  (creating && st && capped ? `Не больше ${tjs(st.remaining)}` : undefined)
+                  (discountTooBig ? "Скидка больше остатка месяца" : creating && st && capped ? `Не больше ${tjs(left)}` : undefined)
                 }
                 inputMode="decimal"
                 isInvalid={(amount !== "" && !amountOk) || fe.hint("amount").isInvalid}
@@ -410,11 +449,57 @@ export function PaymentFormModal({
                 <button
                   className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-brand-text"
                   type="button"
-                  onClick={() => setAmountChoice(amountText(st.remaining))}
+                  onClick={() => setAmountChoice(amountText(left))}
                 >
-                  Остаток {tjs(st.remaining)}
+                  Остаток {tjs(left)}
                 </button>
               </>
+            )}
+            {monthDiscounted && st && (
+              <Banner tone="default">
+                Скидка за месяц уже учтена: {st.discount_percent}% ({tjs(st.discount ?? 0)})
+              </Banner>
+            )}
+            {canDiscount && (
+              <div className="space-y-2 rounded-xl bg-content2 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Switch
+                    isSelected={discountOn}
+                    size="sm"
+                    onValueChange={(on) => {
+                      setDiscountChoice(on);
+                      setAmountChoice(null);
+                      fe.clear("discount_percent");
+                    }}
+                  >
+                    Со скидкой
+                  </Switch>
+                  {discountOn && (
+                    <Input
+                      isRequired
+                      aria-label="Скидка, %"
+                      className="w-28"
+                      endContent={<span className="text-xs text-default-500">%</span>}
+                      errorMessage={fe.hint("discount_percent").errorMessage ?? "От 1 до 100"}
+                      inputMode="numeric"
+                      isInvalid={(percentText !== "" && percent === null) || fe.hint("discount_percent").isInvalid}
+                      placeholder="%"
+                      size="sm"
+                      value={percentText}
+                      onValueChange={(v) => {
+                        fe.clear("discount_percent");
+                        setPercentChoice(v);
+                        setAmountChoice(null);
+                      }}
+                    />
+                  )}
+                </div>
+                {discountOn && percent !== null && (
+                  <p aria-live="polite" className="text-sm text-default-600">
+                    {discountLine(price, creating && st ? st.remaining : price, percent)}
+                  </p>
+                )}
+              </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               <SelectField
@@ -437,7 +522,14 @@ export function PaymentFormModal({
                 {...fe.field("paid_at", setPaidAt)}
               />
             </div>
-            <Input label="Заметка" maxLength={500} value={note} {...fe.field("note", setNote)} />
+            <Input
+              description={discountOn ? "Причина скидки — обязательно" : undefined}
+              isRequired={discountOn}
+              label={discountOn ? "Заметка (причина скидки)" : "Заметка"}
+              maxLength={500}
+              value={note}
+              {...fe.field("note", setNote)}
+            />
           </>
         )}
         {(error ?? fe.message) && !st?.full && (

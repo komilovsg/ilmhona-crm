@@ -4,6 +4,9 @@ import { test } from "node:test";
 import {
   debtLines,
   defaultMonth,
+  discountLine,
+  discountOf,
+  discountText,
   dueText,
   holdText,
   monthConflictText,
@@ -14,6 +17,7 @@ import {
   paidCountLabel,
   paidText,
   partialAmountOk,
+  percentOf,
   whenText,
 } from "./payment-month.ts";
 
@@ -124,4 +128,36 @@ test("monthKind: four distinct kinds", () => {
   assert.equal(monthKind({ state: "не оплачен", started: true }), "unpaid");
   assert.equal(monthKind({ state: "частично" }), "unpaid");
   assert.equal(monthKind({ state: "не оплачен", started: false }), "future");
+});
+
+test("a discount is a percent of the month's price, cents rounded half up like the server", () => {
+  assert.equal(discountOf("500.00", 20), 100);
+  assert.equal(discountOf(500, 100), 500);
+  assert.equal(discountOf("333.33", 15), 50); // 49.9995 -> 50.00
+  assert.equal(discountOf("0.10", 5), 0.01); // 0.005 -> 0.01
+  assert.equal(discountOf(500, 0), 0);
+  assert.equal(discountOf(500, 101), 0);
+  assert.equal(discountOf(500, 2.5), 0);
+});
+
+test("the typed percent is a whole number 1–100", () => {
+  assert.equal(percentOf("20"), 20);
+  assert.equal(percentOf(" 100 "), 100);
+  for (const bad of ["", "0", "101", "2.5", "-5", "abc", "1000"]) assert.equal(percentOf(bad), null, bad);
+});
+
+test("the live line shows the price, the discount and what is left to pay", () => {
+  assert.equal(discountLine("500.00", "500.00", 20), "Цена месяца 500 TJS − 100 TJS (20%) = к оплате 400 TJS");
+  assert.equal(discountLine("500.00", "500.00", 100), "Цена месяца 500 TJS − 500 TJS (100%) = к оплате 0 TJS");
+  assert.equal(discountLine("500.00", "300.00", 20), "Остаток месяца 300 TJS − 100 TJS (20%) = к оплате 200 TJS");
+});
+
+test("a month with a discount is measured against the discounted price", () => {
+  assert.equal(monthStateLabel({ state: "частично", paid: "200.00", price: "500.00", discount: "100.00" }), "частично: 200 из 400 TJS");
+  assert.equal(
+    monthOptionLabel(1, { state: "частично", paid: "200.00", price: "500.00", pending: "300.00", discount: "100.00" }),
+    "1-й · 200 / 400 · ожидает",
+  );
+  assert.equal(discountText({ discount_percent: 20, discount_amount: "100.00" }), "20% · 100 TJS");
+  assert.equal(discountText({ discount_percent: null, discount_amount: "0.00" }), null);
 });

@@ -19,6 +19,20 @@ IDEMPOTENCY_KEY_REUSED = errors.define(
 ENROLLMENT_HAS_PAYMENTS = errors.define(
     "enrollment_has_payments", 409, "The enrollment has payments"
 )
+# a discount needs a reason: the payment's note (the form's «Заметка»)
+DISCOUNT_REASON_REQUIRED = errors.define(
+    "discount_reason_required", 422, "A discount needs a reason in the note"
+)
+DISCOUNT_NO_PRICE = errors.define(
+    "discount_no_price", 422, "The cohort has no price: nothing to take a discount from"
+)
+# params: month_no, percent (the discount already given for that month)
+MONTH_DISCOUNT_EXISTS = errors.define(
+    "month_discount_exists", 409, "The month already has a discount"
+)
+PAYMENT_AMOUNT_ZERO = errors.define(
+    "payment_amount_zero", 422, "A payment of 0 is only a 100 % discount"
+)
 COHORT_NO_INSTRUCTOR = errors.define("cohort_no_instructor", 422, "The cohort has no instructor")
 PAYOUT_PERIOD_INVALID = errors.define(
     "payout_period_invalid", 422, "The cohort does not run in that month"
@@ -29,9 +43,12 @@ PAYOUT_EXISTS = errors.define(
 
 errors.on_constraint("payment_enrollment_fkey", ENROLLMENT_HAS_PAYMENTS)
 errors.on_constraint("instructor_payout_key", PAYOUT_EXISTS)
+errors.on_constraint("payment_month_discount_key", MONTH_DISCOUNT_EXISTS)
 for _check in (
     "payment_month_no_check",
     "payment_amount_check",
+    "payment_discount_check",
+    "payment_money_check",
     "payment_method_check",
     "payment_paid_at_check",
     "payment_status_check",

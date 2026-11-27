@@ -13,10 +13,10 @@ import uuid
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Self
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,7 @@ from app.export import MAX_ROWS, Col, Sheet, check_cap, workbook_response, xlsx_
 from app.metrics import (
     enrollment_attendance,
     enrollment_results,
+    next_lesson,
     today_lessons,
     unfilled_lessons,
 )
@@ -74,7 +75,14 @@ class Strict(BaseModel):
 
 class Mark(Strict):
     present: bool
+    excused: bool = False  # «уважительная»: an absence the percentage leaves out
     reason: Reason | None = None  # only an absence has one
+
+    @model_validator(mode="after")
+    def _excused_is_absence(self) -> Self:
+        if self.excused and self.present:
+            raise ValueError("excused mark cannot be present")
+        return self
 
 
 class GradeIn(Strict):
@@ -169,6 +177,7 @@ async def _lesson_payload(
                 "student_name": student.full_name,
                 "status": enrollment.status,
                 "present": mark[0].present if mark else None,
+                "excused": mark[0].excused if mark else False,
                 "reason": mark[0].reason if mark else None,
                 "marked_at": mark[0].marked_at if mark else None,
                 "marked_by": mark[1] if mark else None,
@@ -245,6 +254,7 @@ async def mark_cell(
         "lesson_id": lesson.id,
         "enrollment_id": enrollment_id,
         "present": body.present,
+        "excused": body.excused,
         "reason": reason,
         "marked_by": p.id,
     }
@@ -256,7 +266,7 @@ async def mark_cell(
             .returning(Attendance.lesson_id)
         )
     ).first()
-    before: tuple[bool | None, str | None] = (None, None)
+    before: tuple[bool | None, str | None, bool] = (None, None, False)
     if inserted is None:
         # the cell exists: lock it, so the audit entry names the value it really replaced
         old = (
@@ -266,11 +276,16 @@ async def mark_cell(
                 .with_for_update()
             )
         ).scalar_one()
-        before = (old.present, old.reason)
-        old.present, old.reason, old.marked_by = body.present, reason, p.id
+        before = (old.present, old.reason, old.excused)
+        old.present, old.reason, old.excused, old.marked_by = (
+            body.present,
+            reason,
+            body.excused,
+            p.id,
+        )
         old.marked_at = _now()
         await db.flush()
-    if before != (body.present, reason):
+    if before != (body.present, reason, body.excused):
         await record(
             db,
             p.id,
@@ -281,6 +296,7 @@ async def mark_cell(
                 "student": [None, row[1]],
                 "present": [before[0], body.present],
                 "reason": [before[1], reason],
+                "excused": [before[2], body.excused],
             },
             branch_id=cohort.branch_id,
         )
@@ -288,6 +304,7 @@ async def mark_cell(
         "lesson_id": lesson.id,
         "enrollment_id": enrollment_id,
         "present": body.present,
+        "excused": body.excused,
         "reason": reason,
     }
 
@@ -362,7 +379,11 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
             select(Attendance).where(Attendance.lesson_id.in_([le.id for le in lessons]))
         )
     ).scalars():
-        cells[a.enrollment_id][str(a.lesson_id)] = {"present": a.present, "reason": a.reason}
+        cells[a.enrollment_id][str(a.lesson_id)] = {
+            "present": a.present,
+            "excused": a.excused,
+            "reason": a.reason,
+        }
     stats = await enrollment_attendance(db, cohort.id, now=now)
     return {
         "cohort_id": cohort.id,
@@ -384,6 +405,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
         ],
         "students": [
             {
+                "n": n,
                 "enrollment_id": e.id,
                 "student_id": s.id,
                 "student_name": s.full_name,
@@ -393,15 +415,16 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "marks": cells.get(e.id, {}),
                 **stats[e.id],
             }
-            for e, s in rows
+            for n, (e, s) in enumerate(rows, 1)
         ],
     }
 
 
 @router.get("/cohorts/{cohort_id}/attendance/export")
 async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
-    """The табель: one row per student, one column per lesson («П» present, «Н» absent with the
-    reason, empty = not marked), then the same held / present / unmarked / percent as the screen."""
+    """The табель: one row per student, one column per lesson («П» present, «У» excused,
+    «Н» absent with the reason, empty = not marked), then the same held / present / unmarked /
+    percent as the screen."""
     cohort = await _cohort(db, p, cohort_id)
     grid = await grid_of(db, cohort)
     check_cap(grid["students"])
@@ -413,15 +436,19 @@ async def export_grid(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
                 return ""
             if mark["present"]:
                 return "П"
+            if mark["excused"]:
+                return f"У ({mark['reason']})" if mark["reason"] else "У"
             return f"Н ({mark['reason']})" if mark["reason"] else "Н"
 
         return value
 
     columns: list[Col[dict[str, Any]]] = [
+        Col("№", lambda s: s["n"], "int"),
         Col("Студент", lambda s: s["student_name"]),
         Col("Статус", lambda s: s["status"]),
         Col("Проведено уроков", lambda s: s["held"], "int"),
         Col("Присутствовал", lambda s: s["present"], "int"),
+        Col("Уважительных", lambda s: s["excused"], "int"),
         Col("Не отмечено", lambda s: s["unmarked"], "int"),
         Col("Посещаемость", lambda s: s["percent"], "percent"),
     ]
@@ -700,6 +727,7 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
     marked / total, and the «не заполнено» list (#21): held lessons of the last 30 days with
     somebody still unmarked, also grouped by instructor for the manager."""
     today, items = await _today_rows(db, p)
+    nxt = await next_lesson(db, cohort_filters(p), st.today())
     groups: dict[Any, dict[str, Any]] = {}
     for item in items:
         g = groups.setdefault(
@@ -714,6 +742,7 @@ async def my_today(p: View, db: DB) -> dict[str, Any]:
     return {
         "date": st.today(),
         "today": today,
+        "next_lesson": _lesson_item(nxt, {}) if nxt else None,
         "unfilled": items,
         "unfilled_by_instructor": list(groups.values()),
     }

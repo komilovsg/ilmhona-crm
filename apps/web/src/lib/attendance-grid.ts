@@ -32,9 +32,11 @@ export function lessonsOfMonth<T extends { date: string }>(lessons: T[], month: 
   return month === ALL_MONTHS ? lessons : lessons.filter((l) => l.date.startsWith(month));
 }
 
-/** Shortcut on a focused cell: 1 = был, 2 = не был; any other key is not a mark. */
-export function keyMark(key: string): boolean | undefined {
-  return key === "1" ? true : key === "2" ? false : undefined;
+export type Status = "present" | "absent" | "excused";
+
+/** Shortcut on a focused cell: 1 = был, 2 = не был, 3 = уважительная; any other key is not a mark. */
+export function keyMark(key: string): Status | undefined {
+  return key === "1" ? "present" : key === "2" ? "absent" : key === "3" ? "excused" : undefined;
 }
 
 /** Arrow key -> [row, column] step between cells; undefined for other keys. */
@@ -54,7 +56,11 @@ export function cellMarkable(lesson: { date: string; writable: boolean }, studen
   return lesson.writable && student.enrolled_on <= lesson.date;
 }
 
-export type Mark = { present: boolean; reason: string | null };
+export type Mark = { present: boolean; excused?: boolean; reason: string | null };
+
+export function statusOf(mark: { present: boolean; excused?: boolean } | undefined): Status | undefined {
+  return mark === undefined ? undefined : mark.present ? "present" : mark.excused ? "excused" : "absent";
+}
 
 /** The marks of a student with one cell set (`undefined` removes it: rollback of a first mark). */
 export function withMark(marks: Record<string, Mark>, lessonId: string, mark: Mark | undefined): Record<string, Mark> {
@@ -63,6 +69,6 @@ export function withMark(marks: Record<string, Mark>, lessonId: string, mark: Ma
   return mark ? { ...rest, [lessonId]: mark } : rest;
 }
 
-export function markLabel(present: boolean | undefined): string {
-  return present === undefined ? "не отмечено" : present ? "присутствовал" : "отсутствовал";
+export function markLabel(status: Status | undefined): string {
+  return status === undefined ? "не отмечено" : status === "present" ? "присутствовал" : status === "excused" ? "уважительная" : "отсутствовал";
 }

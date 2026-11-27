@@ -205,6 +205,7 @@ MONEY = {
     "default_rate",
     "instructor_rate",
     "budget",
+    "discount_amount",
 }
 
 FIELDS: dict[str, str] = {
@@ -248,6 +249,8 @@ FIELDS: dict[str, str] = {
     "method": "способ",
     "paid_at": "дата оплаты",
     "note": "заметка",
+    "discount_percent": "скидка, %",
+    "discount_amount": "скидка",
     "default_rate": "ставка по умолчанию",
     "instructor_rate": "ставка инструктора",
     "source": "источник",
@@ -415,6 +418,23 @@ def _with_changes(
     shown = "; ".join(parts[:MAX_FIELDS])
     more = len(parts) - MAX_FIELDS
     return f"{head} — {shown}" + (f" и ещё {more}" if more > 0 else "")
+
+
+def _discount_text(percent: Any, amount: Any) -> str:
+    return "нет" if percent is None else f"{percent} % ({_money(amount)} TJS)"
+
+
+def _payment(head: str, e: Entry, names: dict[str, str], sec: dict[str, str]) -> str:
+    """A payment with a discount names it first: «… — скидка 20 % (100 TJS); сумма …»."""
+    old_p, new_p = _pair(e.diff.get("discount_percent"))
+    old_a, new_a = _pair(e.diff.get("discount_amount"))
+    rest = {k: v for k, v in e.diff.items() if k not in ("discount_percent", "discount_amount")}
+    if e.action == "payment.create":
+        piece = f"скидка {_discount_text(new_p, new_a)}"
+    else:
+        piece = f"скидка {_discount_text(old_p, old_a)} → {_discount_text(new_p, new_a)}"
+    tail = _with_changes("", rest, names, sec)
+    return f"{head} — {piece}" + (f"; {tail.removeprefix(' — ')}" if tail else "")
 
 
 def sentence(
@@ -617,6 +637,10 @@ def sentence(
         student = _pair(e.diff.get("student"))[1]
         old, new = _pair(e.diff.get("present"))
         _, reason = _pair(e.diff.get("reason"))
+        _, excused = _pair(e.diff.get("excused"))
+        if excused:
+            tail = f", причина: {reason}" if reason else ""
+            return f"{who}: отметил уважительную причину {student} ({code}, {day}){tail}"
         head = (
             f"{who}: посещаемость {student} ({code}, {day}) — {_PRESENCE[old]} → {_PRESENCE[new]}"
         )
@@ -650,6 +674,9 @@ def sentence(
     if a in ACTIONS:
         verb, what = ACTIONS[a]
         head = f"{who}: {verb} {what}{_tail(lab)}"
+        discounted = "discount_percent" in e.diff or "discount_amount" in e.diff
+        if a in ("payment.create", "payment.update") and discounted:
+            return _payment(head, e, names, sections)
         with_changes = a.endswith(".update") or a in WITH_VALUES
         return _with_changes(head, e.diff, names, sections) if with_changes else head
     return f"{who}: {a}{_tail(lab)}"

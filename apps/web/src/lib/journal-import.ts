@@ -24,6 +24,18 @@ export type ImportDate = {
   reason: string | null;
 };
 
+export type UnmatchedName = {
+  line: number;
+  name: string;
+  struck: boolean;
+  marks: number;
+  candidates: string[];
+  /** first day of the file with a mark for this name: the enrollment is dated from it */
+  first_date: string | null;
+  /** students of the group's branch that may be this name, best first */
+  options: { student_id: string; student_name: string; tier: string; phone: string | null }[];
+};
+
 export type JournalPreview = {
   cohort: { id: string; code: string };
   file: { format: string; sheet: string; sheets: string[] };
@@ -31,7 +43,9 @@ export type JournalPreview = {
   options: { create_lessons: boolean; overwrite: boolean };
   dates: ImportDate[];
   rows: { line: number; name: string; student_name: string; struck: boolean; tier: string; status: string }[];
-  unmatched: { line: number; name: string; struck: boolean; marks: number; candidates: string[] }[];
+  unmatched: UnmatchedName[];
+  /** the user may write the missing names into the group (a manager, never an instructor) */
+  can_enroll: boolean;
   missing: { enrollment_id: string; student_name: string; status: string }[];
   unknown: { line: number; date: string; name: string; mark: string }[];
   counts: ImportCounts;

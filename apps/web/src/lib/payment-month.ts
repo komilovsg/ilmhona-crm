@@ -10,6 +10,8 @@ export type MonthPayment = {
   method: string;
   paid_at: string;
   status: string;
+  discount_percent?: number | null;
+  discount_amount?: Money;
   created_by: string | null;
   created_at: string;
 };
@@ -19,7 +21,12 @@ export type MonthStatus = {
   enrollment_id: string;
   month_no: number;
   price: Money;
+  /** The money entered (pending + confirmed); `discount` is what the month's discount takes off. */
   paid: Money;
+  discount?: Money;
+  /** The percent of the month's discount (one per month), null without one. */
+  discount_percent?: number | null;
+  /** price − paid − discount. */
   remaining: Money;
   /** Above the price (old-system data, no cap then); remaining is 0 then, never negative. */
   overpaid?: Money;
@@ -34,7 +41,9 @@ export type MonthStatus = {
 /** One month of an enrollment as the money endpoints give it (`month_states`). */
 export type MonthState = {
   month_no: number;
+  /** The money entered; `discount` is what the month's discount takes off its price. */
   paid: Money;
+  discount?: Money;
   pending: Money;
   price: Money;
   remaining: Money;
@@ -142,12 +151,12 @@ export function monthConflictText(error: unknown): string | null {
 
 /** «не оплачен» · «частично: 200 из 500 TJS» · «оплачен» · «переплата 200 TJS». */
 export function monthStateLabel(
-  s: Pick<MonthState, "state" | "paid" | "price" | "overpaid"> & Partial<Pick<MonthState, "awaiting" | "started">>,
+  s: Pick<MonthState, "state" | "paid" | "price" | "overpaid"> & Partial<Pick<MonthState, "awaiting" | "started" | "discount">>,
 ): string {
   if (s.awaiting) return "ожидает подтверждения";
   if (monthKind(s) === "future") return "не наступил";
   if (Number(s.overpaid ?? 0) > 0) return `переплата ${tjs(s.overpaid ?? 0)}`;
-  if (s.state === "частично") return `частично: ${tjs(s.paid).replace(" TJS", "")} из ${tjs(s.price)}`;
+  if (s.state === "частично") return `частично: ${tjs(s.paid).replace(" TJS", "")} из ${tjs(toPay(s))}`;
 
   return s.state;
 }
@@ -166,17 +175,59 @@ export function paidCountLabel(states: Pick<MonthState, "state" | "pending">[], 
 /** The month picker's label: «2-й», «2-й · оплачен», «2-й · частично: 200 из 500 TJS · ожидает». */
 export function monthOptionLabel(
   month: number,
-  state: Pick<MonthState, "state" | "paid" | "price" | "pending" | "overpaid"> | undefined,
+  state: (Pick<MonthState, "state" | "paid" | "price" | "pending" | "overpaid"> & Pick<Partial<MonthState>, "discount">) | undefined,
 ): string {
   if (!state || state.state === "не оплачен") return `${month}-й`;
 
   // short enough for a 390 px phone: «3-й · 50,50 / 350 · ожидает»
   const text =
     state.state === "частично" && !(Number(state.overpaid ?? 0) > 0)
-      ? `${tjs(state.paid).replace(" TJS", "")} / ${tjs(state.price).replace(" TJS", "")}`
+      ? `${tjs(state.paid).replace(" TJS", "")} / ${tjs(toPay(state)).replace(" TJS", "")}`
       : monthStateLabel({ ...state, awaiting: false });
 
   return `${month}-й · ${text}${Number(state.pending) > 0 ? " · ожидает" : ""}`;
+}
+
+/** What the month costs after its discount (the price without one). */
+function toPay(s: { price: Money; discount?: Money }): number {
+  return Number(s.price) - Number(s.discount ?? 0);
+}
+
+/**
+ * The discount `percent` takes off the month's `price`, the server's rule: cents, rounded half up
+ * (20 % of 500 = 100). 0 when the percent is not a whole number 1–100.
+ */
+export function discountOf(price: Money, percent: number): number {
+  if (!Number.isInteger(percent) || percent < 1 || percent > 100) return 0;
+  const cents = Math.round(Number(price) * 100);
+
+  return Math.round((cents * percent) / 100) / 100;
+}
+
+/** A discount percent typed in the form: a whole number 1–100, else null. */
+export function percentOf(text: string): number | null {
+  const t = text.trim();
+
+  if (!/^\d{1,3}$/.test(t)) return null;
+  const n = Number(t);
+
+  return n >= 1 && n <= 100 ? n : null;
+}
+
+/**
+ * The form's live line: «Цена месяца 500 TJS − 100 TJS (20%) = к оплате 400 TJS»; when part of the
+ * month is paid already: «Остаток месяца 300 TJS − 100 TJS (20%) = к оплате 200 TJS».
+ */
+export function discountLine(price: Money, remaining: Money, percent: number): string {
+  const off = discountOf(price, percent);
+  const base = Number(remaining) < Number(price) ? `Остаток месяца ${tjs(remaining)}` : `Цена месяца ${tjs(price)}`;
+
+  return `${base} − ${tjs(off)} (${percent}%) = к оплате ${tjs(Math.max(Number(remaining) - off, 0))}`;
+}
+
+/** «20% · 100 TJS» for a payment with a discount, null without one. */
+export function discountText(p: { discount_percent?: number | null; discount_amount?: Money }): string | null {
+  return p.discount_percent ? `${p.discount_percent}% · ${tjs(p.discount_amount ?? 0)}` : null;
 }
 
 /** Amount of a partial payment: more than 0 and not more than what the month still needs. */
