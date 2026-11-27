@@ -7,8 +7,8 @@ with. A row is either an enrollment certificate (all three set) or a batch one.
 
 from alembic import op
 
-revision = "0028"
-down_revision = "0027"
+revision = "0030"
+down_revision = "0029"
 
 
 def upgrade() -> None:

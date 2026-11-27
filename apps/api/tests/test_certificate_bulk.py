@@ -277,9 +277,9 @@ async def test_migration_0028_up_and_down() -> None:
         "WHERE table_name = 'certificate' AND column_name = 'enrollment_id'"
     )
     try:
-        await asyncio.to_thread(command.upgrade, cfg, "0027")
+        await asyncio.to_thread(command.upgrade, cfg, "0029")
         assert await one(nullable) == "NO"
-        await asyncio.to_thread(command.upgrade, cfg, "0028")
+        await asyncio.to_thread(command.upgrade, cfg, "0030")
         assert await one(nullable) == "YES"
         assert (
             await one(
@@ -287,7 +287,7 @@ async def test_migration_0028_up_and_down() -> None:
             )
             == 1
         )
-        await asyncio.to_thread(command.downgrade, cfg, "0027")
+        await asyncio.to_thread(command.downgrade, cfg, "0029")
         assert await one(nullable) == "NO"
         await asyncio.to_thread(command.upgrade, cfg, "head")
         assert await one(nullable) == "YES"
