@@ -2,9 +2,9 @@
 
 Prints a temporary password (shown once, valid 7 days, changed at the first sign-in).
 
-`python -m app.cli daily` — the daily job: cohort statuses by dates and the enrollments of
-cohorts that finished (#20, #11), then the login-attempt rows older than a day are deleted.
-Safe to run any number of times.
+`python -m app.cli daily` — the daily job: cohort statuses by dates (#20); активный cohorts with
+no attendance marks for `stale_days` days close (finish logic, lessons ahead freed); then login
+attempts older than a day are deleted. Safe to run any number of times.
 
 `python -m app.cli seed-demo` / `wipe-demo` — a fake dataset for demos and its removal
 (app/demo.py); the wipe deletes only the rows the seed made.
@@ -24,7 +24,7 @@ from sqlalchemy import select, text
 
 from app.audit.log import record
 from app.certificates.importer import Counts, ImportProblem, import_templates
-from app.cohorts.status import STATUSES, sync_status
+from app.cohorts.status import STATUSES, auto_close_stale, sync_status
 from app.core.config import settings
 from app.core.db import engine, sessionmaker
 from app.core.security import hash_password, temp_password
@@ -66,7 +66,7 @@ async def create_superadmin(login: str, full_name: str) -> str | None:
 
 
 async def daily(on: date | None = None) -> int:
-    """набор → активный by the start date (nothing finishes by date). Returns how many changed."""
+    """набор → активный by the start date; stale активный cohorts close. Returns the count."""
     changed = 0
     async with sessionmaker() as db:
         cohorts = (
@@ -87,6 +87,7 @@ async def daily(on: date | None = None) -> int:
                     {"status": [before, cohort.status], "cli": [None, "daily"]},
                     branch_id=cohort.branch_id,
                 )
+        changed += await auto_close_stale(db, on)
         await db.commit()
     return changed
 
@@ -188,7 +189,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "daily":
         count, purged = asyncio.run(_daily_and_close())
-        print(f"cohort statuses changed: {count}; login attempts purged: {purged}")
+        print(f"cohort statuses changed or closed: {count}; login attempts purged: {purged}")
         return 0
     if args.command == "seed-demo":
         demo_password = asyncio.run(seed_command())

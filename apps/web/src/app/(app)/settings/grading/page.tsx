@@ -21,6 +21,8 @@ import { QueryState } from "@/components/QueryState";
 import { SchemeSkeleton } from "@/components/Skeletons";
 import { api } from "@/lib/api";
 
+import { StaleSettings } from "./StaleSettings";
+
 type Standard = SchemePayload & {
   updated_at: string;
   updated_by_name: string | null;
@@ -106,6 +108,7 @@ function Standard({ data }: { data: Standard }) {
           {!data.can_edit && " Менять стандарт может только суперадмин."}
         </p>
       </section>
+      <StaleSettings />
       <ConflictDialog save={s.save} />
       {s.archive && (
         <ArchiveConfirm names={s.archive} pending={s.save.pending} onClose={s.dismiss} onConfirm={() => void s.confirm()} />

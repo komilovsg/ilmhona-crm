@@ -19,7 +19,7 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { DetailSkeleton, ListSkeleton } from "@/components/Skeletons";
-import { CohortStatus, OverdueChip } from "@/components/StatusChip";
+import { CohortStatus, OverdueChip, StaleChip } from "@/components/StatusChip";
 import { useCanMark, useCanSeeAttendance } from "@/hooks/attendance";
 import { useCanIssueCerts } from "@/hooks/certs";
 import { useCanChange, useRefreshEducation } from "@/hooks/education";
@@ -192,6 +192,11 @@ export default function CohortPage() {
             )}
           </div>
           <p className="text-default-600">{c.course_name}</p>
+          {c.stale && (
+            <div className="mt-2">
+              <StaleChip stale={c.stale} />
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
           {canChange && c.status === "активный" && (

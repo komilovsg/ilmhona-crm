@@ -93,6 +93,7 @@ async def clean(migrated_database: None) -> None:
             " director_title = 'Директор ОО Илмхона', director_name_en = 'Ozodamo Faromuz',"
             " director_title_en = 'CEO Ilmhona', director_name_tg = '', director_title_tg = '',"
             " verify_base_url = NULL, allow_non_graduate = false, updated_by = NULL",
+            "UPDATE academy_settings SET stale_days = 60, stale_auto_close = false, updated_by = NULL",
             "DELETE FROM note",
             "DELETE FROM goal",
             "UPDATE academy_goal SET text = '', updated_by = NULL",

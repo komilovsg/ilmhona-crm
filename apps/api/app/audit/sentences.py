@@ -24,7 +24,14 @@ MAX_FIELDS = 4
 # audit filter «section» -> the entities it covers; `auth` is by action (sign-ins, lockouts)
 SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "students": ("student",),
-    "cohorts": ("cohort", "lesson", "enrollment", "grading_scheme", "cohort_analytics"),
+    "cohorts": (
+        "cohort",
+        "lesson",
+        "enrollment",
+        "grading_scheme",
+        "cohort_analytics",
+        "academy_settings",
+    ),
     "rooms": ("room", "course"),
     "users": ("app_user", "role"),
     "payments": ("payment",),
@@ -105,6 +112,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "cert_asset.upload": ("загружено", "изображение для сертификатов"),
     "cert_template_rule.replace": ("изменены", "правила выбора шаблона сертификата"),
     "cert_settings.update": ("изменены", "настройки сертификатов"),
+    "academy_settings.update": ("изменены", "настройки академии"),
+    "cohort.auto_close": ("закрыт автоматически", "поток"),
     "certificate.issue": ("выдан", "сертификат"),
     "certificate.reissue": ("перевыпущен", "сертификат"),
     "certificate.revoke": ("отозван", "сертификат"),
@@ -195,6 +204,7 @@ FILTERS = {
     "user_id": "пользователь",
     "is_active": "активен",
     "cohort": "поток",
+    "closing": "скоро закроется",
     "entity": "объект",
     "entity_id": "ID объекта",
     "action": "действие",
@@ -622,10 +632,35 @@ def sentence(
     if a == "cohort.finish":
         grads = _pair(e.diff.get("graduates"))[1]
         done = _pair(e.diff.get("completed"))[1]
-        return f"{who}: завершил поток {lab}: выпускников {grads}, завершили {done}"
+        freed = _pair(e.diff.get("lessons_cancelled"))[1]
+        tail = f", отменено уроков: {freed}" if freed else ""
+        return f"{who}: завершил поток {lab}: выпускников {grads}, завершили {done}{tail}"
+    if a == "cohort.auto_close":
+        days = _pair(e.diff.get("idle_days"))[1]
+        grads = _pair(e.diff.get("graduates"))[1]
+        done = _pair(e.diff.get("completed"))[1]
+        freed = _pair(e.diff.get("lessons_cancelled"))[1]
+        return (
+            f"{who}: поток {lab} закрыт автоматически: нет отметок {days} "
+            f"{_plural(int(days or 0), 'день', 'дня', 'дней')} "
+            f"(выпускников {grads}, завершили {done}, отменено уроков: {freed or 0})"
+        )
+    if a == "academy_settings.update":
+        parts = []
+        if "stale_days" in e.diff:
+            old, new = _pair(e.diff.get("stale_days"))
+            parts.append(f"дней без отметок {old} → {new}")
+        if "stale_auto_close" in e.diff:
+            on = _pair(e.diff.get("stale_auto_close"))[1]
+            parts.append("автозакрытие потоков без отметок " + ("включено" if on else "выключено"))
+        return f"{who}: изменены настройки академии: " + ", ".join(parts)
     if a == "cohort.reopen":
         n = _pair(e.diff.get("restored"))[1]
-        return f"{who}: вернул поток {lab} в активные, статусов студентов восстановлено: {n}"
+        back = _pair(e.diff.get("lessons_restored"))[1]
+        busy = _pair(e.diff.get("lessons_busy"))[1]
+        tail = f", уроков возвращено: {back}" if back else ""
+        tail += f", не возвращено (аудитория занята): {busy}" if busy else ""
+        return f"{who}: вернул поток {lab} в активные, статусов студентов восстановлено: {n}{tail}"
     if a == "cohort.close_enrollments":
         _, n = _pair(e.diff.get("enrollments_completed"))
         _, grads = _pair(e.diff.get("graduates"))

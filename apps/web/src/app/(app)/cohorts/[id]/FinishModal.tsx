@@ -12,6 +12,7 @@ import { Bone } from "@/components/Skeletons";
 import { useRefreshEducation } from "@/hooks/education";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api, isApiError, messageOf } from "@/lib/api";
+import { formatPrice } from "@/lib/education";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, FinishItem, FinishPreview } from "@/lib/types";
@@ -20,7 +21,14 @@ type Status = { status: string };
 
 /** The finish / reopen of a cohort is a change of its status: the same version check and the same
  * «Запись уже изменили» dialog as every edit form. */
-function useStatusChange(cohort: CohortRow, to: string, path: string, body: () => unknown, done: string, onClose: () => void) {
+function useStatusChange(
+  cohort: CohortRow,
+  to: string,
+  path: string,
+  body: () => unknown,
+  done: (result: unknown) => string,
+  onClose: () => void,
+) {
   const refresh = useRefreshEducation();
 
   return useVersionedSave<CohortRow, Status>({
@@ -30,9 +38,9 @@ function useStatusChange(cohort: CohortRow, to: string, path: string, body: () =
     apply: () => undefined,
     request: (_, version) => api(`/api/v1/cohorts/${cohort.id}/${path}`, { method: "POST", body: body(), version }),
     labels: { status: "Статус" },
-    onSaved: () => {
+    onSaved: (result) => {
       void refresh();
-      notify(done);
+      notify(done(result));
       onClose();
     },
   });
@@ -68,7 +76,7 @@ export function FinishModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
     "завершён",
     "finish",
     () => ({ graduates: data?.graduates, completed: data?.completed }),
-    "Поток завершён",
+    () => "Поток завершён",
     onClose,
   );
   const submit = useSubmit(() => save.save({ status: "завершён" }), !data);
@@ -107,6 +115,16 @@ export function FinishModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
                 : "Срок потока ещё не вышел: он завершится досрочно."}{" "}
               Активные студенты закроются по проходному баллу, это можно вернуть только через суперадмина.
             </p>
+            <p className="text-sm text-default-600" data-testid="lessons-to-free">
+              Будет освобождено уроков: <b className="tabular-nums">{data.lessons_to_free}</b>
+              {data.lessons_to_free > 0 ? " — аудитория и инструктор освободятся." : "."}
+            </p>
+            {!!data.debtors && (
+              <p className="rounded-xl bg-warning/10 p-3 text-sm text-default-700" data-testid="finish-debt">
+                Должники: <b className="tabular-nums">{data.debtors}</b> на сумму{" "}
+                <b className="tabular-nums">{formatPrice(data.debt ?? 0)}</b> — долг останется в разделе «Должники».
+              </p>
+            )}
             <div className="grid grid-cols-3 gap-3 text-center" aria-label="Итог завершения">
               <div className="rounded-xl bg-success/10 p-3">
                 <div className="font-display text-2xl font-bold tabular-nums">{data.graduates}</div>
@@ -160,8 +178,22 @@ export function FinishModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
   );
 }
 
+/** The reopen answer lists the lessons whose slot was taken meanwhile: they stay cancelled. */
+function reopenText(result: unknown): string {
+  const busy = (result as { lessons_busy?: { date: string; start: string; end: string; room_name: string }[] } | null)
+    ?.lessons_busy;
+
+  if (!busy?.length) return "Поток возвращён в активные";
+  const shown = busy
+    .slice(0, 5)
+    .map((l) => `${l.date.slice(8, 10)}.${l.date.slice(5, 7)} ${l.start}–${l.end}`)
+    .join(", ");
+
+  return `Поток возвращён. Уроки не возвращены, аудитория занята (${busy.length}): ${shown}${busy.length > 5 ? " …" : ""}`;
+}
+
 export function ReopenModal({ cohort, onClose }: { cohort: CohortRow; onClose: () => void }) {
-  const save = useStatusChange(cohort, "активный", "reopen", () => undefined, "Поток возвращён в активные", onClose);
+  const save = useStatusChange(cohort, "активный", "reopen", () => undefined, reopenText, onClose);
   const submit = useSubmit(() => save.save({ status: "активный" }));
 
   return (
@@ -184,7 +216,11 @@ export function ReopenModal({ cohort, onClose }: { cohort: CohortRow; onClose: (
         onClose={onClose}
       >
         <div className="space-y-3 text-sm text-default-600">
-          <p>Поток снова станет «активным», а студенты вернутся к статусам, которые были до завершения.</p>
+          <p>
+            Поток снова станет «активным», студенты вернутся к статусам, которые были до завершения, а отменённые при
+            завершении уроки вернутся в расписание. Если время уже занято другим потоком, такой урок останется
+            отменённым.
+          </p>
           {save.failure !== null && (
             <p className="text-danger" role="alert">
               {messageOf(save.failure)}
