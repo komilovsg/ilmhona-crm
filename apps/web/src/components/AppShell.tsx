@@ -369,9 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <TopProgress />
       <Sidebar badges={badges} items={items} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--hairline)] bg-content1/70 backdrop-blur-xl backdrop-saturate-150 pb-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.5rem+env(safe-area-inset-top))] md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))]">
-        <div className="rounded-md bg-sidebar px-3 py-2 md:hidden">
-          <Logo tagline={false} className="[&>div]:text-xl" />
-        </div>
+        <Logo tagline={false} className="md:hidden [&>div]:text-xl" tone="text-brand-text dark:text-white" />
         <div className="hidden text-sm text-default-500 md:block">
           {me.branch ? `Филиал: ${me.branch.name}` : "Все филиалы"}
         </div>
