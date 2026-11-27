@@ -1,3 +1,6 @@
+import importlib.util
+from pathlib import Path
+
 import httpx
 import pytest
 
@@ -85,6 +88,10 @@ async def test_real_run_moves_everything_but_history(admin: httpx.AsyncClient) -
     )[0][0] == 0
     assert (await sql("SELECT is_active FROM app_user WHERE id = :i", i=old_id))[0][0] is False
     assert (await sql("SELECT teaches FROM app_user WHERE id = :i", i=main_id))[0][0] is True
+    assert (await sql("SELECT teaches FROM app_user WHERE id = :i", i=old_id))[0][0] is False
+    # the instructors list shows the person once
+    ids = [r["id"] for r in (await admin.get("/api/v1/instructors")).json()["items"]]
+    assert main_id in ids and old_id not in ids
     # the cohort version moved on through the trigger
     assert (await sql("SELECT version FROM cohort WHERE id = :c", c=cohort_id))[0][0] >= 2
 
@@ -178,3 +185,27 @@ def test_cli_requires_both_logins() -> None:
 
     with pytest.raises(SystemExit):
         main(["merge-users", "--from", "a"])
+
+
+async def test_data_migration_clears_teaches_of_past_merge_sources(
+    admin: httpx.AsyncClient,
+) -> None:
+    spec = importlib.util.spec_from_file_location(
+        "m0039", Path(__file__).parents[1] / "migrations/versions/0039_merged_not_teaching.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    main_id, old_id, _ = await scene(admin)
+    other = await make_user("other", "instructor")  # inactive teacher, never merged: stays
+    await sql("UPDATE app_user SET is_active = false WHERE id = :i", i=other)
+    await sql(
+        "INSERT INTO audit_log (user_id, action, entity, entity_id) "
+        "VALUES (:m, 'user.merge', 'app_user', :o)",
+        m=main_id,
+        o=old_id,
+    )
+    await sql("UPDATE app_user SET is_active = false WHERE id = :i", i=old_id)
+    await sql(mod.FIX_SQL)
+    rows = dict(await sql("SELECT login, teaches FROM app_user"))
+    assert rows["old"] is False and rows["other"] is True

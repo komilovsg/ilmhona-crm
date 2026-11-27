@@ -214,7 +214,7 @@ def render(plan: Plan, dry_run: bool) -> str:
         lines.append(f"rows with both accounts: {tbl} {n}")
     lines.append(f"source sessions to revoke: {plan.sessions}")
     lines.append(
-        f"{plan.source}: is_active -> false; {plan.target}: teaches -> true"
+        f"{plan.source}: is_active -> false, teaches -> false; {plan.target}: teaches -> true"
         if plan.has_teaches
         else f"teaches column absent; {plan.source}: is_active -> false"
     )
@@ -249,7 +249,9 @@ async def merge_users(db: AsyncSession, source_login: str, target_login: str, dr
         ),
         params,
     )
-    await db.execute(text("UPDATE app_user SET is_active = false WHERE id = :s"), params)
+    await db.execute(
+        text("UPDATE app_user SET is_active = false, teaches = false WHERE id = :s"), params
+    )
     await db.execute(text("UPDATE app_user SET teaches = true WHERE id = :t"), params)
     moved = {f"{c.table}.{c.column}": c.count for c in plan.columns if c.moved and c.count}
     await record(
