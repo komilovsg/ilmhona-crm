@@ -116,6 +116,14 @@ export const apiErrors: Record<string, string> = {
   cert_custom_invalid: "Значение поля сертификата заполнено неверно.",
   cert_director_overflow: "Имя или должность директора не помещаются в шаблон.",
   cohort_not_completed: "Поток ещё не завершён: статусы выпускников определятся при завершении.",
+  donor_name_taken: "Донор с таким названием уже есть.",
+  funding_donors_invalid: "Доноры не подходят к финансированию: «За счёт донора» и «Смешанный» — с донором, «Платный» и «Бесплатный» — без.",
+  donor_archived: "Донор в архиве: выбрать его нельзя.",
+  donor_not_in_cohort: "Этот донор не финансирует поток.",
+  donor_required: "Выберите донора студента.",
+  donor_in_use: "У донора в этом потоке есть студенты ({count}). Сначала смените им финансирование.",
+  funding_has_payers: "В потоке есть студенты, которые платят сами ({count}). Сначала выберите им доноров.",
+  payment_donor_funded: "Студент учится за счёт донора: оплаты за него не принимаются.",
 };
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -150,6 +158,11 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "discount_reason_required") return "Укажите причину скидки";
   if (code === "payment_amount_zero") return "Больше 0 (сумма 0 — только при скидке 100%)";
   if (code === "discount_no_price") return "У потока нет цены";
+  if (code === "donor_required") return "Выберите донора";
+  if (code === "donor_not_in_cohort") return "Этот донор не финансирует поток";
+  if (code === "donor_archived") return "Донор в архиве";
+  if (code === "funding_donors_invalid") return "Доноры не подходят к финансированию";
+  if (code === "free_has_price") return "У бесплатного потока цена 0";
   if (code === "deadline_before_start") return "Срок должен быть позже начала";
   if (code === "percent_over_100") return "От 1 до 100";
   if (code === "target_not_above_baseline") return "План должен быть больше стартового значения";

@@ -24,6 +24,7 @@ import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
 import { ENROLLMENT_STATUSES, EXPELLED, expelledLast, formatPrice } from "@/lib/education";
 import type { CohortPayments } from "@/lib/money-types";
+import { studentFunding, withDonors } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -53,6 +54,32 @@ function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: stri
         {ENROLLMENT_STATUSES.map((s) => (
           <DropdownItem key={s}>{s}</DropdownItem>
         ))}
+      </DropdownMenu>
+    </Dropdown>
+  );
+}
+
+const SELF = "__self__";
+
+/** «Платит сам» ↔ «Донор: X» of one student (a mixed cohort; a donor cohort: another donor only). */
+function FundingMenu({ row, cohort, onPick }: { row: EnrollmentRow; cohort: CohortRow; onPick: (donorId: string | null) => void }) {
+  const overlayMotion = useOverlayMotion();
+  const menu = useMenu((key: string) => onPick(key === SELF ? null : key));
+  const options = [
+    ...(cohort.funding === "смешанный" ? [{ key: SELF, label: "Платит сам" }] : []),
+    ...cohort.donors.filter((d) => !d.archived || d.id === row.donor_id).map((d) => ({ key: d.id, label: `Донор: ${d.name}` })),
+  ];
+  const label = studentFunding(cohort.funding, row.donor_id, cohort.donors);
+
+  return (
+    <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
+      <DropdownTrigger>
+        <Button aria-label={`Кто платит: ${row.student_name}`} className="max-w-full" size="sm" variant="light">
+          <span className="truncate">{label}</span>
+        </Button>
+      </DropdownTrigger>
+      <DropdownMenu aria-label="Кто платит" disabledKeys={[row.donor_id ?? SELF]} items={options} onAction={menu.onAction}>
+        {(o) => <DropdownItem key={o.key}>{o.label}</DropdownItem>}
       </DropdownMenu>
     </Dropdown>
   );
@@ -88,6 +115,20 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     onSuccess: () => void refresh(),
     onError: (e) => {
       void refresh(); // a 409 means somebody changed it first: show what is there now
+      notifyError(e);
+    },
+  });
+
+  const setFunding = useMutation({
+    mutationFn: ({ r, donorId }: { r: EnrollmentRow; donorId: string | null }) =>
+      api(`/api/v1/enrollments/${r.id}/funding`, { method: "PATCH", body: { donor_id: donorId }, version: r.version }),
+    onSuccess: () => {
+      void refresh();
+      void money.refetch();
+      notify("Финансирование изменено");
+    },
+    onError: (e) => {
+      void refresh();
       notifyError(e);
     },
   });
@@ -140,8 +181,21 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     ) : (
       "—"
     );
-  const status = (r: EnrollmentRow) =>
+  const statusOnly = (r: EnrollmentRow) =>
     canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s, version: r.version })} /> : <PersonStatus status={r.status} />;
+  const funding = (r: EnrollmentRow) =>
+    withDonors(cohort.funding) &&
+    (canChange ? (
+      <FundingMenu cohort={cohort} row={r} onPick={(donorId) => setFunding.mutate({ r, donorId })} />
+    ) : (
+      <span className="text-xs text-default-500">{studentFunding(cohort.funding, r.donor_id, cohort.donors)}</span>
+    ));
+  const status = (r: EnrollmentRow) => (
+    <div className="flex min-w-0 flex-col items-start gap-1">
+      {statusOnly(r)}
+      {funding(r)}
+    </div>
+  );
   const paid = (r: EnrollmentRow) => {
     const m = moneyOf.get(r.id);
 
@@ -161,6 +215,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   };
   const payButton = (r: EnrollmentRow) =>
     canPay &&
+    !r.donor_id &&
     r.status !== "отчислен" &&
     cohort.status !== "отменён" && (
       <Button
@@ -186,6 +241,12 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-default-600">
           Студентов: <b>{cohort.fill.enrolled}</b> из {cohort.fill.capacity}
+          {withDonors(cohort.funding) && (
+            <>
+              {" "}
+              · за счёт доноров: <b>{cohort.seats.donor}</b>
+            </>
+          )}
           {money.data && (
             <>
               {" "}

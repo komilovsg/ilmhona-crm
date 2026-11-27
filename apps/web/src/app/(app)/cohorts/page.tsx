@@ -19,11 +19,14 @@ import { EmptyState, QueryState } from "@/components/QueryState";
 import { SelectField } from "@/components/SelectField";
 import { CardGridSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { CohortStatus, OverdueChip, StaleChip } from "@/components/StatusChip";
+import { CohortStatus, OverdueChip } from "@/components/StatusChip";
+import { useDonorOptions } from "@/hooks/donors";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useSeesPayments } from "@/hooks/money";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { COHORT_STATUSES, daysLabel, formatPrice, fullDate } from "@/lib/education";
+import { fundingLabel } from "@/lib/funding";
 import type { CohortRow, Paged } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
 import { lazyModal } from "@/lib/lazy-modal";
@@ -31,11 +34,12 @@ import { lazyModal } from "@/lib/lazy-modal";
 const CohortFormModal = lazyModal(() => import("./CohortFormModal").then((m) => m.CohortFormModal));
 
 const PAGE_SIZE = 12;
-type Filters = { q: string; status: string | null; branch: string | null; overdue: boolean; closing: boolean };
+type Filters = { q: string; status: string | null; branch: string | null; overdue: boolean; closing: boolean; donor: string | null };
 
 function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) => void }) {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
+  const { data: donors = [] } = useDonorOptions();
 
   return (
     <>
@@ -66,6 +70,16 @@ function FilterFields({ filters, set }: { filters: Filters; set: (f: Filters) =>
           options={branches.map((b) => ({ key: b.id, label: b.name }))}
           value={filters.branch}
           onChange={(branch) => set({ ...filters, branch })}
+        />
+      )}
+      {donors.length > 0 && (
+        <SelectField filter
+          allLabel="Все доноры"
+          className="md:w-48"
+          label="Донор"
+          options={donors.map((d) => ({ key: d.id, label: d.name }))}
+          value={filters.donor}
+          onChange={(donor) => set({ ...filters, donor })}
         />
       )}
     </>
@@ -116,6 +130,15 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
             {c.room_name} · {c.branch_name}
           </dd>
         </div>
+        {c.funding !== "платный" && (
+          <div className="flex items-center gap-2 text-default-600">
+            <Icon name="graduates" size={14} />
+            <dd className="min-w-0 break-words">
+              {fundingLabel(c.funding)}
+              {c.donors.length > 0 && ` · ${c.donors.map((d) => d.name).join(", ")}`}
+            </dd>
+          </div>
+        )}
         {c.payers !== undefined && (
           <div className="flex items-center gap-2 text-default-600">
             <Icon name="payments" size={14} />
@@ -132,7 +155,7 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
   );
 }
 
-const NO_FILTERS: Filters = { q: "", status: null, branch: null, overdue: false, closing: false };
+const NO_FILTERS: Filters = { q: "", status: null, branch: null, overdue: false, closing: false, donor: null };
 
 export default function CohortsPage() {
   const overlayMotion = useOverlayMotion();
@@ -154,6 +177,7 @@ export default function CohortsPage() {
           branch_id: filters.branch ?? undefined,
           overdue: filters.overdue ? "true" : undefined,
           closing: filters.closing ? "true" : undefined,
+          donor_id: filters.donor ?? undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
         },
@@ -166,7 +190,7 @@ export default function CohortsPage() {
     setPage(1);
   };
   const cohorts = list.data?.items ?? [];
-  const activeFilters = [filters.status, filters.branch, filters.overdue, filters.closing].filter(Boolean).length;
+  const activeFilters = [filters.status, filters.branch, filters.overdue, filters.closing, filters.donor].filter(Boolean).length;
   const counts = summary.data?.cohorts;
 
   return (
@@ -175,7 +199,7 @@ export default function CohortsPage() {
         actions={
           <>
             <ExportButton
-              params={{ q: filters.q.trim(), status: filters.status, branch_id: filters.branch, overdue: filters.overdue ? "true" : undefined, closing: filters.closing ? "true" : undefined }}
+              params={{ q: filters.q.trim(), status: filters.status, branch_id: filters.branch, overdue: filters.overdue ? "true" : undefined, closing: filters.closing ? "true" : undefined, donor_id: filters.donor }}
               path="/api/v1/cohorts/export"
             />
             {canChange && (

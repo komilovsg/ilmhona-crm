@@ -10,11 +10,13 @@ import { LoadingButton } from "./LoadingButton";
 import { Segmented } from "./Segmented";
 
 import { OverCapacityNotice } from "./OverCapacityNotice";
+import { SelectField } from "./SelectField";
 
 import { useRefreshEducation } from "@/hooks/education";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { api } from "@/lib/api";
 import { overToast, wouldExceed } from "@/lib/capacity";
+import { withDonors } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -53,6 +55,13 @@ export function NewStudentModal({
   const nameRef = useRef<HTMLInputElement>(null);
   const phoneRef = useRef<HTMLInputElement>(null);
   const again = useRef(false);
+  // a donor-funded cohort: who pays for the student. Only this cohort's donors (from its own card), a
+  // single donor of a «донор» cohort is set by the server, so the field is not shown then.
+  const funding = cohort.data?.funding;
+  const donors = (cohort.data?.donors ?? []).filter((d) => !d.archived);
+  const pickDonor = !!funding && withDonors(funding) && !(funding === "донор" && donors.length === 1);
+  const donorMissing = funding === "донор" && donors.length > 1;
+  const [donorId, setDonorId] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: () =>
@@ -60,6 +69,7 @@ export function NewStudentModal({
         method: "POST",
         body: {
           new_student: { full_name: name, phone: phone.trim() || null, gender: gender === "none" ? null : gender },
+          ...(pickDonor ? { donor_id: donorId } : {}),
         },
       }),
     onSuccess: (row) => {
@@ -74,8 +84,8 @@ export function NewStudentModal({
       nameRef.current?.focus();
     },
   });
-  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender"]);
-  const valid = !!name.trim();
+  const fe = useFieldErrors(save.error, ["full_name", "phone", "gender", "donor_id"]);
+  const valid = !!name.trim() && !(donorMissing && !donorId);
   const submit = useSubmit(() => save.mutateAsync(), !valid);
   const run = (more: boolean) => {
     again.current = more;
@@ -153,6 +163,20 @@ export function NewStudentModal({
           />
           {fe.hint("gender").errorMessage && <p className="mt-1 text-xs text-danger">{fe.hint("gender").errorMessage}</p>}
         </div>
+        {pickDonor && (
+          <SelectField
+            allLabel={funding === "смешанный" ? "Платит сам" : undefined}
+            isRequired={funding === "донор"}
+            label={funding === "донор" ? "Донор" : "Кто платит"}
+            options={donors.map((d) => ({ key: d.id, label: funding === "донор" ? d.name : `Донор: ${d.name}` }))}
+            value={donorId}
+            {...fe.hint("donor_id")}
+            onChange={(v) => {
+              fe.clear("donor_id");
+              setDonorId(v);
+            }}
+          />
+        )}
         <OverCapacityNotice fill={fill} />
         {fe.message && (
           <p className="text-sm text-danger" role="alert">

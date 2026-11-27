@@ -9,7 +9,7 @@ the nightly job.
 from alembic import op
 
 revision = "0032"
-down_revision = "0030"
+down_revision = "0031"
 
 
 def upgrade() -> None:

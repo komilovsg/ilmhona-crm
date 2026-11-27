@@ -18,6 +18,7 @@ import { RowMenu } from "@/components/RowMenu";
 import { Segmented } from "@/components/Segmented";
 import { SelectField } from "@/components/SelectField";
 import { ListSkeleton } from "@/components/Skeletons";
+import { useDonorOptions } from "@/hooks/donors";
 import { useCourses } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useCanChangeGraduates, useRefreshReports } from "@/hooks/reports";
@@ -36,8 +37,8 @@ const EmploymentFormModal = lazyModal(() => import("./EmploymentFormModal").then
 
 const PAGE_SIZE = 25;
 type View = "students" | "courses";
-type Filters = { q: string; branch: string | null; course: string | null; employed: string | null; certificate: string | null };
-const NO_FILTERS: Filters = { q: "", branch: null, course: null, employed: null, certificate: null };
+type Filters = { q: string; branch: string | null; course: string | null; employed: string | null; certificate: string | null; donor: string | null };
+const NO_FILTERS: Filters = { q: "", branch: null, course: null, employed: null, certificate: null, donor: null };
 const YES_NO = [
   { key: "true", label: "Да" },
   { key: "false", label: "Нет" },
@@ -50,6 +51,7 @@ function paramsOf(f: Filters) {
     course_id: f.course ?? undefined,
     employed: f.employed ?? undefined,
     certificate: f.certificate ?? undefined,
+    donor_id: f.donor ?? undefined,
   };
 }
 
@@ -59,6 +61,7 @@ export default function GraduatesPage() {
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const { data: courses = [] } = useCourses();
+  const { data: donors = [] } = useDonorOptions();
   const refresh = useRefreshReports();
   const qc = useQueryClient();
   const [view, setView] = useState<View>("students");
@@ -166,14 +169,17 @@ export default function GraduatesPage() {
           <>
             <SelectField filter allLabel="Все курсы" label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={f.course} onChange={(course) => set({ ...f, course })} />
             <FilterDrawer
-              count={[f.branch, f.employed, f.certificate].filter(Boolean).length}
-              onReset={() => set({ ...f, branch: null, employed: null, certificate: null })}
+              count={[f.branch, f.employed, f.certificate, f.donor].filter(Boolean).length}
+              onReset={() => set({ ...f, branch: null, employed: null, certificate: null, donor: null })}
             >
               {!me?.branch && (
                 <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />
               )}
               <SelectField filter allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
               <SelectField filter allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
+              {donors.length > 0 && (
+                <SelectField filter allLabel="Все доноры" label="Донор" options={donors.map((d) => ({ key: d.id, label: d.name }))} value={f.donor} onChange={(donor) => set({ ...f, donor })} />
+              )}
             </FilterDrawer>
           </>
         )}
