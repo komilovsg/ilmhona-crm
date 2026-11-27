@@ -127,7 +127,7 @@ export default function CertificatesPage() {
   return (
     <>
       <PageHeader actions={<ExportButton label="Выгрузить в Excel" params={{ ...paramsOf(f), format: "xlsx" }} path="/api/v1/certificates" />} title="Сертификаты" />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FilterInput isClearable placeholder="Поиск по номеру или ФИО" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         <SelectField filter allLabel="Любой статус" label="Статус" options={STATUS_OPTIONS} value={f.status} onChange={(status) => set({ ...f, status: status as CertStatus | null })} />
         {!me?.branch && (

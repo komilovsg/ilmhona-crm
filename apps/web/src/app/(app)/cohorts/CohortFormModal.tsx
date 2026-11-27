@@ -170,7 +170,7 @@ export function CohortFormModal({
         className="space-y-4"
         onSubmit={submit}
       >
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <SelectField
             isDisabled={!!cohort}
             isRequired

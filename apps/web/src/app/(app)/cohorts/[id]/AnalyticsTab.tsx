@@ -328,12 +328,12 @@ export function AnalyticsTab({ cohortId }: { cohortId: string }) {
       >
         {(data) => (
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Retention data={data} />
               <Grades data={data} />
             </div>
             <Attendance data={data} />
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Risk cohortId={cohortId} rows={data.risk} />
               <Top cohortId={cohortId} data={data} rows={data.top} />
             </div>

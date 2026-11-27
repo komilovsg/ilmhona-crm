@@ -46,7 +46,7 @@ function StaffToday() {
         errorText="Не удалось загрузить уроки"
         query={today}
         skeleton={
-          <div className="mb-6 grid gap-3 md:grid-cols-2">
+          <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
             {[0, 1].map((i) => (
               <Bone key={i} className="h-28 w-full rounded-2xl" />
             ))}
@@ -59,7 +59,7 @@ function StaffToday() {
               <EmptyState title="Сегодня уроков нет" />
             </div>
           ) : (
-            <ul className="mb-6 grid gap-3 md:grid-cols-2">
+            <ul className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2">
               {data.today.map((l) => {
                 const state = markState(l.marked, l.total);
 

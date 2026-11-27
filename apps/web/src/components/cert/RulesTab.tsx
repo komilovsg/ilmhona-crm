@@ -62,7 +62,7 @@ function Rules({ initial }: { initial: TemplateRule[] }) {
       {rows.length === 0 && <p className="text-sm text-default-500">Правил нет: всем выдаётся шаблон по умолчанию.</p>}
       <ul className="space-y-3">
         {rows.map((r, i) => (
-          <li key={i} className="grid gap-3 rounded-xl bg-content2 p-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
+          <li key={i} className="grid grid-cols-1 gap-3 rounded-xl bg-content2 p-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-center">
             <SelectField isDisabled={!canChange} label="Курс" options={courses.map((c) => ({ key: c.id, label: c.name }))} value={r.course_id} onChange={(v) => set(i, { course_id: v })} />
             <SelectField allLabel="Любой инструктор" isDisabled={!canChange} label="Инструктор" options={instructors.map((c) => ({ key: c.id, label: c.full_name }))} value={r.instructor_id} onChange={(v) => set(i, { instructor_id: v })} />
             <SelectField isDisabled={!canChange} label="Шаблон" options={templates.map((t) => ({ key: t.id, label: t.name }))} value={r.template_id} onChange={(v) => set(i, { template_id: v })} />

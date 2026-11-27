@@ -231,7 +231,7 @@ function Undone({ data }: { data: TodayData }) {
 /** Skeleton with the same grid, rail and card heights as the loaded screen (CLS ~0). */
 export function InstructorTodaySkeleton() {
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
       <div>
         {[0, 1].map((i) => (
           <div key={i} className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 sm:grid-cols-[4rem_minmax(0,1fr)] sm:gap-x-4">

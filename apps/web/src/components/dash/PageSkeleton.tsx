@@ -7,7 +7,7 @@ export function DashPageSkeleton({ manager = false }: { manager?: boolean }) {
       <div className="grid gap-4 md:gap-6">
         <Bone className="h-[4.875rem] w-full rounded-2xl md:h-14" />
         <Bone className="h-[19.375rem] w-full rounded-[1.125rem] lg:h-[9.25rem]" />
-        <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-5">
           <Bone className="h-[11.5rem] w-full rounded-2xl lg:col-span-3" />
           <Bone className="h-[9rem] w-full rounded-2xl lg:col-span-2" />
         </div>
@@ -19,7 +19,7 @@ export function DashPageSkeleton({ manager = false }: { manager?: boolean }) {
     <div className="grid gap-4 md:gap-6">
       <Bone className="h-[4.875rem] w-full rounded-2xl md:h-14" />
       <Bone className="h-[15rem] w-full rounded-2xl md:h-[11.25rem]" />
-      <div className="grid gap-4 md:gap-6 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-4 md:gap-6 lg:grid-cols-5">
         <Bone className="h-[14.75rem] w-full rounded-2xl lg:col-span-3 lg:h-[13.5rem]" />
         <Bone className="h-[22rem] w-full rounded-2xl lg:col-span-2" />
         <Bone className="h-[27rem] w-full rounded-2xl lg:col-span-3" />

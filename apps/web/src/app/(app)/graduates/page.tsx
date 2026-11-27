@@ -158,7 +158,7 @@ export default function GraduatesPage() {
         value={view}
         onChange={setView}
       />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {view === "students" && (
           <FilterInput isClearable placeholder="Поиск по имени или телефону" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         )}

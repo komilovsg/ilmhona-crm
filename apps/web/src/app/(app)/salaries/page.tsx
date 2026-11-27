@@ -100,7 +100,7 @@ export default function SalariesPage() {
         }}
       />
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 md:flex md:flex-wrap">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:flex-wrap">
         <SelectField filter
           className="md:w-52"
           label="Месяц"

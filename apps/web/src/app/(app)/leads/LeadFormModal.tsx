@@ -177,7 +177,7 @@ export function LeadFormModal({
       title={lead ? "Лид" : "Новый лид"}
       onClose={onClose}
     >
-      <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
+      <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={submit}>
         <Input
           className="sm:col-span-2"
           description={

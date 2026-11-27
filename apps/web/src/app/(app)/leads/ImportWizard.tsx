@@ -168,7 +168,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
           </span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <SelectField
             isDisabled={!!me?.branch}
             isRequired
@@ -211,7 +211,7 @@ export function ImportWizard({ onClose }: { onClose: () => void }) {
           <>
             <section aria-label="Колонки">
               <h3 className="mb-2 text-sm font-medium">Колонки файла</h3>
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {Object.keys(FIELD_LABELS).map((field) => (
                   <SelectField
                     key={field}

@@ -7,7 +7,7 @@ export default function Loading() {
       <HeaderSkeleton />
       <StatCardsSkeleton count={4} />
       <Bone className="mb-4 h-12 w-72 rounded-xl" />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 md:flex md:flex-wrap">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:flex-wrap">
         <Bone className="h-12 rounded-xl md:w-52" />
         <Bone className="h-12 rounded-xl md:w-56" />
         <Bone className="h-12 rounded-xl md:w-48" />

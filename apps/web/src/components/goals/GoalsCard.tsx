@@ -152,7 +152,7 @@ export function GoalsCard() {
         }
       >
         {(d) => (
-          <ul className="grid gap-3 lg:grid-cols-2">
+          <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
             {d.items.map((g) => (
               <GoalRow key={g.id} goal={g} onEdit={(goal) => setForm({ goal })} />
             ))}

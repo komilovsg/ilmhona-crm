@@ -45,7 +45,7 @@ function LinkPickers({ value, onChange }: { value: Links; onChange: (v: Links) =
   const cohorts = useCohortOptions(true);
 
   return (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <SelectField
         allLabel="Без цели"
         label="Цель"
@@ -201,7 +201,7 @@ function NoteItem({ note }: { note: Note }) {
 
 function NotesSkeleton({ count }: { count: number }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
       {Array.from({ length: count }, (_, i) => (
         <Bone key={i} className="h-[6.5rem] w-full rounded-xl" />
       ))}
@@ -234,7 +234,7 @@ function AllNotesModal({ onClose }: { onClose: () => void }) {
           skeleton={<NotesSkeleton count={3} />}
         >
           {(d) => (
-            <ul className="grid gap-3 md:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {d.items.map((n) => (
                 <NoteItem key={n.id} note={n} />
               ))}
@@ -316,7 +316,7 @@ export function NotesCard() {
         skeleton={<NotesSkeleton count={3} />}
       >
         {(d) => (
-          <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             {d.items.map((n) => (
               <NoteItem key={n.id} note={n} />
             ))}

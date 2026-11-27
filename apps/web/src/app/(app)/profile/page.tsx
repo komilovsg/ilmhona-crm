@@ -188,7 +188,7 @@ export default function ProfilePage() {
     <>
       <PageHeader title="Профиль" />
       {me && (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {me.role.code === "instructor" && (
             <div className="md:col-span-2">
               <TourReplay userId={me.id} />

@@ -78,7 +78,7 @@ export default function EmploymentPage() {
         ← Выпускники
       </Link>
       <PageHeader actions={<ExportButton params={paramsOf(f)} path="/api/v1/employment/export" />} title="Трудоустройство" />
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FilterInput isClearable placeholder="Студент или организация" value={f.q} onClear={() => set({ ...f, q: "" })} onValueChange={(q) => set({ ...f, q })} />
         {!me?.branch && (
           <SelectField filter allLabel="Все филиалы" label="Филиал" options={branches.map((b) => ({ key: b.id, label: b.name }))} value={f.branch} onChange={(branch) => set({ ...f, branch })} />

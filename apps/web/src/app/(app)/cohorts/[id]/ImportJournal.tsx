@@ -165,7 +165,7 @@ export function ImportJournal({ cohortId, onClose }: { cohortId: string; onClose
               </button>
             </p>
             {manual && (
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <SelectField
                   label="Лист"
                   options={preview.file.sheets.map((s) => ({ key: s, label: s }))}

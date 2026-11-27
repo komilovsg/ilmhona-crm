@@ -148,7 +148,7 @@ export function IssueCertificatesModal({ cohortId, onClose }: { cohortId: string
       onClose={onClose}
     >
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <SelectField
             label="Шаблон"
             options={options}
