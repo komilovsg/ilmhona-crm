@@ -263,6 +263,8 @@ class Lesson(Versioned, Legacy, Base):
     # an overlap that came with old data (migration 0015, import): outside the constraint,
     # shown as «Проверить: конфликт инструктора» until resolved
     instructor_conflict: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # cancelled by a cohort finish (after the finish date, no marks): reopen brings it back
+    cancelled_by_finish: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
 
 
@@ -609,6 +611,20 @@ class CertSettings(Versioned, Base):
     # https origin of the public check page; empty = the QR still encodes the number
     verify_base_url: Mapped[str | None] = mapped_column(Text)
     allow_non_graduate: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    updated_by: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class AcademySettings(Versioned, Base):
+    """The one row (id = 1): `stale_days`, the days without attendance marks after which a cohort
+    is flagged, and `stale_auto_close`: whether the nightly job then closes it (off by default)."""
+
+    __tablename__ = "academy_settings"
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    stale_days: Mapped[int] = mapped_column(Integer, server_default=text("60"))
+    stale_auto_close: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     updated_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )

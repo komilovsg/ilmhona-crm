@@ -111,8 +111,14 @@ SEED = [
     ("sql_up", "SQL", "2025-02-01", None, 100),
     ("sql_cap", "Sql", "2025-03-01", None, 100),
     # one course runs three times on Monday and once every day, plus its dated twin
-    ("robo", "Робототехника (5 фев)", "2025-01-01", None, 100),
-    ("robo2", "Робототехника", "2025-02-01", None, 100),
+    # the free survivor takes the paid twins' price: 800 and 500 tie on cohorts, 800 wins
+    ("robo", "Робототехника (5 фев)", "2025-01-01", None, 0),
+    ("robo2", "Робототехника", "2025-02-01", None, 800),
+    ("robo3", "Робототехника (Mar", "2025-03-01", None, 500),
+    # the owner's one-off merge into the base Python course
+    ("pyb1", "Python - базовый уровень 1 группа (Jul", "2025-01-15", None, 0),
+    ("pyb", "Python - базовый уровень", "2025-02-01", None, 300),
+    ("pyb_rest", "Python - базовый уровень остатки", "2025-03-01", None, 0),
 ]
 # (course key, weekdays, start, end); each cohort gets its own room
 SCHEDULES = [
@@ -121,6 +127,10 @@ SCHEDULES = [
     ("robo", "{1}", "15:00", "16:30"),
     ("robo", "{1,2,3,4,5,6,7}", "18:00", "19:00"),
     ("robo2", "{2,4}", "10:00", "11:00"),
+    ("robo3", "{6}", "11:00", "12:00"),
+    ("pyb1", "{1}", "10:00", "11:00"),
+    ("pyb", "{2}", "10:00", "11:00"),
+    ("pyb_rest", "{3}", "10:00", "11:00"),
     ("sql", "{1}", "10:00", "11:00"),
     ("sql_up", "{2}", "10:00", "11:00"),
     ("sql_up", "{3}", "10:00", "11:00"),
@@ -185,9 +195,9 @@ async def _seed(conn: Any) -> dict[str, uuid.UUID]:
             await conn.execute(
                 text(
                     "INSERT INTO cohort (course_id, branch_id, room_id, instructor_id, start_date, "
-                    "end_date, weekdays, start_time, end_time, capacity, price_month, status) "
+                    "end_date, weekdays, start_time, end_time, capacity, price_month, funding, status) "
                     "VALUES (:c, :b, :r, :u, DATE '2026-02-02', DATE '2026-04-30', "
-                    "CAST(CAST(:d AS text) AS integer[]), CAST(CAST(:s AS text) AS time), CAST(CAST(:e AS text) AS time), 10, 100, 'активный') "
+                    "CAST(CAST(:d AS text) AS integer[]), CAST(CAST(:s AS text) AS time), CAST(CAST(:e AS text) AS time), 10, :pm, :f, 'активный') "
                     "RETURNING id"
                 ),
                 {
@@ -195,6 +205,9 @@ async def _seed(conn: Any) -> dict[str, uuid.UUID]:
                     "b": branch,
                     "r": rooms[n],
                     "u": user if key == "robo" else None,
+                    # free robotics cohorts stay free after the course price becomes 800
+                    "pm": 0 if key.startswith("robo") else 100,
+                    "f": "бесплатный" if key.startswith("robo") else "платный",
                     "d": days,
                     "s": start,
                     "e": end,
@@ -257,7 +270,7 @@ async def _state(conn: Any) -> dict[str, Any]:
         # every cohort row except its course: id, code, schedule, room, dates, instructor
         "cohort_rows": await rows(
             "SELECT id, code, branch_id, room_id, instructor_id, start_date, end_date, weekdays, "
-            "start_time, end_time, capacity, price_month, status FROM cohort ORDER BY id"
+            "start_time, end_time, capacity, price_month, funding, status FROM cohort ORDER BY id"
         ),
         "lessons": await rows(
             "SELECT id, cohort_id, room_id, lesson_date, starts_at, ends_at FROM lesson ORDER BY id"
@@ -297,7 +310,7 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
     cfg.set_main_option("sqlalchemy.url", url.render_as_string(hide_password=False))
     engine = create_async_engine(url)
     try:
-        await asyncio.to_thread(command.upgrade, cfg, "0031")
+        await asyncio.to_thread(command.upgrade, cfg, "0032")
         async with engine.begin() as conn:
             ids = await _seed(conn)
         async with engine.connect() as conn:
@@ -328,13 +341,22 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
         assert [(list(d), t) for d, t in robo] == [
             ([1], "09:00:00"),
             ([2, 4], "10:00:00"),
+            ([6], "11:00:00"),
             ([1], "12:00:00"),
             ([1], "15:00:00"),
             ([1, 2, 3, 4, 5, 6, 7], "18:00:00"),
         ]
+        async with engine.connect() as conn:
+            prices = dict(
+                (await conn.execute(text("SELECT name, default_price_month FROM course"))).all()
+            )
+        assert prices["Робототехника"] == 800  # the free survivor took the paid twin's price
+        assert prices["Python - базовый уровень"] == 300
+        assert prices["Программирование"] == 100  # a paid survivor keeps its own
         assert set(after["courses"]) == {
             ("Python", None),  # «python» merged into the older «Python»
             ("Python (базовый)", None),
+            ("Python - базовый уровень", None),
             ("SQL", None),
             ("Дизайн", None),
             ("Программирование", "COURSES:5"),
@@ -344,10 +366,11 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
         assert survivor == (ids["jan"], 100)
         assert after["cohorts"] == [
             ("Python (базовый)", 1),
+            ("Python - базовый уровень", 3),
             ("SQL", 5),
             ("Дизайн", 1),
             ("Программирование", 6),
-            ("Робототехника", 5),
+            ("Робототехника", 6),
         ]
         assert after["leads"] == [("Python (базовый)", 1), ("Программирование", 2)]
         assert after["campaigns"] == [("Программирование",)]
@@ -355,6 +378,10 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
         assert after["rules"] == [("Программирование", False), ("Программирование", True)]
         merges = [(a, lab, d) for a, lab, d in after["audit"] if a == "course.merge"]
         renames = [(lab, d["name"]) for a, lab, d in after["audit"] if a == "course.update"]
+        robo_change = next(
+            d for a, lab, d in after["audit"] if a == "course.update" and lab == "Робототехника"
+        )
+        assert robo_change["default_price_month"] == ["0.00", "800.00"]
         assert sorted((lab, d["cohorts"][1]) for _, lab, d in merges) == sorted(
             [
                 ("Программирование", 1),
@@ -363,6 +390,9 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
                 ("SQL", 2),
                 ("Sql", 2),
                 ("Робототехника", 1),
+                ("Робототехника (Mar", 1),
+                ("Python - базовый уровень", 1),
+                ("Python - базовый уровень остатки", 1),
             ]
         )
         plain = next(d for _, lab, d in merges if lab == "Программирование")
@@ -373,10 +403,14 @@ async def test_migration_0033_merges_dated_duplicates_and_keeps_other_brackets()
                 ("Программирование", ["Программирование (23 янв)", "Программирование"]),
                 ("Робототехника", ["Робототехника (5 фев)", "Робототехника"]),
                 ("SQL", ["sql", "SQL"]),
+                (
+                    "Python - базовый уровень",
+                    ["Python - базовый уровень 1 группа (Jul", "Python - базовый уровень"],
+                ),
             ]
         )
         # down is a no-op, up again changes nothing
-        await asyncio.to_thread(command.downgrade, cfg, "0031")
+        await asyncio.to_thread(command.downgrade, cfg, "0032")
         await asyncio.to_thread(command.upgrade, cfg, "head")
         async with engine.connect() as conn:
             assert await _state(conn) == after

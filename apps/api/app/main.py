@@ -18,6 +18,7 @@ from app.certificates.bulk import router as cert_bulk_router
 from app.certificates.editor import router as cert_editor_router
 from app.certificates.registry import router as cert_registry_router
 from app.cohorts.api import router as cohorts_router
+from app.cohorts.settings_api import router as academy_settings_router
 from app.core.config import settings
 from app.core.errors import install_error_handlers
 from app.core.monitoring import init_sentry
@@ -82,6 +83,7 @@ for router in (
     branches_router,
     rooms_router,
     cohorts_router,
+    academy_settings_router,
     attendance_router,
     analytics_router,
     journal_router,

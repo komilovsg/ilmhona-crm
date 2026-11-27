@@ -119,6 +119,8 @@ export type CohortRow = {
   status: string;
   /** «Срок вышел»: активный after the end date, not finished by hand */
   overdue: boolean;
+  /** no marks for a long time: the idle days and the date the nightly job closes the cohort */
+  stale: { idle_days: number; closes_on: string | null } | null;
   fill: Fill;
   /** list only, for those who see payments: confirmed payers and income (Decimal as string) */
   payers?: number;
@@ -135,6 +137,11 @@ export type FinishPreview = {
   completed: number;
   excluded_count: number;
   overdue: boolean;
+  /** lessons after today with no marks: the finish cancels them and frees the room */
+  lessons_to_free: number;
+  /** debt of the cohort (only for who sees payments): a finish keeps it in «Должники» */
+  debtors?: number;
+  debt?: string;
   lists: {
     graduates: FinishItem[];
     completed: FinishItem[];

@@ -6,8 +6,10 @@ course «Программирование»; the date shows in the cohort title 
 Per group of courses whose names match once the trailing date is cut (trimmed, spaces collapsed,
 case ignored): a group with a dated name or with more than one course (case-only twins such as
 «Python» / «python» merge too):
-- the survivor is the oldest course (created_at, then id); its price, duration, format and
-  direction stay; the merged courses' differing values are kept in the audit entry;
+- the survivor is the oldest course (created_at, then id); its duration, format and direction
+  stay; its default price too, unless it is 0 and a merged twin's is not: then the paid twin
+  with the most cohorts gives it (a tie: the highest). Cohorts keep their own price and funding.
+  The merged courses' differing values are kept in the audit entry;
 - every reference moves to the survivor: cohort, lead, campaign, note, certificate,
   cert_template_rule (a rule the survivor already has for that instructor wins, the merged one
   is dropped);
@@ -16,6 +18,7 @@ case ignored): a group with a dated name or with more than one course (case-only
 - the merged courses are deleted; the survivor keeps its own name without the date, unless that
   starts with a small letter and another course of the group is capitalised: then the
   capitalised variant with the most cohorts wins (a tie: the oldest);
+- three one-off merges into «Python - базовый уровень» (ALIASES), decided by the owner;
 - one audit entry per merged course («course.merge») and per rename («course.update»).
 
 The pattern is a frozen copy of app/education/course_names.py.
@@ -30,7 +33,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "0033"
-down_revision = "0031"
+down_revision = "0032"
 
 log = logging.getLogger("alembic.runtime.migration")
 
@@ -77,6 +80,29 @@ def _audit(conn: sa.Connection, action: str, entity_id: Any, label: str, diff: d
     )
 
 
+# One-off merges decided by the owner: these cohorts' courses are the base Python course (names
+# after the date is cut, compared ignoring case).
+ALIASES = {
+    "python - базовый уровень 1 группа": "Python - базовый уровень",
+    "python - базовый уровень 2 группа": "Python - базовый уровень",
+    "python - базовый уровень остатки": "Python - базовый уровень",
+}
+
+
+def _default_price(members: list[dict[str, Any]]) -> Any:
+    """A course price is only the default for new cohorts (each cohort keeps its own price and
+    funding). A free survivor takes a paid twin's price: the twin with the most cohorts, a tie:
+    the highest price."""
+    survivor = members[0]
+    if survivor["default_price_month"] > 0:
+        return survivor["default_price_month"]
+    paid = [m for m in members[1:] if m["default_price_month"] > 0]
+    if not paid:
+        return survivor["default_price_month"]
+    best = max(paid, key=lambda m: (m["cohorts"], m["default_price_month"]))
+    return best["default_price_month"]
+
+
 def _capitalised(name: str) -> bool:
     return name[:1].isupper()
 
@@ -107,6 +133,7 @@ def upgrade() -> None:
         clean = _tidy(TRAILING_DATE.sub("", row["name"]))
         if not clean:  # a name that is only a date stays as it is
             continue
+        clean = ALIASES.get(clean.casefold(), clean)
         groups.setdefault(clean.casefold(), []).append({**row, "clean": clean})
 
     for members in groups.values():
@@ -114,6 +141,7 @@ def upgrade() -> None:
             continue  # a single course with a clean name: nothing to do
         survivor, merged = members[0], members[1:]
         new_name = _final_name(members)
+        new_price = _default_price(members)
         sid = survivor["id"]
         legacy = survivor["legacy_ref"]
         for m in merged:
@@ -149,12 +177,21 @@ def upgrade() -> None:
             conn.execute(
                 sa.text("UPDATE course SET legacy_ref = :r WHERE id = :s"), {"r": legacy, "s": sid}
             )
+        change: dict[str, Any] = {}
         if new_name != survivor["name"]:
+            change["name"] = [survivor["name"], new_name]
+        if new_price != survivor["default_price_month"]:
+            change["default_price_month"] = [
+                _plain(survivor["default_price_month"]),
+                _plain(new_price),
+            ]
+        if change:
             conn.execute(
-                sa.text("UPDATE course SET name = :n WHERE id = :s"), {"n": new_name, "s": sid}
+                sa.text("UPDATE course SET name = :n, default_price_month = :p WHERE id = :s"),
+                {"n": new_name, "p": new_price, "s": sid},
             )
-            _audit(conn, "course.update", sid, new_name, {"name": [survivor["name"], new_name]})
-            log.info("course %r renamed to %r", survivor["name"], new_name)
+            _audit(conn, "course.update", sid, new_name, change)
+            log.info("course %r changed: %s", survivor["name"], change)
 
 
 def downgrade() -> None:

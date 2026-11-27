@@ -308,7 +308,7 @@ async def test_bug_20_daily_job_derives_status_from_dates(admin: httpx.AsyncClie
     stale = await raw_cohort(
         course,
         room,
-        start_date=t - timedelta(days=60),
+        start_date=t - timedelta(days=20),
         end_date=t - timedelta(days=8),
         status="активный",
         start_time="08:00",
