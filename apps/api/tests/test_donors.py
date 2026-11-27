@@ -437,6 +437,23 @@ async def test_graduates_filter_by_donor(admin: httpx.AsyncClient) -> None:
     assert [x["student_name"] for x in r.json()["items"]] == ["Донорский выпускник"]
 
 
+async def test_students_and_graduates_filter_by_not_paying(admin: httpx.AsyncClient) -> None:
+    cohort = await running_cohort(admin, funding="платный", back=1, capacity=30)
+    free = await enroll(admin, cohort, "Бесплатник")
+    paying = await enroll(admin, cohort, "Платник")
+    assert (await _mark(admin, free, not_paying=True)).status_code == 200
+    await sql("UPDATE enrollment SET status = 'выпускник' WHERE id IN (:a, :b)", a=free, b=paying)
+    r = await admin.get("/api/v1/students", params={"not_paying": "true"})
+    assert r.status_code == 200, r.text
+    assert [s["full_name"] for s in r.json()["items"]] == ["Бесплатник"]
+    r = await admin.get("/api/v1/students")
+    assert {s["full_name"] for s in r.json()["items"]} == {"Бесплатник", "Платник"}
+    r = await admin.get("/api/v1/graduates/students", params={"not_paying": "true"})
+    assert [x["student_name"] for x in r.json()["items"]] == ["Бесплатник"]
+    r = await admin.get("/api/v1/graduates/students")
+    assert {x["student_name"] for x in r.json()["items"]} == {"Бесплатник", "Платник"}
+
+
 async def test_lead_convert_into_a_donor_cohort(admin: httpx.AsyncClient) -> None:
     d1, d2 = await donor(admin, "Д1"), await donor(admin, "Д2")
     cohort = await running_cohort(admin, funding="донор", donor_ids=[d1, d2])

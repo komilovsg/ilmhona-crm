@@ -150,6 +150,7 @@ def _student_where(
     branch_id: uuid.UUID | None,
     needs_review: bool | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
 ) -> list[Any]:
     where: list[Any] = list(student_filters(p))
     if donor_id:  # funded by that donor in a cohort the user may see
@@ -157,6 +158,14 @@ def _student_where(
             exists().where(
                 Enrollment.student_id == Student.id,
                 Enrollment.donor_id == donor_id,
+                Enrollment.cohort_id.in_(select(Cohort.id).where(*cohort_filters(p))),
+            )
+        )
+    if not_paying:  # marked «не платит» in a cohort the user may see
+        where.append(
+            exists().where(
+                Enrollment.student_id == Student.id,
+                Enrollment.not_paying,
                 Enrollment.cohort_id.in_(select(Cohort.id).where(*cohort_filters(p))),
             )
         )
@@ -189,10 +198,11 @@ async def list_students(
     branch_id: uuid.UUID | None = None,
     needs_review: bool | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
     page: Page = 1,
     page_size: PageSize = 25,
 ) -> dict[str, Any]:
-    where = _student_where(p, q, status, branch_id, needs_review, donor_id)
+    where = _student_where(p, q, status, branch_id, needs_review, donor_id, not_paying)
     total = (await db.execute(select(func.count()).select_from(Student).where(*where))).scalar_one()
     rows = (
         await db.execute(_student_select(where).limit(page_size).offset((page - 1) * page_size))
@@ -226,8 +236,9 @@ async def export_students(
     branch_id: uuid.UUID | None = None,
     needs_review: bool | None = None,
     donor_id: uuid.UUID | None = None,
+    not_paying: bool | None = None,
 ) -> Response:
-    where = _student_where(p, q, status, branch_id, needs_review, donor_id)
+    where = _student_where(p, q, status, branch_id, needs_review, donor_id, not_paying)
     rows = (await db.execute(_student_select(where).limit(MAX_ROWS + 1))).all()
     check_cap(rows)
     counts = await _counts(db, p, [s.id for s, _, _ in rows])
@@ -239,7 +250,13 @@ async def export_students(
         title="Студенты",
         columns=STUDENT_COLUMNS,
         rows=[_out(s, b, st, counts.get(s.id, 0)) for s, b, st in rows],
-        filters={"q": q, "status": status, "branch_id": branch_id, "donor_id": donor_id},
+        filters={
+            "q": q,
+            "status": status,
+            "branch_id": branch_id,
+            "donor_id": donor_id,
+            "not_paying": not_paying,
+        },
     )
 
 

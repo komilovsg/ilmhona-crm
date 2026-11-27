@@ -37,6 +37,8 @@ const CertDownloadModal = lazyModal(() => import("./CertDownloadModal").then((m)
 const EmploymentFormModal = lazyModal(() => import("./EmploymentFormModal").then((m) => m.EmploymentFormModal));
 
 const PAGE_SIZE = 25;
+// «Не платит» is one more option of the donor filter
+const NOT_PAYING = "not_paying";
 type View = "students" | "courses";
 type Filters = { q: string; branch: string | null; course: string | null; employed: string | null; certificate: string | null; donor: string | null };
 const NO_FILTERS: Filters = { q: "", branch: null, course: null, employed: null, certificate: null, donor: null };
@@ -52,7 +54,8 @@ function paramsOf(f: Filters) {
     course_id: f.course ?? undefined,
     employed: f.employed ?? undefined,
     certificate: f.certificate ?? undefined,
-    donor_id: f.donor ?? undefined,
+    donor_id: f.donor && f.donor !== NOT_PAYING ? f.donor : undefined,
+    not_paying: f.donor === NOT_PAYING ? "true" : undefined,
   };
 }
 
@@ -178,9 +181,7 @@ export default function GraduatesPage() {
               )}
               <SelectField filter allLabel="Любой" label="Трудоустроен" options={YES_NO} value={f.employed} onChange={(employed) => set({ ...f, employed })} />
               <SelectField filter allLabel="Любой" label="Сертификат" options={YES_NO} value={f.certificate} onChange={(certificate) => set({ ...f, certificate })} />
-              {donors.length > 0 && (
-                <SelectField filter allLabel="Все доноры" label="Донор" options={donors.map((d) => ({ key: d.id, label: d.name }))} value={f.donor} onChange={(donor) => set({ ...f, donor })} />
-              )}
+              <SelectField filter allLabel="Все доноры" label="Донор" options={[...donors.map((d) => ({ key: d.id, label: d.name })), { key: NOT_PAYING, label: "Не платит" }]} value={f.donor} onChange={(donor) => set({ ...f, donor })} />
             </FilterDrawer>
           </>
         )}
