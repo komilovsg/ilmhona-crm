@@ -18,7 +18,7 @@ export default function ConstructorPage({ params }: { params: Promise<{ id: stri
     <QueryState
       errorText="Не удалось загрузить шаблон"
       notFound={
-        <EmptyState action={<Link className="text-brand-text" href="/settings/certificates">К шаблонам</Link>} title="Шаблон не найден" />
+        <EmptyState action={<Link className="text-brand-text" href="/certificates?tab=templates">К шаблонам</Link>} title="Шаблон не найден" />
       }
       query={query}
       skeleton={<Bone className="h-[60vh] w-full" />}

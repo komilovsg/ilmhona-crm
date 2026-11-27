@@ -32,6 +32,8 @@ export const NAV_GROUPS: { key: NavGroup; label: string }[] = [
 export type NavItem = {
   /** Backend section key that must be at least `view`. */
   section: string;
+  /** A second section whose view right shows the item too (one menu item for two sections). */
+  alsoSection?: string;
   href: string;
   label: string;
   icon: string;
@@ -52,7 +54,8 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "payments", group: "money", href: "/payments", label: "Оплаты", icon: "payments" },
   { section: "rooms", group: "study", href: "/rooms", label: "Расписание", icon: "rooms" },
   { section: "graduates", group: "study", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
-  { section: "certificates", group: "study", href: "/certificates", label: "Сертификаты", icon: "certificate", audience: "staff" },
+  // one item for the registry and the templates (tabs inside); templates alone also open it
+  { section: "certificates", alsoSection: "cert_templates", group: "study", href: "/certificates", label: "Сертификаты", icon: "certificate", audience: "staff" },
   { section: "master_list", group: "money", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
   { section: "marketing", group: "sales", href: "/marketing", label: "Маркетинг", icon: "marketing" },
   // the instructor sees only their own money: one page instead of the instructors and salaries tables
@@ -64,7 +67,6 @@ export const NAV_ITEMS: NavItem[] = [
   { section: "audit", group: "admin", href: "/audit", label: "Журнал", icon: "audit" },
   // «Настройки → Стандарты академии»: staff who grade read it, the superadmin changes it (an
   // instructor sees the scheme of their cohort on the cohort page)
-  { section: "cert_templates", group: "study", href: "/settings/certificates", label: "Шаблоны сертификатов", icon: "certificate" },
   { section: "attendance", group: "admin", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
   { section: "donors", group: "admin", href: "/settings/donors", label: "Доноры", icon: "cross", audience: "staff" },
 ];
@@ -81,7 +83,9 @@ function forRole(item: NavItem, roleCode: string | null | undefined, teaches?: b
 function shown(item: NavItem, permissions: Permissions | undefined, roleCode: string | null | undefined, teaches?: boolean): boolean {
   if (item.audience === "own") return !!teaches;
 
-  return can(permissions, item.section, "view") && forRole(item, roleCode, teaches);
+  const seen = can(permissions, item.section, "view") || (!!item.alsoSection && can(permissions, item.alsoSection, "view"));
+
+  return seen && forRole(item, roleCode, teaches);
 }
 
 /** The sidebar: only sections the user may at least view (and pages meant for their role). */
@@ -116,6 +120,10 @@ export function canOpen(permissions: Permissions | undefined, pathname: string, 
   if (pathname === "/profile") return true;
   // the employment list is a page of «Выпускники и трудоустройство»
   const path = pathname === "/employment" ? "/graduates" : pathname;
+  // the template editor lives under settings but is part of «Сертификаты»
+  if (path === "/settings/certificates" || path.startsWith("/settings/certificates/")) {
+    return can(permissions, "cert_templates", "view") && roleCode !== "instructor";
+  }
   const item = NAV_ITEMS.find((i) => path === i.href || path.startsWith(`${i.href}/`));
 
   return item ? shown(item, permissions, roleCode, teaches) : true;

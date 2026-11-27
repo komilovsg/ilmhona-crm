@@ -314,14 +314,14 @@ export function Constructor({ initial, onReplace }: { initial: TemplateDetail; o
     }
   }
 
-  const back = () => (dirty ? setConfirm("back") : router.push("/settings/certificates"));
+  const back = () => (dirty ? setConfirm("back") : router.push("/certificates?tab=templates"));
   const published = detail.latest_version_no !== null;
   const status = published ? `Опубликовано, версия ${detail.latest_version_no}${detail.has_unpublished_changes ? " · есть неопубликованные изменения" : ""}` : "Черновик · не опубликовано";
 
   if (!wide)
     return (
       <div className="fixed inset-0 z-40 flex flex-col overflow-y-auto bg-background p-5">
-        <button className="mb-4 flex items-center gap-1 self-start text-sm text-brand-text" type="button" onClick={() => router.push("/settings/certificates")}>
+        <button className="mb-4 flex items-center gap-1 self-start text-sm text-brand-text" type="button" onClick={() => router.push("/certificates?tab=templates")}>
           <Icon name="chevron-left" size={18} /> Шаблоны
         </button>
         <h1 className="text-xl font-semibold">{detail.name}</h1>
@@ -483,7 +483,7 @@ export function Constructor({ initial, onReplace }: { initial: TemplateDetail; o
         }}
       />
       <ConflictDialog save={save} />
-      <ConfirmModal confirmLabel="Выйти" danger isOpen={confirm === "back"} title="Выйти без сохранения?" onClose={() => setConfirm(null)} onConfirm={() => router.push("/settings/certificates")}>
+      <ConfirmModal confirmLabel="Выйти" danger isOpen={confirm === "back"} title="Выйти без сохранения?" onClose={() => setConfirm(null)} onConfirm={() => router.push("/certificates?tab=templates")}>
         Несохранённые изменения будут потеряны.
       </ConfirmModal>
       <ConfirmModal confirmLabel="Опубликовать" isLoading={busy === "publish"} isOpen={confirm === "publish"} title="Опубликовать шаблон?" onClose={() => setConfirm(null)} onConfirm={() => void publish()}>

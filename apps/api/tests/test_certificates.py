@@ -581,9 +581,12 @@ async def test_templates_list_and_preview(admin: httpx.AsyncClient, login_as: Si
     assert (await viewer.post(f"/api/v1/cert-templates/{tid}/preview")).status_code == 200
 
 
-async def test_cert_templates_is_a_superadmin_section_by_default() -> None:
-    rows = await sql("SELECT count(*) FROM role_permission WHERE section = 'cert_templates'")
-    assert rows[0][0] == 0
+async def test_cert_templates_default_is_superadmin_and_manager() -> None:
+    rows = await sql(
+        "SELECT r.code, rp.level FROM role_permission rp JOIN role r ON r.id = rp.role_id "
+        "WHERE rp.section = 'cert_templates'"
+    )
+    assert [tuple(r) for r in rows] == [("manager", "change")]
 
 
 # ---- import ----------------------------------------------------------------------------------
