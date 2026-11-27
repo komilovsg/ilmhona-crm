@@ -684,6 +684,8 @@ class Certificate(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     number: Mapped[str] = mapped_column(Text)
     verify_code: Mapped[str] = mapped_column(Text, unique=True)
+    # the code of the public check page; null for certificates issued before it existed
+    public_code: Mapped[str | None] = mapped_column(Text)
     # null for a certificate issued from an Excel list (batch_id is then set)
     enrollment_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
     cohort_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("cohort.id"))

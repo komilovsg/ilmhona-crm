@@ -36,6 +36,7 @@ FIELDS: dict[str, str] = {
     "company.director_name": "Директор: имя",
     "company.director_title": "Директор: должность",
 }
+SAMPLE_CODE = "XXXXXXXXXXXX"  # a placeholder of the real code's width (previews, the editor)
 DATE_FORMATS = ("dd.mm.yyyy", "d month yyyy", "month d, yyyy")
 DEFAULT_DATE_FORMAT = DATE_FORMATS[0]
 _RU_MONTHS = (
@@ -69,6 +70,9 @@ class Context:
     gender: str | None = None  # 'male' | 'female' | None
     verify_code: str = ""  # goes into the QR link
     verify_base: str = ""  # origin of the QR link; empty = the configured default
+    # the code is also printed under the QR and opens the public check page (certificates
+    # issued before that page existed keep their old QR and are not checked publicly)
+    public: bool = False
     signature_ref: str | None = None  # asset id of the director's signature
     seal_ref: str | None = None  # asset id of the company seal
     instructor_signature_ref: str | None = None  # asset id of the cohort instructor's signature
@@ -131,7 +135,8 @@ def sample_context(kind: str) -> Context:
             "company.director_title": "Директор ОО Илмхона",
         },
         gender=gender,
-        verify_code="SAMPLE",
+        verify_code=SAMPLE_CODE,
+        public=True,
     )
 
 
@@ -194,6 +199,7 @@ def snapshot_of(ctx: Context, lang: str, custom: dict[str, str] | None = None) -
         "gender": ctx.gender,
         "verify_code": ctx.verify_code,
         "verify_base": ctx.verify_base,
+        "public": ctx.public,
         "signature_ref": ctx.signature_ref,
         "seal_ref": ctx.seal_ref,
         "instructor_signature_ref": ctx.instructor_signature_ref,
@@ -211,6 +217,7 @@ def context_of(data: dict[str, Any]) -> Context:
         gender=data.get("gender"),
         verify_code=data.get("verify_code", ""),
         verify_base=data.get("verify_base", ""),
+        public=bool(data.get("public", False)),
         signature_ref=data.get("signature_ref"),
         seal_ref=data.get("seal_ref"),
         instructor_signature_ref=data.get("instructor_signature_ref"),

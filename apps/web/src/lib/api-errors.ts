@@ -16,6 +16,7 @@ export const apiErrors: Record<string, string> = {
   proxy_required: "Запрос отклонён. Обновите страницу.",
   invalid_credentials: "Неверный логин или пароль.",
   too_many_attempts: "Слишком много попыток входа. Подождите 15 минут.",
+  cert_check_limit: "Слишком много проверок. Попробуйте через минуту.",
   temp_password_expired: "Срок временного пароля истёк. Попросите администратора выдать новый.",
   password_change_required: "Сначала смените временный пароль.",
   wrong_password: "Текущий пароль неверный.",

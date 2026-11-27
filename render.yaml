@@ -28,6 +28,10 @@ services:
       # sends it in X-Proxy-Secret (app/core/proxy.py, docs/ops/deploy.md).
       - key: PROXY_SHARED_SECRET
         sync: false
+      # Origin of the certificate check page (/v/<code>) the QR code links to: the web app, unless
+      # the superadmin sets another address in the certificate settings.
+      - key: CERT_VERIFY_BASE_URL
+        value: https://ilmhona-crm.vercel.app
       # FORWARDED_ALLOW_IPS is left at the uvicorn default (127.0.0.1): the client address for the
       # login lockout comes from the X-Client-IP the web proxy derives from Vercel's own header,
       # NOT from a browser-supplied X-Forwarded-For (which trusting any peer's XFF would let a

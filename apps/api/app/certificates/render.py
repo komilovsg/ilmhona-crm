@@ -197,9 +197,30 @@ def _text_html(layer: TextLayer, ctx: Context) -> str:
 
 
 def _qr_url(ctx: Context) -> str:
-    # `verify_code` is the random code of the registry when a verify domain is set, else the number
+    # `verify_code`: the random code of the public check page (`ctx.public`); on a certificate
+    # issued before that page existed, the code or the number it was issued with
     base = (ctx.verify_base or settings.cert_verify_base_url).rstrip("/")
     return f"{base}/v/{ctx.verify_code}"
+
+
+CODE_FONT = ("Montserrat", 500, False)
+
+
+def show_code(code: str) -> str:
+    """XXXX-XXXX-XXXX: easier to type from paper; the check page ignores the dashes."""
+    return "-".join(code[i : i + 4] for i in range(0, len(code), 4))
+
+
+def _code_html(layer: QrLayer, code: str) -> str:
+    """The code printed in a thin line right under the QR, as wide as the QR."""
+    size = max(4.0, min(8.0, layer.w_mm * 0.28))
+    return (
+        f'<div style="position:absolute;left:{_n(layer.x_mm - 10)}mm;'
+        f"top:{_n(layer.y_mm + layer.h_mm + 0.6)}mm;width:{_n(layer.w_mm + 20)}mm;"
+        f"text-align:center;font-family:'{CODE_FONT[0]}';font-weight:{CODE_FONT[1]};"
+        f"font-size:{_n(size)}pt;line-height:1;letter-spacing:0.3pt;color:{layer.color};"
+        f'white-space:nowrap">{html.escape(show_code(code))}</div>'
+    )
 
 
 def _qr_svg(url: str, color: str) -> bytes:
@@ -258,6 +279,9 @@ def build_html(
             key = f"qr:{i}"
             resources[key] = ("image/svg+xml", _qr_svg(_qr_url(ctx), layer.color))
             body.append(f'<img src="{key}" style="{_box(layer)}object-fit:contain">')
+            if ctx.public and ctx.verify_code:
+                body.append(_code_html(layer, ctx.verify_code))
+                faces.add(CODE_FONT)
         elif isinstance(layer, RectLayer):
             body.append(f'<div style="{_box(layer)}background:{layer.fill}"></div>')
         elif isinstance(layer, LineLayer):

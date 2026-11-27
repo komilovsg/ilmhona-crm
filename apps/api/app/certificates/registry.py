@@ -28,7 +28,7 @@ from app.certificates.errors import (
     CERT_NOT_VALID,
     COHORT_NOT_FINISHED,
 )
-from app.certificates.fields import load_settings
+from app.certificates.fields import SAMPLE_CODE, load_settings
 from app.certificates.issuing import (
     FIX_TEXTS,
     PLACEHOLDER_NUMBER,
@@ -249,7 +249,7 @@ async def preview_one(
         db, enrollment_id, layout, lang or template.lang, {}, AssetCache(db),
         await load_settings(db), number=enrollment.certificate_no or PLACEHOLDER_NUMBER,
     )  # fmt: skip
-    prep.ctx.verify_code = PLACEHOLDER_NUMBER
+    prep.ctx.verify_code, prep.ctx.public = SAMPLE_CODE, True
     name = str(prep.ctx.values["student.full_name"])
     if fix := fix_of(layout, prep.ctx, prep.assets):
         raise DomainError(CERT_NOT_READY, items=[_fix_item(enrollment_id, name, fix)])
@@ -287,6 +287,7 @@ async def _create(
     cert = Certificate(
         number=number,
         verify_code=code,
+        public_code=code,
         enrollment_id=enrollment.id,
         cohort_id=prep.cohort.id,
         course_id=prep.cohort.course_id,

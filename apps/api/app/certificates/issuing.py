@@ -182,7 +182,7 @@ def snapshot(
     prep: Prepared, lang: str, custom: dict[str, str], number: str, code: str
 ) -> dict[str, Any]:
     prep.ctx.values["certificate.number"] = number
-    prep.ctx.verify_code = code if prep.ctx.verify_base else number
+    prep.ctx.verify_code, prep.ctx.public = code, True
     return snapshot_of(prep.ctx, lang, custom)
 
 

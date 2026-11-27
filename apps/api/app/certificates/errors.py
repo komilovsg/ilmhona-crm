@@ -47,3 +47,4 @@ CERT_BRANCH_REQUIRED = errors.define("cert_branch_required", 422, "Choose the br
 COHORT_NOT_FINISHED = errors.define(
     "cohort_not_finished", 409, "Certificates are issued only for a finished cohort"
 )
+CERT_CHECK_LIMIT = errors.define("cert_check_limit", 429, "Too many certificate checks")
