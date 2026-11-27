@@ -22,6 +22,7 @@ from app.core.db import DB
 from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
 from app.core.versioning import Version, check_version
+from app.donors.funding import donor_names, enrollment_donor
 from app.education.errors import COHORT_CLOSED, STUDENT_BRANCH_MISMATCH
 from app.education.scope import (
     branch_for_write,
@@ -95,6 +96,8 @@ class LeadUpdate(Strict):
 
 class ConvertIn(Strict):
     cohort_id: uuid.UUID | None = None
+    # the student's donor in a cohort funded by donors (see app.donors.funding)
+    donor_id: uuid.UUID | None = None
 
 
 # ---- output -----------------------------------------------------------------------------
@@ -520,6 +523,7 @@ async def convert_lead(
     if not allows(p.level("students"), "change"):
         raise DomainError(FORBIDDEN, section="students", level="change")
     cohort: Cohort | None = None
+    donor_id: uuid.UUID | None = None
     if body.cohort_id is not None:
         if not allows(p.level("cohorts"), "change"):
             raise DomainError(FORBIDDEN, section="cohorts", level="change")
@@ -533,6 +537,7 @@ async def convert_lead(
             raise DomainError(STUDENT_BRANCH_MISMATCH)
         if cohort.status in (cohort_status.CANCELLED, cohort_status.DONE):
             raise DomainError(COHORT_CLOSED)
+        donor_id = await enrollment_donor(db, cohort, body.donor_id)
 
     student: Student | None = None
     created = False
@@ -574,7 +579,7 @@ async def convert_lead(
             },
             branch_id=lead.branch_id,
         )  # fmt: skip
-    enrollment = await _enroll(db, p, cohort, student) if cohort else None
+    enrollment = await _enroll(db, p, cohort, student, donor_id) if cohort else None
     return {
         "lead": await _detail(db, p, lead),
         "student": {
@@ -590,7 +595,7 @@ async def convert_lead(
 
 
 async def _enroll(
-    db: AsyncSession, p: Principal, cohort: Cohort, student: Student
+    db: AsyncSession, p: Principal, cohort: Cohort, student: Student, donor_id: uuid.UUID | None
 ) -> dict[str, Any]:
     existing = (
         await db.execute(
@@ -607,9 +612,12 @@ async def _enroll(
     over = over_capacity_of(
         (await cohort_enrolled(db, [cohort.id]))[cohort.id] + 1, cohort.capacity
     )
-    enrollment = Enrollment(cohort_id=cohort.id, student_id=student.id, created_by=p.id)
+    enrollment = Enrollment(
+        cohort_id=cohort.id, student_id=student.id, created_by=p.id, donor_id=donor_id
+    )
     db.add(enrollment)
     await db.flush()
+    donor = (await donor_names(db, [donor_id])).get(donor_id) if donor_id else None
     await record(
         db, p.id, "enrollment.create", "enrollment", enrollment.id,
         {
@@ -617,6 +625,7 @@ async def _enroll(
             "student": [None, student.full_name],
             "status": [None, enrollment.status],
             **({"over_capacity": [None, over]} if over else {}),
+            **({"donor": [None, donor]} if donor else {}),
         },
         branch_id=cohort.branch_id,
     )  # fmt: skip

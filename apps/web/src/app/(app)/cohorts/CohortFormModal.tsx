@@ -5,23 +5,27 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
 import { Input } from "@heroui/input";
+import { Select, SelectItem } from "@heroui/select";
 import clsx from "clsx";
 
 import { AppModal } from "@/components/AppModal";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { SelectField } from "@/components/SelectField";
+import { useDonorOptions } from "@/hooks/donors";
 import { useCourses, useInstructors, useRefreshEducation, useRooms } from "@/hooks/education";
 import { useBranches, useMe } from "@/hooks/queries";
 import { useFieldErrors } from "@/hooks/useFieldErrors";
 import { useVersionedSave } from "@/hooks/useVersionedSave";
 import { api } from "@/lib/api";
 import { MAX_DATE, MIN_DATE, scheduleProblem, WEEKDAYS, endDateOf, monthsOf } from "@/lib/education";
+import { FUNDINGS, fundingProblem, withDonors } from "@/lib/funding";
+import { useOverlayMotion } from "@/lib/motion";
 import { useSubmit } from "@/lib/submit";
 import { notify } from "@/lib/toast";
-import type { CohortRow } from "@/lib/types";
+import type { CohortRow, Funding } from "@/lib/types";
 import { LoadingButton } from "@/components/LoadingButton";
 
-const FIELDS = ["instructor_id", "room_id", "start_date", "end_date", "start_time", "end_time", "capacity", "price_month"];
+const FIELDS = ["instructor_id", "room_id", "start_date", "end_date", "start_time", "end_time", "capacity", "price_month", "donor_ids"];
 
 /** Where a new cohort starts when it is created from a free cell of the room board. */
 export type CohortPreset = { branch_id: string; room_id: string; start_date: string; weekday: number; start_time: string; end_time: string };
@@ -57,6 +61,13 @@ export function CohortFormModal({
   const [endTime, setEndTime] = useState(cohort?.end_time ?? preset?.end_time ?? "11:30");
   const [capacity, setCapacity] = useState(String(cohort?.capacity ?? 15));
   const [price, setPrice] = useState(cohort ? String(Number(cohort.price_month)) : "");
+  const [funding, setFunding] = useState<Funding>(cohort?.funding ?? "платный");
+  const [donorIds, setDonorIds] = useState<string[]>(cohort?.donors.map((d) => d.id).sort() ?? []);
+  const { data: donorOptions = [] } = useDonorOptions();
+  const overlayMotion = useOverlayMotion();
+  // archived donors are offered only when the cohort already has them
+  const donorChoices = donorOptions.filter((d) => !d.archived || donorIds.includes(d.id));
+  const free = funding === "бесплатный";
   const [failed, setFailed] = useState<{ error: unknown; sig: string } | null>(null);
   const { data: rooms = [] } = useRooms(branchId);
   const { data: instructors = [] } = useInstructors(branchId);
@@ -68,7 +79,7 @@ export function CohortFormModal({
     roomOptions.unshift({ key: cohort.room_id, label: cohort.room_name });
 
   const cap = Number(capacity);
-  const problem = scheduleProblem({ start, end, startTime, endTime, weekdays });
+  const problem = scheduleProblem({ start, end, startTime, endTime, weekdays }) ?? fundingProblem(funding, donorIds);
   const valid =
     !!courseId && !!branchId && !!roomId && !!start && !!end && !problem && Number.isInteger(cap) && cap >= 1 && cap <= 100 && Number(price || 0) >= 0;
 
@@ -81,7 +92,9 @@ export function CohortFormModal({
     start_time: startTime,
     end_time: endTime,
     capacity: cap,
-    price_month: price === "" ? "" : String(Number(price)),
+    price_month: free ? "0" : price === "" ? "" : String(Number(price)),
+    funding,
+    donor_ids: withDonors(funding) ? donorIds : [],
   };
   // A server error belongs to the values that were sent: any edit hides it, and so does a client hint.
   const sig = JSON.stringify([courseId, branchId, values]);
@@ -110,6 +123,8 @@ export function CohortFormModal({
       end_time: c.end_time,
       capacity: c.capacity,
       price_month: String(Number(c.price_month)),
+      funding: c.funding,
+      donor_ids: c.donors.map((d) => d.id).sort(),
     }),
     apply: (v) => {
       setInstructorId(v.instructor_id);
@@ -121,6 +136,8 @@ export function CohortFormModal({
       setEndTime(v.end_time);
       setCapacity(String(v.capacity));
       setPrice(v.price_month);
+      setFunding(v.funding);
+      setDonorIds(v.donor_ids);
     },
     request: (changed, version) =>
       api(`/api/v1/cohorts/${cohort?.id}`, { method: "PATCH", body: body(changed), version }),
@@ -134,11 +151,14 @@ export function CohortFormModal({
       end_time: "Время конца",
       capacity: "Мест в потоке",
       price_month: "Цена в месяц",
+      funding: "Финансирование",
+      donor_ids: "Доноры",
     },
     show: {
       instructor_id: (id: string | null) => instructors.find((i) => i.id === id)?.full_name ?? "Без инструктора",
       room_id: (id: string | null) => rooms.find((r) => r.id === id)?.name ?? "—",
       weekdays: (days: number[]) => days.map((d) => WEEKDAYS[d - 1]).join(", ") || "—",
+      donor_ids: (ids: string[]) => ids.map((id) => donorOptions.find((d) => d.id === id)?.name ?? "—").join(", ") || "—",
     },
     onSaved: done,
   });
@@ -270,14 +290,45 @@ export function CohortFormModal({
             {...fe.field("capacity", setCapacity)}
           />
           <Input
-            description={cohort ? undefined : "Пусто: цена курса"}
+            description={cohort || free ? undefined : "Пусто: цена курса"}
             endContent={<span className="text-xs text-default-600">TJS</span>}
+            isDisabled={free}
             label="Цена в месяц"
             min={0}
             type="number"
-            value={price}
+            value={free ? "0" : price}
             {...fe.field("price_month", setPrice)}
           />
+          <SelectField
+            isRequired
+            label="Финансирование"
+            options={FUNDINGS}
+            value={funding}
+            onChange={(v) => v && setFunding(v as Funding)}
+          />
+          {withDonors(funding) && (
+            <Select
+              classNames={{ value: "truncate" }}
+              errorMessage={fe.hint("donor_ids").errorMessage}
+              isInvalid={fe.hint("donor_ids").isInvalid}
+              isRequired
+              items={donorChoices}
+              label="Доноры"
+              popoverProps={{ motionProps: overlayMotion }}
+              selectedKeys={donorIds}
+              selectionMode="multiple"
+              onSelectionChange={(keys) => {
+                fe.clear("donor_ids");
+                setDonorIds([...keys].map(String).sort());
+              }}
+            >
+              {(d) => (
+                <SelectItem key={d.id} classNames={{ title: "whitespace-normal break-words" }}>
+                  {d.name}
+                </SelectItem>
+              )}
+            </Select>
+          )}
         </div>
         <fieldset>
           <legend className="mb-2 text-sm text-default-600">Дни занятий</legend>

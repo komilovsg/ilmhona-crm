@@ -30,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.deps import Principal
 from app.metrics import student_counts
 from app.metrics.money import (
+    BILLED_PRICE,
+    BILLED_SINCE,
     CANCELLED,
     TZ,
     ZERO,
@@ -68,9 +70,9 @@ async def collection_month(
         await db.execute(
             select(
                 Enrollment.id,
-                Enrollment.enrolled_at,
+                BILLED_SINCE,
                 Enrollment.status,
-                Cohort.price_month,
+                BILLED_PRICE,
                 Cohort.start_date,
                 Cohort.end_date,
             )
@@ -79,7 +81,7 @@ async def collection_month(
             .where(*cohort_where, *debtor_where())
         )
     ).all()
-    by = await enrollment_money_rows(db, [tuple(r) for r in rows], on)  # type: ignore[misc]
+    by = await enrollment_money_rows(db, [tuple(r) for r in rows], on)
     expected = collected = ZERO
     for eid, _, _, price, start, _ in rows:
         month_no = month_index(on) - month_index(start) + 1

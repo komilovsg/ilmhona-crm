@@ -88,6 +88,10 @@ export type Course = {
 
 export type Fill = { enrolled: number; capacity: number };
 
+export type Funding = "платный" | "бесплатный" | "донор" | "смешанный";
+export type DonorRef = { id: string; name: string; archived: boolean };
+export type Seats = { paying: number; donor: number; free: number };
+
 export type CohortRow = {
   version: number;
   id: string;
@@ -107,6 +111,11 @@ export type CohortRow = {
   end_time: string;
   capacity: number;
   price_month: string;
+  /** платный | бесплатный | донор | смешанный */
+  funding: Funding;
+  donors: DonorRef[];
+  /** enrolled students who pay / are paid for by a donor / study free */
+  seats: Seats;
   status: string;
   /** «Срок вышел»: активный after the end date, not finished by hand */
   overdue: boolean;
@@ -157,6 +166,10 @@ export type EnrollmentRow = {
   enrolled_at: string;
   needs_review: boolean;
   review_reason: string | null;
+  /** the donor that pays for the student; null = pays themself (or a free cohort) */
+  donor_id: string | null;
+  /** moved from a donor to paying themself then: the debt counts from that month */
+  pays_from: string | null;
   /** hints for the instructor: they added it, and it has no payments, marks or grades */
   created_by_me: boolean;
   deletable: boolean;

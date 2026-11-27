@@ -20,6 +20,7 @@ import { ListSkeleton, PillsSkeleton } from "@/components/Skeletons";
 import { ReviewChip } from "@/components/ReviewChip";
 import { PersonStatus } from "@/components/StatusChip";
 import { useCanChange, useEducationSummary } from "@/hooks/education";
+import { useDonorOptions } from "@/hooks/donors";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
 import { dushanbeDay, telHref } from "@/lib/format";
@@ -43,14 +44,20 @@ function Phone({ value }: { value: string | null }) {
   );
 }
 
-const NO_FILTERS: { q: string; status: string | null; branch: string | null } = { q: "", status: null, branch: null };
+const NO_FILTERS: { q: string; status: string | null; branch: string | null; donor: string | null } = {
+  q: "",
+  status: null,
+  branch: null,
+  donor: null,
+};
 
 export default function StudentsPage() {
   const canChange = useCanChange("students");
   const { data: me } = useMe();
   const { data: branches = [] } = useBranches();
   const summary = useEducationSummary();
-  const [{ q, status, branch }, setFilters] = useUrlState(NO_FILTERS);
+  const [{ q, status, branch, donor }, setFilters] = useUrlState(NO_FILTERS);
+  const { data: donors = [] } = useDonorOptions();
   const setQ = (next: string) => setFilters({ q: next });
   const setStatus = (next: string | null) => setFilters({ status: next });
   const setBranch = (next: string | null) => setFilters({ branch: next });
@@ -66,13 +73,14 @@ export default function StudentsPage() {
   });
 
   const list = useQuery({
-    queryKey: ["students", q, status, branch, review, page],
+    queryKey: ["students", q, status, branch, donor, review, page],
     queryFn: () =>
       api<Paged<StudentRow>>("/api/v1/students", {
         params: {
           q: q.trim() || undefined,
           status: status ?? undefined,
           branch_id: branch ?? undefined,
+          donor_id: donor ?? undefined,
           needs_review: review ? "true" : undefined,
           page: String(page),
           page_size: String(PAGE_SIZE),
@@ -93,7 +101,7 @@ export default function StudentsPage() {
       <PageHeader
         actions={
           <>
-            <ExportButton params={{ q: q.trim(), status, branch_id: branch, needs_review: review ? "true" : null }} path="/api/v1/students/export" />
+            <ExportButton params={{ q: q.trim(), status, branch_id: branch, donor_id: donor, needs_review: review ? "true" : null }} path="/api/v1/students/export" />
             {canChange && (
               <Button color="primary" startContent={<Icon name="plus" size={18} />} onPress={() => setCreating(true)}>
                 Студент
@@ -163,6 +171,19 @@ export default function StudentsPage() {
             value={branch}
             onChange={(b) => {
               setBranch(b);
+              setPage(1);
+            }}
+          />
+        )}
+        {donors.length > 0 && (
+          <SelectField filter
+            allLabel="Все доноры"
+            className="w-full md:w-48"
+            label="Донор"
+            options={donors.map((d) => ({ key: d.id, label: d.name }))}
+            value={donor}
+            onChange={(d) => {
+              setFilters({ donor: d });
               setPage(1);
             }}
           />

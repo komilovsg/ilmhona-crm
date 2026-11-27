@@ -220,8 +220,30 @@ class Cohort(Versioned, Legacy, Base):
     status: Mapped[str] = mapped_column(Text, server_default=text("'набор'"))
     # what the instructor earns per month the cohort runs (default: the instructor's default_rate)
     instructor_rate: Mapped[Decimal] = mapped_column(Numeric(12, 2), server_default=text("0"))
+    # платный | бесплатный (price 0) | донор (every student by a donor) | смешанный (per student)
+    funding: Mapped[str] = mapped_column(Text, server_default=text("'платный'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class Donor(Versioned, Base):
+    """An organisation that pays for students. Only the students are tracked, not its money."""
+
+    __tablename__ = "donor"
+    id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
+    name: Mapped[str] = mapped_column(Text, unique=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    archived: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=NOW)
+
+
+class CohortDonor(Base):
+    __tablename__ = "cohort_donor"
+    cohort_id: Mapped[UUID] = mapped_column(
+        PG_UUID, ForeignKey("cohort.id", ondelete="CASCADE"), primary_key=True
+    )
+    donor_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("donor.id"), primary_key=True)
 
 
 class Lesson(Versioned, Legacy, Base):
@@ -285,6 +307,10 @@ class Enrollment(Versioned, Legacy, Base):
     status_before_finish: Mapped[str | None] = mapped_column(Text)
     # the old system's total when it had no homework / final to go with it
     legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
+    # the donor that pays for the student (one of the cohort's donors); None = pays themself
+    donor_id: Mapped[UUID | None] = mapped_column(PG_UUID)
+    # set when the student moved from a donor to paying themself: the debt counts from its month
+    pays_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )
@@ -642,9 +668,14 @@ class Certificate(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     number: Mapped[str] = mapped_column(Text)
     verify_code: Mapped[str] = mapped_column(Text, unique=True)
-    enrollment_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
-    cohort_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
-    course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    # null for a certificate issued from an Excel list (batch_id is then set)
+    enrollment_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
+    cohort_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("cohort.id"))
+    course_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("course.id"))
+    student_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID, ForeignKey("student.id", ondelete="SET NULL")
+    )
+    batch_id: Mapped[UUID | None] = mapped_column(PG_UUID)
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
     instructor_id: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")

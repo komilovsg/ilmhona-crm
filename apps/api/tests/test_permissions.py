@@ -94,7 +94,7 @@ async def test_sections_are_independent(login_as: SignedIn, section: str) -> Non
 async def test_superadmin_passes_everywhere(admin: httpx.AsyncClient) -> None:
     me = (await admin.get("/api/v1/auth/me")).json()
     assert set(me["permissions"].values()) == {"change"}
-    assert len(me["permissions"]) == 15
+    assert len(me["permissions"]) == 16
     for path in (U, "/api/v1/roles", "/api/v1/audit"):
         assert (await admin.get(path)).status_code == 200
 

@@ -38,6 +38,12 @@ CERT_CUSTOM_INVALID = errors.define("cert_custom_invalid", 422, "A custom value 
 CERT_DIRECTOR_OVERFLOW = errors.define(
     "cert_director_overflow", 422, "The director's name or title does not fit a template"
 )
+CERT_BATCH_FIXED = errors.define(
+    "cert_batch_fixed", 409, "A certificate from an Excel list cannot be reissued"
+)
+CERT_BULK_FILE = errors.define("cert_bulk_file", 422, "The Excel list is not acceptable")
+CERT_BULK_EMPTY = errors.define("cert_bulk_empty", 409, "No row of the list can be issued")
+CERT_BRANCH_REQUIRED = errors.define("cert_branch_required", 422, "Choose the branch")
 COHORT_NOT_FINISHED = errors.define(
     "cohort_not_finished", 409, "Certificates are issued only for a finished cohort"
 )

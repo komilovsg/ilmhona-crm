@@ -14,6 +14,7 @@ from app.auth.sessions import router as sessions_router
 from app.branches.api import router as branches_router
 from app.campaigns.api import router as campaigns_router
 from app.certificates.api import router as certificates_router
+from app.certificates.bulk import router as cert_bulk_router
 from app.certificates.editor import router as cert_editor_router
 from app.certificates.registry import router as cert_registry_router
 from app.cohorts.api import router as cohorts_router
@@ -24,6 +25,7 @@ from app.core.nostore import NoStore
 from app.core.proxy import ProxySecretRequired
 from app.dashboard.api import router as dashboard_cards_router
 from app.dashboard.prefs import router as dashboard_prefs_router
+from app.donors.api import router as donors_router
 from app.employment.api import router as employment_router
 from app.export import XLSX
 from app.goals.api import academy_router as academy_goal_router
@@ -95,6 +97,7 @@ for router in (
     certificates_router,
     cert_editor_router,
     cert_registry_router,
+    cert_bulk_router,
     employment_router,
     academy_goal_router,
     goals_router,
@@ -102,6 +105,7 @@ for router in (
     grading_router,
     dashboard_cards_router,
     dashboard_prefs_router,
+    donors_router,
 ):
     app.include_router(router)
 

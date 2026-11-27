@@ -36,6 +36,7 @@ SECTION_ENTITIES: dict[str, tuple[str, ...]] = {
     "certificates": ("certificate",),
     "master_list": ("master_list",),
     "dashboard": ("dashboard_month", "academy_goal", "goal"),
+    "donors": ("donor", "donor_report"),
 }
 AUTH_LABEL = "Вход в систему"
 
@@ -108,6 +109,8 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "certificate.reissue": ("перевыпущен", "сертификат"),
     "certificate.revoke": ("отозван", "сертификат"),
     "certificate.pdf": ("скачан", "сертификат"),
+    "certificate.bulk_issue": ("выданы", "сертификаты из Excel"),
+    "certificate.bulk_zip": ("скачан", "архив сертификатов"),
     "cert_settings.signature_upload": ("загружена", "подпись директора"),
     "cert_settings.signature_delete": ("удалена", "подпись директора"),
     "cert_settings.seal_upload": ("загружена", "печать"),
@@ -127,6 +130,10 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "note.delete": ("удалена", "заметка"),
     "dashboard_pref.update": ("изменены", "настройки дашборда"),
     "dashboard_pref.reset": ("сброшены", "настройки дашборда"),
+    "donor.create": ("добавлен", "донор"),
+    "donor.update": ("изменён", "донор"),
+    "donor.archive": ("перенесён в архив", "донор"),
+    "donor.unarchive": ("возвращён из архива", "донор"),
 }
 CERT_IMAGE_SENTENCES = {
     "cert_settings.signature_upload": "загружена подпись директора",
@@ -175,6 +182,8 @@ TABLES: dict[str, str] = {
     "academy_goal": "цель академии",
     "goal": "цели",
     "note": "заметки",
+    "donor": "доноры",
+    "donor_report": "отчёт по донорам",
 }
 FILTERS = {
     "q": "поиск",
@@ -195,6 +204,8 @@ FILTERS = {
     "period": "период",
     "instructor_id": "инструктор",
     "student": "студент",
+    "donor": "донор",
+    "donor_id": "донор",
 }
 MONEY = {
     "default_price_month",
@@ -275,6 +286,10 @@ FIELDS: dict[str, str] = {
     "target_retention": "цель по удержанию, %",
     "target_attendance": "цель по посещаемости, %",
     "target_pass_rate": "цель по проходным, %",
+    "funding": "финансирование",
+    "donors": "доноры",
+    "donor": "донор",
+    "donors_assigned": "студентов передано донору",
 }
 REFS = {"branch_id", "role_id", "instructor_id", "room_id", "course_id", "user_id", "campaign_id"}
 DAYS = {1: "Пн", 2: "Вт", 3: "Ср", 4: "Чт", 5: "Пт", 6: "Сб", 7: "Вс"}
@@ -529,7 +544,13 @@ def sentence(
         student, cohort = _pair(e.diff.get("student"))[1], _pair(e.diff.get("cohort"))[1]
         over = _pair(e.diff.get("over_capacity"))[1]
         tail = f" — сверх плана: {over['enrolled']} из {over['capacity']}" if over else ""
+        if donor := _pair(e.diff.get("donor"))[1]:
+            tail = f" за счёт донора {donor}{tail}"
         return f"{who}: зачислен студент {student} в поток {cohort}{tail}"
+    if a == "enrollment.funding":
+        student, cohort = _pieces(lab)
+        old, new = _pair(e.diff.get("funding"))
+        return f"{who}: изменено финансирование студента {student} в потоке {cohort}: {old} → {new}"
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
         lost = []
@@ -545,20 +566,34 @@ def sentence(
     if a in ("certificate.issue", "certificate.reissue", "certificate.revoke", "certificate.pdf"):
         student, cohort = _pieces(lab)
         number = _pair(e.diff.get("number"))[1]
+        # a certificate from an Excel list has no cohort
+        where = "" if cohort == "массовая выдача" else f" (поток {cohort})"
         if a == "certificate.pdf":
-            return f"{who}: скачан сертификат {number} студента {student} (поток {cohort})"
+            return f"{who}: скачан сертификат {number} студента {student}{where}"
         if a == "certificate.revoke":
             reason = _pair(e.diff.get("reason"))[1]
-            return (
-                f"{who}: отозван сертификат {number} студента {student} (поток {cohort}): {reason}"
-            )
+            return f"{who}: отозван сертификат {number} студента {student}{where}: {reason}"
         verb = "выдан" if a == "certificate.issue" else "перевыпущен"
         tail = ""
         if a == "certificate.issue" and e.diff.get("non_graduate"):
             tail = ", не выпускнику"
         if comment := _pair(e.diff.get("comment"))[1]:
             tail += f": {comment}"
-        return f"{who}: {verb} сертификат {number} студенту {student} (поток {cohort}){tail}"
+        if a == "certificate.issue" and e.diff.get("bulk"):
+            return f"{who}: выдан сертификат {number} для {student} (массовая выдача из Excel)"
+        return f"{who}: {verb} сертификат {number} студенту {student}{where}{tail}"
+    if a == "certificate.bulk_zip":
+        count = _pair(e.diff.get("count"))[1] or 0
+        return f"{who}: скачан архив сертификатов массовой выдачи ({count} шт.)"
+    if a == "certificate.bulk_issue":
+        count = _pair(e.diff.get("count"))[1] or 0
+        template = _pair(e.diff.get("template"))[1]
+        skipped = _pair(e.diff.get("skipped"))[1] or 0
+        tail = f", пропущено строк: {skipped}" if skipped else ""
+        return (
+            f"{who}: массовая выдача сертификатов из Excel «{lab}»: "
+            f"выдано {count}, шаблон {template}{tail}"
+        )
     if a == "enrollment.certificate_pdf":
         student, cohort = _pieces(lab)
         _, number = _pair(e.diff.get("certificate_no"))
