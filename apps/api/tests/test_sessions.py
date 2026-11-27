@@ -102,7 +102,7 @@ async def test_remember_me_cookie_attributes() -> None:
         assert all("max-age" not in x.lower() for x in cookies)  # session cookies
         assert all("httponly" in x.lower() for x in cookies)
         hours = await sql("SELECT extract(epoch FROM expires_at - now()) / 3600 FROM refresh_token")
-        assert 11.9 < float(hours[0][0]) <= 12
+        assert 11.9 < float(hours[0][0]) <= 12.001  # db now() vs app clock skew
     await sql("DELETE FROM refresh_token")
     async with make_client() as c:
         r = await c.post(

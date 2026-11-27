@@ -204,7 +204,12 @@ class Cohort(Versioned, Legacy, Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     # 'G-NNN' from cohort_code_seq (database default)
     code: Mapped[str] = mapped_column(
-        Text, server_default=text("'G-' || lpad(nextval('cohort_code_seq')::text, 3, '0')")
+        Text,
+        server_default=text(
+            "'G-' || CASE WHEN nextval('cohort_code_seq') < 1000 "
+            "THEN lpad(currval('cohort_code_seq')::text, 3, '0') "
+            "ELSE currval('cohort_code_seq')::text END"
+        ),
     )
     course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id"))
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
