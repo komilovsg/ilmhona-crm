@@ -16,11 +16,14 @@ import { LoadingButton } from "@/components/LoadingButton";
 import { Segmented } from "@/components/Segmented";
 import { PersonStatus } from "@/components/StatusChip";
 import { useRefreshAttendance } from "@/hooks/attendance";
+import { useCanEnroll } from "@/hooks/education";
+import { lazyModal } from "@/lib/lazy-modal";
 import { api } from "@/lib/api";
 import { lessonProgress, markedLabel, markState, percentLabel } from "@/lib/attendance";
 import {
   ALL_MONTHS,
   arrowStep,
+  cellLocked,
   cellMarkable,
   keyMark,
   defaultMonth,
@@ -37,6 +40,29 @@ import { useBrowserValue } from "@/lib/client-store";
 import { dayMonth, dayTitle, fullDate, todayIso } from "@/lib/education";
 import { notify, notifyError } from "@/lib/toast";
 import type { AttendanceGrid, GridStudent } from "@/lib/types";
+
+const EnrollDateModal = lazyModal(() => import("@/components/EnrollDateModal").then((m) => m.EnrollDateModal));
+
+/** Before the student's enrollment day: a lock; a button that offers to move the day when allowed. */
+function LockedCell({ student, lesson, onMove }: { student: GridStudent; lesson: Col; onMove?: () => void }) {
+  const hint = `${student.student_name}: зачислен ${dayMonth(student.enrolled_on)} — позже урока ${dayMonth(lesson.date)}`;
+
+  return onMove ? (
+    <button
+      aria-label={`${hint}. Зачислить с ${dayMonth(lesson.date)}`}
+      className={clsx(CELL, "text-default-400 transition-colors hover:bg-default-100 hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus")}
+      title={`${hint}. Нажмите, чтобы зачислить с ${dayMonth(lesson.date)}`}
+      type="button"
+      onClick={onMove}
+    >
+      <Icon name="lock" size={14} />
+    </button>
+  ) : (
+    <span aria-label={hint} className={clsx(CELL, "text-default-300")} role="img" title={hint}>
+      <Icon name="lock" size={14} />
+    </span>
+  );
+}
 
 const ImportJournal = dynamic(() => import("./ImportJournal").then((m) => m.ImportJournal));
 
@@ -275,6 +301,9 @@ function Grid({
   const [pending, setPending] = useState<Set<string>>(new Set());
   const [bulk, setBulk] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ enrollmentId: string; lessonId: string; el: HTMLButtonElement } | null>(null);
+  const canEnroll = useCanEnroll();
+  const [moving, setMoving] = useState<{ student: GridStudent; day: string } | null>(null);
+  const anyLocked = students.some((s) => lessons.some((l) => cellLocked(l, s)));
   const gridKey = ["grid", cohortId];
 
   const settle = () => {
@@ -378,6 +407,10 @@ function Grid({
       {marking && (
         <p className="mb-3 hidden text-xs text-default-500 md:block">
           Нажмите на ячейку и выберите «Был», «Не был» или «Уважительная» (клавиши 1, 2, 3). «Все ✓» в шапке урока — отметить всех присутствующими.
+          {anyLocked &&
+            (canEnroll
+              ? " Замок — урок до даты зачисления студента: нажмите, чтобы зачислить его с этого урока."
+              : " Замок — урок до даты зачисления студента.")}
         </p>
       )}
 
@@ -476,7 +509,13 @@ function Grid({
                 </td>
                 {lessons.map((l, col) => (
                   <td key={l.id} className={clsx("border-b border-divider px-1 py-2", l.date === today && "bg-primary/5")}>
-                    {marking && cellMarkable(l, s) ? (
+                    {cellLocked(l, s) ? (
+                      <LockedCell
+                        lesson={l}
+                        student={s}
+                        onMove={marking && canEnroll ? () => setMoving({ student: s, day: l.date }) : undefined}
+                      />
+                    ) : marking && cellMarkable(l, s) ? (
                       <MarkCell
                         busy={pending.has(`${l.id}:${s.enrollment_id}`)}
                         col={col}
@@ -544,6 +583,20 @@ function Grid({
             </div>
           </PopoverContent>
         </Popover>
+      )}
+
+      {moving && (
+        <EnrollDateModal
+          cohortStart={grid.start_date}
+          enrollment={{
+            id: moving.student.enrollment_id,
+            version: moving.student.version,
+            student_name: moving.student.student_name,
+            enrolled_on: moving.student.enrolled_on,
+          }}
+          preset={moving.day}
+          onClose={() => setMoving(null)}
+        />
       )}
 
       {/* phone: the list of lessons; a tap opens the mark screen (one lesson per screen, #23) */}

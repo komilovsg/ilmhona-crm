@@ -428,6 +428,11 @@ def _tail(label: str | None) -> str:
     return f" {label}" if label else ""
 
 
+def _ddmm(value: Any) -> str:
+    """`2026-11-03` -> «03.11»."""
+    return f"{value[8:10]}.{value[5:7]}" if isinstance(value, str) and len(value) >= 10 else NONE
+
+
 def _pieces(label: str | None) -> tuple[str, str]:
     """`Алиев Алишер (G-012)` -> student, cohort."""
     if label and label.endswith(")") and " (" in label:
@@ -565,6 +570,12 @@ def sentence(
         student, cohort = _pieces(lab)
         old, new = _pair(e.diff.get("funding"))
         return f"{who}: изменено финансирование студента {student} в потоке {cohort}: {old} → {new}"
+    if a == "enrollment.date":
+        student, cohort = _pieces(lab)
+        old, new = (_ddmm(d) for d in _pair(e.diff.get("enrolled_on")))
+        return (
+            f"{who}: изменена дата зачисления студента {student} в потоке {cohort} с {old} на {new}"
+        )
     if a == "enrollment.delete":
         student, cohort = _pair(e.diff.get("student"))[0], _pair(e.diff.get("cohort"))[0]
         lost = []

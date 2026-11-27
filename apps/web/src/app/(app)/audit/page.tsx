@@ -33,6 +33,7 @@ const ACTIONS: Record<string, string> = {
   "student.delete": "Студент удалён",
   "enrollment.create": "Зачисление",
   "enrollment.update": "Статус зачисления",
+  "enrollment.date": "Дата зачисления",
   "enrollment.delete": "Студент убран из потока",
   "cohort.create": "Поток создан",
   "cohort.update": "Поток изменён",

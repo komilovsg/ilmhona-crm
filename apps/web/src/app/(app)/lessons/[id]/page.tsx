@@ -15,16 +15,17 @@ import { LoadingButton } from "@/components/LoadingButton";
 import { EmptyState, QueryState } from "@/components/QueryState";
 import { Bone } from "@/components/Skeletons";
 import { useCanMark, useRefreshAttendance } from "@/hooks/attendance";
-import { useIsInstructor } from "@/hooks/education";
+import { useCanEnroll, useIsInstructor } from "@/hooks/education";
 import { api, isApiError } from "@/lib/api";
 import { markedLabel } from "@/lib/attendance";
-import { dayTitle, fullDate, todayIso } from "@/lib/education";
+import { dayMonth, dayTitle, fullDate, todayIso } from "@/lib/education";
 import { useReducedMotion } from "@/lib/client-store";
 import { SPRING_POP, SPRING_SNAPPY } from "@/lib/motion";
 import { lazyModal } from "@/lib/lazy-modal";
 import { notify, notifyError } from "@/lib/toast";
 import type { LessonAttendance, MarkRow } from "@/lib/types";
 
+const EnrollDateModal = lazyModal(() => import("@/components/EnrollDateModal").then((m) => m.EnrollDateModal));
 const NewStudentModal = lazyModal(() => import("@/components/NewStudentModal").then((m) => m.NewStudentModal));
 
 type Cell = { present: boolean; excused: boolean; reason: string | null; state: "saving" | "saved" | "error" };
@@ -222,11 +223,12 @@ function LessonMark({ data }: { data: LessonAttendance }) {
   const ahead = lesson.date > todayIso(); // the API takes marks from the lesson's day on
   const disabled = lesson.cancelled || ahead;
   // the instructor adds a student right from the lesson; enrolled today, they are on today's
-  // lesson (and later ones) only: on an earlier lesson they are listed apart, without marks
+  // lesson (and later ones) only: on an earlier lesson they are listed apart (`late`), with the
+  // offer to move their enrollment day to this lesson
   const canAdd = useIsInstructor() && !lesson.cancelled;
-  const past = lesson.date < todayIso();
+  const canEnroll = useCanEnroll();
   const [adding, setAdding] = useState(false);
-  const [late, setLate] = useState<{ id: string; name: string }[]>([]);
+  const [moving, setMoving] = useState<LessonAttendance["late"][number] | null>(null);
 
   const patchCache = useCallback(
     (enrollmentId: string, present: boolean, reason: string | null, excused: boolean) =>
@@ -371,7 +373,9 @@ function LessonMark({ data }: { data: LessonAttendance }) {
       </div>
 
       {total === 0 ? (
-        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">На этом уроке нет студентов.</p>
+        <p className="rounded-2xl bg-content1 p-8 text-center text-default-500">
+          {data.late.length > 0 ? "Все студенты зачислены позже этого урока." : "На этом уроке нет студентов."}
+        </p>
       ) : (
         <ul data-rows className="space-y-2">
           {data.students.map((s, i) => (
@@ -388,15 +392,33 @@ function LessonMark({ data }: { data: LessonAttendance }) {
         </ul>
       )}
 
-      {late.length > 0 && (
-        <ul aria-label="Добавлены после урока" className="mt-2 space-y-2">
-          {late.map((s) => (
-            <li key={s.id} className="rounded-2xl border border-dashed border-default-300 p-4">
-              <div className="truncate text-base font-medium">{s.name}</div>
-              <p className="text-xs text-default-500">Добавлен сегодня, после этого урока: отметки — с сегодняшних уроков.</p>
-            </li>
-          ))}
-        </ul>
+      {data.late.length > 0 && (
+        <section aria-label="Зачислены позже этого урока" className="mt-4">
+          <h2 className="mb-2 text-sm font-medium text-default-600">Зачислены позже этого урока</h2>
+          <ul className="space-y-2">
+            {data.late.map((s) => (
+              <li key={s.enrollment_id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-default-300 p-4">
+                <div className="min-w-0">
+                  <div className="truncate text-base font-medium">{s.student_name}</div>
+                  <p className="text-xs text-default-500">
+                    Зачислен {fullDate(s.enrolled_on)}: отметить на этом уроке нельзя.
+                  </p>
+                </div>
+                {canEnroll && !lesson.cancelled && !ahead && (
+                  <Button
+                    color="primary"
+                    size="sm"
+                    startContent={<Icon name="calendar" size={16} />}
+                    variant="flat"
+                    onPress={() => setMoving(s)}
+                  >
+                    Зачислить с {dayMonth(lesson.date)}
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <div className="mt-6 flex justify-between gap-3">
@@ -419,12 +441,14 @@ function LessonMark({ data }: { data: LessonAttendance }) {
           cohortCode={lesson.cohort_code}
           cohortId={lesson.cohort_id}
           onClose={() => setAdding(false)}
-          onSaved={(row) => {
-            if (past) setLate((l) => [...l, { id: row.id, name: row.student_name }]);
+          onSaved={() => {
             void queryClient.invalidateQueries({ queryKey: key });
             void refreshAttendance();
           }}
         />
+      )}
+      {moving && (
+        <EnrollDateModal cohortStart={lesson.cohort_start} enrollment={{ ...moving, id: moving.enrollment_id }} preset={lesson.date} onClose={() => setMoving(null)} />
       )}
     </>
   );

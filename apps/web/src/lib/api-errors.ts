@@ -58,7 +58,9 @@ export const apiErrors: Record<string, string> = {
   finish_changed: "Состав выпускников изменился: проверьте новые числа и подтвердите ещё раз.",
   lesson_cancelled: "Урок отменён.",
   lesson_not_held: "Урок ещё впереди: отметить можно с дня урока.",
-  enrolled_after_lesson: "Студент зачислен позже этого урока: отметка невозможна.",
+  enrolled_after_lesson: "Студент зачислен {enrolled} — позже этого урока. Измените дату зачисления, чтобы отметить.",
+  enrolled_on_future: "Дата зачисления не может быть позже сегодняшнего дня.",
+  enrolled_on_has_marks: "Есть отметки посещаемости с {first_mark}: дату зачисления можно сдвинуть только до этого дня.",
   instructor_invalid: "Инструктор должен быть активным сотрудником с ролью «Инструктор» из этого филиала.",
   room_branch_mismatch: "Аудитория из другого филиала.",
   student_branch_mismatch: "Студент из другого филиала.",
@@ -164,6 +166,8 @@ export function fieldText(code: string, ctx?: Record<string, unknown>): string {
   if (code === "payment_amount_zero") return "Больше 0 (сумма 0 — только при скидке 100%)";
   if (code === "discount_no_price") return "У потока нет цены";
   if (code === "donor_required") return "Выберите донора";
+  if (code === "enrolled_on_future") return "Не позже сегодняшнего дня";
+  if (code === "enrolled_on_has_marks") return "Раньше этой даты есть отметки";
   if (code === "donor_not_in_cohort") return "Этот донор не финансирует поток";
   if (code === "donor_archived") return "Донор в архиве";
   if (code === "room_archived") return "Аудитория в архиве";

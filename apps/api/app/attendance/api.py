@@ -195,11 +195,25 @@ async def _lesson_payload(
         .all()
     )
     at = ordered.index(lesson.id) if lesson.id in ordered else None
+    # enrolled after this lesson: not markable, listed so the screen can offer to move the day
+    late = (
+        await db.execute(
+            select(Enrollment, Student)
+            .join(Student, Student.id == Enrollment.student_id)
+            .where(
+                Enrollment.cohort_id == lesson.cohort_id,
+                Enrollment.status != EXPELLED,
+                ~enrolled_by(lesson.lesson_date),
+            )
+            .order_by(Student.full_name, Enrollment.id)
+        )
+    ).all()
     return {
         "lesson": {
             "id": lesson.id,
             "cohort_id": cohort.id,
             "cohort_code": cohort.code,
+            "cohort_start": cohort.start_date,
             "course_name": course,
             "room_name": room,
             "date": lesson.lesson_date,
@@ -213,6 +227,15 @@ async def _lesson_payload(
         "prev_id": ordered[at - 1] if at else None,
         "next_id": ordered[at + 1] if at is not None and at + 1 < len(ordered) else None,
         "students": students,
+        "late": [
+            {
+                "enrollment_id": e.id,
+                "version": e.version,
+                "student_name": s.full_name,
+                "enrolled_on": e.enrolled_at.astimezone(st.TZ).date(),
+            }
+            for e, s in late
+        ],
         "marked": sum(1 for s in students if s["present"] is not None),
         "total": len(students),
     }
@@ -248,7 +271,8 @@ async def mark_cell(
     if row is None:
         raise DomainError(NOT_FOUND)
     if not row[2]:
-        raise DomainError(ENROLLED_AFTER_LESSON)
+        day = row[0].enrolled_at.astimezone(st.TZ)
+        raise DomainError(ENROLLED_AFTER_LESSON, enrolled=day.strftime("%d.%m"))
     reason = None if body.present else (body.reason or None)
     values = {
         "lesson_id": lesson.id,
@@ -388,6 +412,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
     return {
         "cohort_id": cohort.id,
         "cohort_code": cohort.code,
+        "start_date": cohort.start_date,
         "lessons": [
             {
                 "id": le.id,
@@ -410,6 +435,7 @@ async def grid_of(db: AsyncSession, cohort: Cohort) -> dict[str, Any]:
                 "student_id": s.id,
                 "student_name": s.full_name,
                 "status": e.status,
+                "version": e.version,
                 "enrolled_at": e.enrolled_at,
                 "enrolled_on": e.enrolled_at.astimezone(st.TZ).date(),
                 "marks": cells.get(e.id, {}),
