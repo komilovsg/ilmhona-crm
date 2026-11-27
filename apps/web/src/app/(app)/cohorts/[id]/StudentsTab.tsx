@@ -183,12 +183,12 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
     ) : (
       "—"
     );
-  // the enrollment day (Dushanbe): lessons before it take no marks; who may enrol may move it
+  // the enrollment day (Dushanbe): lessons before it take no marks; only admin and manager move it (an instructor sees it read-only)
   const enrolledOn = (r: EnrollmentRow) => todayIso(new Date(r.enrolled_at));
   const enrolled = (r: EnrollmentRow) => (
     <span className="inline-flex items-center gap-1 whitespace-nowrap tabular-nums">
       {fullDate(enrolledOn(r))}
-      {(canChange || instructor) && (
+      {canChange && !instructor && (
         <Button
           isIconOnly
           aria-label={`Изменить дату зачисления: ${r.student_name}`}

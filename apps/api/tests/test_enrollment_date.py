@@ -125,13 +125,11 @@ async def test_scope_and_rights_follow_enrolling(
     mine = await _join_now(admin, own)  # a row a manager added: still in the instructor's cohort
     theirs = await _join_now(admin, other)
     day = today() - timedelta(days=5)
-    r = await _move(ins, mine, day)
-    assert r.status_code == 200, r.text
-    assert r.json()["debt"] is None  # an instructor never sees money
-    assert (await _move(ins, theirs, day)).status_code == 404
+    assert (await _move(ins, mine, day)).status_code == 403  # only admin and manager move it
+    assert (await _move(ins, theirs, day)).status_code == 403
     assert (
         await ins.get(f"{E}/{theirs['id']}/enrolled-on", params={"enrolled_on": str(day)})
-    ).status_code == 404
+    ).status_code == 403
     # another branch's manager: 404; a role without cohorts change: 403
     far = await login_as("far", "manager", branch="Истаравшан")
     assert (await _move(far, theirs, day)).status_code == 404
@@ -183,3 +181,21 @@ async def test_free_cohort_has_no_debt_change(admin: httpx.AsyncClient) -> None:
     row = await _join_now(admin, cohort)
     r = await _move(admin, row, today() - timedelta(days=5))
     assert r.status_code == 200 and r.json()["debt"] is None
+
+
+async def test_instructor_cannot_move_the_day_manager_can(
+    admin: httpx.AsyncClient, login_as: SignedIn
+) -> None:
+    ins = await login_as("ins2", "instructor", branch="Душанбе")
+    me = (await ins.get("/api/v1/auth/me")).json()["id"]
+    own, _ = await past_cohort(admin, name="A", instructor_id=me)
+    row = await _join_now(admin, own)
+    day = today() - timedelta(days=5)
+    assert (await _move(ins, row, day)).status_code == 403
+    r = await ins.get(f"{E}/{row['id']}/enrolled-on", params={"enrolled_on": str(day)})
+    assert r.status_code == 403
+    # back-dating while enrolling (the journal flow) is closed to them too
+    r = await ins.post(f"{C}/{own['id']}/enrollments", json={**NEW, "enrolled_on": str(day)})
+    assert r.status_code == 403
+    mgr = await login_as("mgr2", "manager", branch="Душанбе")
+    assert (await _move(mgr, row, day)).status_code == 200
