@@ -149,6 +149,11 @@ export default function CertificatesPage() {
                 Выдать из Excel
               </Button>
             )}
+            {seesTemplates && (
+              <Button as={Link} href="/settings/certificates" variant="flat">
+                Настройки
+              </Button>
+            )}
             <ExportButton label="Выгрузить в Excel" params={{ ...paramsOf(f), format: "xlsx" }} path="/api/v1/certificates" />
           </div>
         }
