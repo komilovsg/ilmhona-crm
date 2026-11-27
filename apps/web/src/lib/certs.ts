@@ -38,12 +38,13 @@ export type CertRow = {
   id: string;
   number: string;
   status: CertStatus;
-  enrollment_id: string;
-  student_id: string;
+  enrollment_id: string | null;
+  batch_id: string | null;
+  student_id: string | null;
   student_name: string;
-  cohort_id: string;
-  cohort_code: string;
-  course_name: string;
+  cohort_id: string | null;
+  cohort_code: string | null;
+  course_name: string | null;
   branch_name: string;
   instructor_name: string | null;
   template_name: string;
