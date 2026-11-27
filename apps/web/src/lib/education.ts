@@ -92,6 +92,21 @@ export function fullDate(iso: string): string {
   return `${dayMonth(iso)}.${iso.slice(0, 4)}`;
 }
 
+const SHORT_MONTHS = ["янв", "фев", "мар", "апр", "мая", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+
+/** «23 янв», «5 мая 2025»: the year only when it is not the current one. */
+export function shortDate(iso: string, today: string = todayIso()): string {
+  // no-break spaces: «(21 дек)» never wraps inside the brackets
+  const text = `${Number(iso.slice(8, 10))}\u00a0${SHORT_MONTHS[Number(iso.slice(5, 7)) - 1]}`;
+  return iso.slice(0, 4) === today.slice(0, 4) ? text : `${text}\u00a0${iso.slice(0, 4)}`;
+}
+
+/** A cohort's title «Программирование (23 янв)»: course names hold no date, the start date tells
+ * cohorts of one course apart. Lists, selects and filters show the bare course name. */
+export function cohortTitle(c: { course_name: string; start_date: string }, today?: string): string {
+  return `${c.course_name} (${shortDate(c.start_date, today)})`;
+}
+
 /** «Пн 12.03» */
 export function dayTitle(iso: string): string {
   return `${WEEKDAYS[isoWeekday(iso) - 1]} ${dayMonth(iso)}`;

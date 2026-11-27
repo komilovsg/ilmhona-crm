@@ -24,7 +24,7 @@ import { useCanChange, useEducationSummary } from "@/hooks/education";
 import { useSeesPayments } from "@/hooks/money";
 import { useBranches, useMe } from "@/hooks/queries";
 import { api } from "@/lib/api";
-import { COHORT_STATUSES, daysLabel, formatPrice, fullDate } from "@/lib/education";
+import { COHORT_STATUSES, cohortTitle, daysLabel, formatPrice, fullDate } from "@/lib/education";
 import { fundingLabel } from "@/lib/funding";
 import type { CohortRow, Paged } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
@@ -94,7 +94,7 @@ function CohortCard({ cohort: c }: { cohort: CohortRow }) {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs font-medium text-brand-text">{c.code}</div>
-          <div className="break-words text-base font-semibold">{c.course_name}</div>
+          <div className="break-words text-base font-semibold">{cohortTitle(c)}</div>
           {c.stale && (
             <div className="mt-1.5">
               <StaleChip stale={c.stale} />
