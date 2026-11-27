@@ -5,6 +5,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@heroui/button";
+import { Chip } from "@heroui/chip";
 import { Dropdown, DropdownItem, DropdownMenu, DropdownTrigger } from "@heroui/dropdown";
 import { useMenu } from "@/components/useMenu";
 
@@ -24,7 +25,7 @@ import { api } from "@/lib/api";
 import { telHref } from "@/lib/format";
 import { ENROLLMENT_STATUSES, EXPELLED, expelledLast, formatPrice, fullDate, todayIso } from "@/lib/education";
 import type { CohortPayments } from "@/lib/money-types";
-import { studentFunding, withDonors } from "@/lib/funding";
+import { NOT_PAYING, NOT_PAYING_LABEL, payerBody, payerKey, priced, studentFunding, withDonors } from "@/lib/funding";
 import { useSubmit } from "@/lib/submit";
 import { notify, notifyError } from "@/lib/toast";
 import type { CohortRow, EnrollmentRow } from "@/lib/types";
@@ -62,15 +63,23 @@ function StatusMenu({ row, onPick }: { row: EnrollmentRow; onPick: (status: stri
 
 const SELF = "__self__";
 
-/** «Платит сам» ↔ «Донор: X» of one student (a mixed cohort; a donor cohort: another donor only). */
-function FundingMenu({ row, cohort, onPick }: { row: EnrollmentRow; cohort: CohortRow; onPick: (donorId: string | null) => void }) {
+/** «Платит сам» ↔ «Не платит» ↔ «Донор: X» of one student (a paid cohort: the first two; a mixed
+ * one: all; a donor cohort: another donor only). */
+function FundingMenu({ row, cohort, onPick }: { row: EnrollmentRow; cohort: CohortRow; onPick: (payer: string | null) => void }) {
   const overlayMotion = useOverlayMotion();
   const menu = useMenu((key: string) => onPick(key === SELF ? null : key));
   const options = [
-    ...(cohort.funding === "смешанный" ? [{ key: SELF, label: "Платит сам" }] : []),
-    ...cohort.donors.filter((d) => !d.archived || d.id === row.donor_id).map((d) => ({ key: d.id, label: `Донор: ${d.name}` })),
+    ...(priced(cohort.funding)
+      ? [
+          { key: SELF, label: "Платит сам" },
+          { key: NOT_PAYING, label: NOT_PAYING_LABEL },
+        ]
+      : []),
+    ...(withDonors(cohort.funding)
+      ? cohort.donors.filter((d) => !d.archived || d.id === row.donor_id).map((d) => ({ key: d.id, label: `Донор: ${d.name}` }))
+      : []),
   ];
-  const label = studentFunding(cohort.funding, row.donor_id, cohort.donors);
+  const label = studentFunding(cohort.funding, row.donor_id, cohort.donors, row.not_paying);
 
   return (
     <Dropdown {...menu.dropdown} motionProps={overlayMotion} placement="bottom-end">
@@ -79,7 +88,7 @@ function FundingMenu({ row, cohort, onPick }: { row: EnrollmentRow; cohort: Coho
           <span className="truncate">{label}</span>
         </Button>
       </DropdownTrigger>
-      <DropdownMenu aria-label="Кто платит" disabledKeys={[row.donor_id ?? SELF]} items={options} onAction={menu.onAction}>
+      <DropdownMenu aria-label="Кто платит" disabledKeys={[payerKey(row.donor_id, row.not_paying) ?? SELF]} items={options} onAction={menu.onAction}>
         {(o) => <DropdownItem key={o.key}>{o.label}</DropdownItem>}
       </DropdownMenu>
     </Dropdown>
@@ -122,8 +131,8 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   });
 
   const setFunding = useMutation({
-    mutationFn: ({ r, donorId }: { r: EnrollmentRow; donorId: string | null }) =>
-      api(`/api/v1/enrollments/${r.id}/funding`, { method: "PATCH", body: { donor_id: donorId }, version: r.version }),
+    mutationFn: ({ r, payer }: { r: EnrollmentRow; payer: string | null }) =>
+      api(`/api/v1/enrollments/${r.id}/funding`, { method: "PATCH", body: payerBody(payer), version: r.version }),
     onSuccess: () => {
       void refresh();
       void money.refetch();
@@ -204,13 +213,20 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   );
   const statusOnly = (r: EnrollmentRow) =>
     canChange ? <StatusMenu row={r} onPick={(s) => setStatus.mutate({ id: r.id, status: s, version: r.version })} /> : <PersonStatus status={r.status} />;
+  // a paid cohort shows who pays only to who may change it (or for a «не платит» student)
   const funding = (r: EnrollmentRow) =>
-    withDonors(cohort.funding) &&
+    (withDonors(cohort.funding) || (priced(cohort.funding) && (canChange || r.not_paying))) &&
     (canChange ? (
-      <FundingMenu cohort={cohort} row={r} onPick={(donorId) => setFunding.mutate({ r, donorId })} />
+      <FundingMenu cohort={cohort} row={r} onPick={(payer) => setFunding.mutate({ r, payer })} />
     ) : (
-      <span className="text-xs text-default-500">{studentFunding(cohort.funding, r.donor_id, cohort.donors)}</span>
+      <span className="text-xs text-default-500">{studentFunding(cohort.funding, r.donor_id, cohort.donors, r.not_paying)}</span>
     ));
+  const free = (r: EnrollmentRow) =>
+    r.not_paying && (
+      <Chip className="ml-2 shrink-0 align-middle" size="sm" variant="flat">
+        {NOT_PAYING_LABEL}
+      </Chip>
+    );
   const status = (r: EnrollmentRow) => (
     <div className="flex min-w-0 flex-col items-start gap-1">
       {statusOnly(r)}
@@ -237,6 +253,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
   const payButton = (r: EnrollmentRow) =>
     canPay &&
     !r.donor_id &&
+    !r.not_paying &&
     r.status !== "отчислен" &&
     cohort.status !== "отменён" && (
       <Button
@@ -266,6 +283,12 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
             <>
               {" "}
               · за счёт доноров: <b>{cohort.seats.donor}</b>
+            </>
+          )}
+          {priced(cohort.funding) && cohort.seats.free > 0 && (
+            <>
+              {" "}
+              · не платят: <b>{cohort.seats.free}</b>
             </>
           )}
           {money.data && (
@@ -338,6 +361,7 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
                       <Link className="hover:text-brand-text" href={`/students/${r.student_id}`}>
                         {r.student_name}
                       </Link>
+                      {free(r)}
                       {flag(r)}
                     </td>
                     <td className="px-4 py-3">{phone(r)}</td>
@@ -365,10 +389,13 @@ export function StudentsTab({ cohort, canChange }: { cohort: CohortRow; canChang
               )}
               <li className={clsx("rounded-2xl bg-content1 p-4", r.status === EXPELLED && "text-default-500")}>
                 <div className="flex items-start justify-between gap-2">
-                  <Link className="min-w-0 truncate font-medium" href={`/students/${r.student_id}`}>
-                    <span className="mr-2 text-xs font-normal tabular-nums text-default-500">{i + 1}.</span>
-                    {r.student_name}
-                  </Link>
+                  <div className="flex min-w-0 items-center">
+                    <Link className="min-w-0 truncate font-medium" href={`/students/${r.student_id}`}>
+                      <span className="mr-2 text-xs font-normal tabular-nums text-default-500">{i + 1}.</span>
+                      {r.student_name}
+                    </Link>
+                    {free(r)}
+                  </div>
                   {trash(r)}
                 </div>
                 {flag(r)}

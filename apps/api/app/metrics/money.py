@@ -9,9 +9,10 @@
   price_month × months started since enrollment (from the later of the enrollment month and the
   cohort start month, to the earlier of this month and the cohort's last month),
   debt = max(expected − paid − discount, 0). An expelled student owes nothing more: debt 0.
-- Donors (`app.donors.funding`): a donor-funded enrollment owes nothing (its price is 0) and is
-  never a debtor, nor in this month's expected money, nor in the payment form's choices. After a
-  move from a donor to paying themself (`pays_from`) the months count from that month.
+- Donors (`app.donors.funding`): a donor-funded enrollment, and one marked «не платит», owes
+  nothing (its price is 0) and is never a debtor, nor in this month's expected money, nor in the
+  payment form's choices. After a move from either to paying themself (`pays_from`) the months
+  count from that month.
 - Discount: a payment may take `discount_percent` of the month's price off (`discount_amount`,
   rounded to the cent, half up; one discount per enrollment month). A month is covered by what is
   paid plus the discount (`COVERED`); income stays the money received, discounts are their own sum.
@@ -37,6 +38,7 @@ from sqlalchemy import ColumnElement, case, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import clock
+from app.donors.funding import owes_nothing, owes_nothing_clause
 from app.models import (
     AppUser,
     Campaign,
@@ -100,26 +102,27 @@ def expected_months(enrolled_on: date, start: date, end: date, on: date) -> int:
 
 
 def debtor_where() -> list[ColumnElement[bool]]:
-    """Enrollments that can owe: not expelled, not funded by a donor, in a cohort that is not
-    cancelled. The debtors list, the dashboard's total debt, this month's expected money and the
-    payment form's choices share it."""
+    """Enrollments that can owe: not expelled, not funded by a donor nor «не платит», in a cohort
+    that is not cancelled. The debtors list, the dashboard's total debt, this month's expected
+    money and the payment form's choices share it."""
     return [
         Enrollment.status != EXPELLED,
-        Enrollment.donor_id.is_(None),
+        ~owes_nothing_clause(),
         Cohort.status != CANCELLED,
     ]
 
 
 # what the debt counts from and the price of a month for one enrollment (columns of a MoneyRow):
-# a donor-funded student has no price; after a move to paying themself, months count from then
+# a donor-funded or «не платит» student has no price; after a move to paying themself, months
+# count from then
 BILLED_SINCE = func.greatest(Enrollment.enrolled_at, Enrollment.pays_from)
-BILLED_PRICE = case((Enrollment.donor_id.is_not(None), literal(ZERO)), else_=Cohort.price_month)
+BILLED_PRICE = case((owes_nothing_clause(), literal(ZERO)), else_=Cohort.price_month)
 
 
 def billed(e: Enrollment, c: Cohort) -> tuple[datetime, Decimal]:
     """`BILLED_SINCE` and `BILLED_PRICE` of a loaded enrollment."""
     since = max(e.enrolled_at, e.pays_from) if e.pays_from else e.enrolled_at
-    return since, (ZERO if e.donor_id is not None else c.price_month)
+    return since, (ZERO if owes_nothing(e) else c.price_month)
 
 
 async def debt_summary(

@@ -1,7 +1,8 @@
 """Donor numbers: who pays for the students, and the report a donor gets.
 
-- Funding of an enrollment: «донор» when a donor pays for it, «бесплатно» in a free cohort,
-  else «платник». `funding_counts` = enrollments of each kind among the enrolled (not expelled).
+- Funding of an enrollment: «донор» when a donor pays for it, «бесплатно» in a free cohort or
+  when marked «не платит» (no donor's student), else «платник». `funding_counts` = enrollments
+  of each kind among the enrolled (not expelled).
 - Donor report: per donor and cohort, the donor's students: enrolled (all of them), studying
   (активный), completed (завершил), expelled (отчислен), graduated (выпускник), employed (the
   student has an employment record, the one employment table #13). Only students: the donor's
@@ -26,6 +27,7 @@ def funding_kind() -> ColumnElement[str]:
     return case(
         (Enrollment.donor_id.is_not(None), literal(BY_DONOR)),
         (Cohort.funding == "бесплатный", literal(FREE_SEAT)),
+        (Enrollment.not_paying, literal(FREE_SEAT)),
         else_=literal(PAYING),
     )
 

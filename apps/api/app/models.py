@@ -318,8 +318,10 @@ class Enrollment(Versioned, Legacy, Base):
     legacy_total: Mapped[Decimal | None] = mapped_column(Numeric(5, 1))
     # the donor that pays for the student (one of the cohort's donors); None = pays themself
     donor_id: Mapped[UUID | None] = mapped_column(PG_UUID)
-    # set when the student moved from a donor to paying themself: the debt counts from its month
+    # set when the student moved from a donor (or «не платит») to paying: the debt counts from then
     pays_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # marked by hand «не платит» (a «платный» / «смешанный» cohort): owes nothing, no donor
+    not_paying: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     created_by: Mapped[UUID | None] = mapped_column(
         PG_UUID, ForeignKey("app_user.id", ondelete="SET NULL")
     )

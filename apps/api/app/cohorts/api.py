@@ -35,11 +35,12 @@ from app.core.errors import FORBIDDEN, NOT_FOUND, VALIDATION_FAILED, DomainError
 from app.core.paging import Page, PageSize
 from app.core.search import search_clause
 from app.core.versioning import Version, check_version
-from app.donors.errors import DONOR_REQUIRED, FUNDING_DONORS_INVALID
+from app.donors.errors import FUNDING_DONORS_INVALID
 from app.donors.funding import (
-    DONOR,
     FREE,
     WITH_DONORS,
+    change_enrollment_funding,
+    check_not_paying,
     cohort_donors,
     donor_names,
     enrollment_donor,
@@ -230,6 +231,8 @@ class EnrollIn(Strict):
     new_student: NewStudent | None = None
     # «за счёт донора»: one of the cohort's donors (a «донор» cohort with one donor sets it itself)
     donor_id: uuid.UUID | None = None
+    # «не платит»: studies for free in a «платный» / «смешанный» cohort, chosen by hand
+    not_paying: bool = False
     # a student who joins a running cohort: the day they actually started (cohort start .. today)
     enrolled_on: Day | None = None
 
@@ -249,9 +252,11 @@ class EnrollmentReview(Strict):
 
 
 class EnrollmentFunding(Strict):
-    """`donor_id` null = the student pays themself (a «смешанный» cohort only)."""
+    """`donor_id` null = the student pays themself (a «смешанный» cohort only); `not_paying` =
+    nobody pays («не платит», a «платный» / «смешанный» cohort, never with a donor)."""
 
     donor_id: uuid.UUID | None
+    not_paying: bool = False
 
 
 class EnrollmentStatus(Strict):
@@ -1114,8 +1119,10 @@ def _enrollment_out(
         "enrolled_at": e.enrolled_at,
         "needs_review": e.needs_review,
         "review_reason": e.review_reason,
-        # None: pays themself (or a free cohort); `pays_from`: moved from a donor to paying then
+        # None: pays themself (or a free cohort) unless `not_paying`; `pays_from`: moved from a
+        # donor or «не платит» to paying then
         "donor_id": e.donor_id,
+        "not_paying": e.not_paying,
         "pays_from": e.pays_from,
         "created_by_me": mine,
         "deletable": mine and not records and e.status == ENROLLED,
@@ -1177,7 +1184,9 @@ async def export_enrollments(cohort_id: uuid.UUID, p: View, db: DB) -> Response:
         rows=[
             {
                 **_enrollment_out(e, s),
-                "funding_label": funding_label(cohort.funding, names.get(e.donor_id)),
+                "funding_label": funding_label(
+                    cohort.funding, names.get(e.donor_id) if e.donor_id else None, e.not_paying
+                ),
             }
             for e, s in rows
         ],
@@ -1218,6 +1227,7 @@ async def enroll_into(
         (await cohort_enrolled(db, [cohort.id]))[cohort.id] + 1, cohort.capacity
     )
     donor_id = await enrollment_donor(db, cohort, body.donor_id)
+    check_not_paying(cohort, donor_id, body.not_paying)
     if body.new_student is not None:
         student = Student(
             full_name=body.new_student.full_name,
@@ -1248,7 +1258,11 @@ async def enroll_into(
             raise DomainError(STUDENT_BRANCH_MISMATCH)
         student = found
     enrollment = Enrollment(
-        cohort_id=cohort.id, student_id=student.id, created_by=p.id, donor_id=donor_id
+        cohort_id=cohort.id,
+        student_id=student.id,
+        created_by=p.id,
+        donor_id=donor_id,
+        not_paying=body.not_paying,
     )
     if enrolled_on is not None and enrolled_on < st.today():
         enrollment.enrolled_at = local_dt(max(enrolled_on, cohort.start_date), time(0, 0))
@@ -1267,6 +1281,7 @@ async def enroll_into(
             "status": [None, enrollment.status],
             **({"over_capacity": [None, over]} if over else {}),
             **({"donor": [None, donor]} if donor else {}),
+            **({"not_paying": [None, True]} if body.not_paying else {}),
         },
         branch_id=cohort.branch_id,
     )
@@ -1335,8 +1350,8 @@ async def set_enrollment_status(
 async def set_enrollment_funding(
     enrollment_id: uuid.UUID, body: EnrollmentFunding, version: Version, p: Change, db: DB
 ) -> dict[str, Any]:
-    """«Платит сам» ↔ «за счёт донора X» (a «смешанный» cohort; in a «донор» cohort only another
-    donor). Moving to paying themself starts the debt from this month (`pays_from`)."""
+    """«Платит сам» ↔ «за счёт донора X» ↔ «не платит» (rules in `app.donors.funding`). Moving
+    to paying themself starts the debt from this month (`pays_from`)."""
     enrollment, student, cohort = await _enrollment(db, p, enrollment_id)
     await check_version(
         db,
@@ -1346,27 +1361,19 @@ async def set_enrollment_funding(
         lambda: _enrollment_out(enrollment, student),
         changes=body.model_dump(exclude_unset=True),
     )
-    if body.donor_id == enrollment.donor_id:
+    started = enrollment.pays_from
+    diff = await change_enrollment_funding(db, cohort, enrollment, body.donor_id, body.not_paying)
+    if diff is None:
         return _enrollment_out(enrollment, student)
-    if body.donor_id is None:
-        if cohort.funding == DONOR:
-            raise DomainError(DONOR_REQUIRED).for_field("donor_id", "donor_required")
-        if enrollment.donor_id is not None:
-            enrollment.pays_from = _now()
-    else:
-        await enrollment_donor(db, cohort, body.donor_id)
-    names = await donor_names(db, [enrollment.donor_id, body.donor_id])
-    before = funding_label(cohort.funding, names.get(enrollment.donor_id))  # type: ignore[arg-type]
-    after = funding_label(cohort.funding, names.get(body.donor_id))  # type: ignore[arg-type]
-    enrollment.donor_id = body.donor_id
-    await db.flush()
+    if enrollment.pays_from != started and enrollment.pays_from is not None:
+        diff["pays_from"] = [None, enrollment.pays_from.astimezone(st.TZ).strftime("%Y-%m")]
     await record(
         db,
         p.id,
         "enrollment.funding",
         "enrollment",
         enrollment.id,
-        {"funding": [before, after], "cohort": [None, cohort.code]},
+        {**diff, "cohort": [None, cohort.code]},
         branch_id=cohort.branch_id,
     )
     return _enrollment_out(enrollment, student)

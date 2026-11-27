@@ -8,9 +8,13 @@
   paid for by one donor.
 
 A donor-funded student owes nothing and no payment is taken for them (`app.metrics.money`).
-Moving a student from a donor to paying themself sets `pays_from`: the debt counts from that
-month. Owner decisions: one donor per enrollment, no partial cover, no quotas, the donor's money
-is not tracked.
+«Не платит» (`Enrollment.not_paying`): a person marks one student of a «платный» or «смешанный»
+cohort as studying for free (no rule decides it, owner decision). The student owes nothing and no
+payment is taken, like a donor-funded one, but no donor pays: the two never go together, and the
+student is not a donor's in the donor report (a free seat). Moving a student from a donor or from
+«не платит» to paying themself sets `pays_from`: the debt counts from that month. Owner
+decisions: one donor per enrollment, no partial cover, no quotas, the donor's money is not
+tracked.
 """
 
 import uuid
@@ -18,9 +22,10 @@ from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import ColumnElement, delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import clock
 from app.core.errors import DomainError
 from app.donors.errors import (
     DONOR_ARCHIVED,
@@ -29,12 +34,37 @@ from app.donors.errors import (
     DONOR_REQUIRED,
     FUNDING_DONORS_INVALID,
     FUNDING_HAS_PAYERS,
+    NOT_PAYING_FUNDING,
+    NOT_PAYING_WITH_DONOR,
 )
 from app.models import Cohort, CohortDonor, Donor, Enrollment
 
 PAID, FREE, DONOR, MIXED = "платный", "бесплатный", "донор", "смешанный"
 FUNDINGS = (PAID, FREE, DONOR, MIXED)
 WITH_DONORS = (DONOR, MIXED)
+# a student can be marked «не платит» only where students pay
+PRICED = (PAID, MIXED)
+NOT_PAYING_LABEL = "Не платит"
+
+
+def owes_nothing(e: Enrollment) -> bool:
+    """A student that never pays: funded by a donor or marked «не платит»."""
+    return e.donor_id is not None or e.not_paying
+
+
+def owes_nothing_clause() -> ColumnElement[bool]:
+    """`owes_nothing` as SQL."""
+    return or_(Enrollment.donor_id.is_not(None), Enrollment.not_paying)
+
+
+def check_not_paying(cohort: Cohort, donor_id: uuid.UUID | None, not_paying: bool) -> None:
+    """«не платит» only in a priced cohort and never with a donor."""
+    if not not_paying:
+        return
+    if cohort.funding not in PRICED:
+        raise DomainError(NOT_PAYING_FUNDING).for_field("not_paying", "not_paying_funding")
+    if donor_id is not None:
+        raise DomainError(NOT_PAYING_WITH_DONOR).for_field("not_paying", "not_paying_with_donor")
 
 
 async def cohort_donors(
@@ -112,6 +142,14 @@ async def set_cohort_funding(
     if funding == FREE:
         cohort.price_month = Decimal("0.00")
     await db.flush()
+    if funding not in PRICED:
+        # «не платит» means nothing where nobody pays; in a «донор» cohort these students need a
+        # donor like the payers below
+        await db.execute(
+            update(Enrollment)
+            .where(Enrollment.cohort_id == cohort.id, Enrollment.not_paying)
+            .values(not_paying=False)
+        )
     note: dict[str, Any] = {}
     if funding == DONOR:
         payers = (
@@ -155,6 +193,36 @@ async def enrollment_donor(
     return None
 
 
+async def change_enrollment_funding(
+    db: AsyncSession,
+    cohort: Cohort,
+    e: Enrollment,
+    donor_id: uuid.UUID | None,
+    not_paying: bool,
+) -> dict[str, Any] | None:
+    """Change who pays for one student: themself, a donor of the cohort, or nobody («не платит»).
+    Moving to paying themself starts the debt from now (`pays_from`). Returns the audit diff
+    {funding: [before, after]}, or None when nothing changed."""
+    if donor_id == e.donor_id and not_paying == e.not_paying:
+        return None
+    check_not_paying(cohort, donor_id, not_paying)
+    if donor_id is None and not not_paying:
+        if cohort.funding == DONOR:
+            raise DomainError(DONOR_REQUIRED).for_field("donor_id", "donor_required")
+    elif donor_id is not None:
+        await enrollment_donor(db, cohort, donor_id)
+    names = await donor_names(db, [e.donor_id, donor_id])
+    before = funding_label(
+        cohort.funding, names.get(e.donor_id) if e.donor_id else None, e.not_paying
+    )
+    after = funding_label(cohort.funding, names.get(donor_id) if donor_id else None, not_paying)
+    if owes_nothing(e) and donor_id is None and not not_paying:
+        e.pays_from = clock.now()
+    e.donor_id, e.not_paying = donor_id, not_paying
+    await db.flush()
+    return {"funding": [before, after]}
+
+
 async def donor_names(db: AsyncSession, ids: Sequence[uuid.UUID | None]) -> dict[uuid.UUID, str]:
     wanted = {i for i in ids if i is not None}
     if not wanted:
@@ -163,8 +231,10 @@ async def donor_names(db: AsyncSession, ids: Sequence[uuid.UUID | None]) -> dict
     return dict(rows.all())
 
 
-def funding_label(cohort_funding: str, donor_name: str | None) -> str:
-    """How a student is paid for, in words: «Платит сам», «Донор: X», «Бесплатно»."""
+def funding_label(cohort_funding: str, donor_name: str | None, not_paying: bool = False) -> str:
+    """How a student is paid for, in words: «Платит сам», «Донор: X», «Не платит», «Бесплатно»."""
+    if not_paying:
+        return NOT_PAYING_LABEL
     if donor_name:
         return f"Донор: {donor_name}"
     return "Бесплатно" if cohort_funding == FREE else "Платит сам"

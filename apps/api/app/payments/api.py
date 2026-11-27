@@ -36,7 +36,7 @@ from app.core.errors import FORBIDDEN, NOT_FOUND, DomainError
 from app.core.paging import Page, PageSize
 from app.core.search import search_clause
 from app.core.versioning import Version, check_version, lock
-from app.donors.errors import PAYMENT_DONOR_FUNDED
+from app.donors.errors import PAYMENT_DONOR_FUNDED, PAYMENT_NOT_PAYING
 from app.education.scope import check_cohort_visible, cohort_filters, is_instructor
 from app.export import MAX_ROWS, Col, check_cap, xlsx_response
 from app.metrics import cohort_enrolled
@@ -528,7 +528,13 @@ async def cohort_payments(cohort_id: uuid.UUID, p: View, db: DB) -> dict[str, An
         "funding": cohort.funding,
         "seats": (await cohort_funding_counts(db, [cohort.id]))[cohort.id],
         "items": [
-            {"enrollment_id": e.id, "donor_id": e.donor_id, **money[e.id]} for e in enrollments
+            {
+                "enrollment_id": e.id,
+                "donor_id": e.donor_id,
+                "not_paying": e.not_paying,
+                **money[e.id],
+            }
+            for e in enrollments
         ],
     }
 
@@ -544,6 +550,7 @@ async def enrollment_payments(enrollment_id: uuid.UUID, p: View, db: DB) -> dict
         "price_month": cohort.price_month,
         "funding": cohort.funding,
         "donor_id": enrollment.donor_id,
+        "not_paying": enrollment.not_paying,
         **money[enrollment.id],
     }
 
@@ -914,6 +921,8 @@ async def create_payment(body: PaymentIn, response: Response, p: Change, db: DB)
         enrollment, cohort = await _enrollment(db, p, body.enrollment_id, for_update=True)
         if enrollment.donor_id is not None:
             raise DomainError(PAYMENT_DONOR_FUNDED)
+        if enrollment.not_paying:
+            raise DomainError(PAYMENT_NOT_PAYING)
         _check_month_no(cohort, body.month_no)
         # a retry of the same create that waited on the lock finds the stored payment now
         existing = await _by_key(db, body.idempotency_key)
