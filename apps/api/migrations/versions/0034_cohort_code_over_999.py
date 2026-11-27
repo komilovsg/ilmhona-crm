@@ -5,7 +5,7 @@
 
 from alembic import op
 
-revision = "0035"
+revision = "0034"
 down_revision = "0033"
 
 NEW = (
