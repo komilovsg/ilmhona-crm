@@ -6,6 +6,7 @@ import { Input } from "@heroui/input";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { AppModal } from "@/components/AppModal";
+import { DateField } from "@/components/DateField";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoadingButton } from "@/components/LoadingButton";
 import { SelectField } from "@/components/SelectField";
@@ -164,15 +165,12 @@ export function GoalFormModal({ goal, onClose }: { goal?: Goal; onClose: () => v
           value={branch}
           onChange={setBranch}
         />
-        <Input isRequired label="Начало" placeholder=" " type="date" value={start} {...fe.field("start_date", setStart)} />
-        <Input
+        <DateField isRequired label="Начало" value={start} {...fe.field("start_date", setStart)} />
+        <DateField
           isRequired
           errorMessage={fe.hint("deadline").errorMessage ?? "Срок должен быть позже начала"}
           isInvalid={(deadline !== "" && deadline <= start) || fe.hint("deadline").isInvalid}
           label="Срок"
-          validationBehavior="aria"
-          placeholder=" "
-          type="date"
           value={deadline}
           onValueChange={(v) => {
             fe.clear("deadline");

@@ -225,6 +225,7 @@ def _unfilled_query(cohort_where: list[ColumnElement[bool]], now: datetime) -> A
             [
                 *cohort_where,
                 held_lesson(now),
+                Lesson.ends_at <= now,  # a lesson still in progress is not «unmarked» yet
                 Lesson.starts_at >= now - timedelta(days=UNFILLED_DAYS),
                 Cohort.status != "отменён",
             ]
@@ -237,7 +238,7 @@ def _unfilled_query(cohort_where: list[ColumnElement[bool]], now: datetime) -> A
 async def unfilled_lessons(
     db: AsyncSession, cohort_where: list[ColumnElement[bool]], *, now: datetime | None = None
 ) -> list[tuple[Lesson, Cohort, str, str, int, int]]:
-    """#21: held lessons of the last 30 days where somebody is still unmarked, oldest first."""
+    """#21: finished lessons of the last 30 days where somebody is still unmarked, oldest first."""
     rows = await db.execute(_unfilled_query(cohort_where, now or _now()))
     return [tuple(r) for r in rows.all()]
 

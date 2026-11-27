@@ -182,8 +182,8 @@ function StudentRow({
             aria-label={`Причина отсутствия: ${row.student_name}`}
             isDisabled={!canMark || disabled}
             maxLength={200}
+            classNames={{ inputWrapper: "min-h-11" }}
             placeholder="Причина (необязательно)"
-            size="sm"
             value={shown}
             onBlur={() => draft !== null && saveReason(draft)}
             onKeyDown={(e) => e.key === "Enter" && saveReason(shown)}
