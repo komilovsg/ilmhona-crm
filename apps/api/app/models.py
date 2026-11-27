@@ -206,7 +206,12 @@ class Cohort(Versioned, Legacy, Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     # 'G-NNN' from cohort_code_seq (database default)
     code: Mapped[str] = mapped_column(
-        Text, server_default=text("'G-' || lpad(nextval('cohort_code_seq')::text, 3, '0')")
+        Text,
+        server_default=text(
+            "'G-' || CASE WHEN nextval('cohort_code_seq') < 1000 "
+            "THEN lpad(currval('cohort_code_seq')::text, 3, '0') "
+            "ELSE currval('cohort_code_seq')::text END"
+        ),
     )
     course_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("course.id"))
     branch_id: Mapped[UUID] = mapped_column(PG_UUID, ForeignKey("branch.id"))
@@ -686,6 +691,8 @@ class Certificate(Base):
     id: Mapped[UUID] = mapped_column(PG_UUID, primary_key=True, server_default=UUID_PK)
     number: Mapped[str] = mapped_column(Text)
     verify_code: Mapped[str] = mapped_column(Text, unique=True)
+    # the code of the public check page; null for certificates issued before it existed
+    public_code: Mapped[str | None] = mapped_column(Text)
     # null for a certificate issued from an Excel list (batch_id is then set)
     enrollment_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("enrollment.id"))
     cohort_id: Mapped[UUID | None] = mapped_column(PG_UUID, ForeignKey("cohort.id"))

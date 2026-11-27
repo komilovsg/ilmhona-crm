@@ -1288,7 +1288,14 @@ async def set_enrollment_status(
     )
     if body.status == "активный" and cohort.status in (st.CANCELLED, st.DONE):
         raise DomainError(COHORT_CLOSED)  # #11: a finished cohort has no active students
-    if enrollment.certificate_no and body.status != st.GRADUATE:
+    # A certificate issued to a graduate keeps the status «выпускник». One issued knowingly to a
+    # non-graduate (superadmin setting, with a comment) did not depend on the status, so the
+    # status stays editable; the certificate itself is changed only by reissue or revoke.
+    if (
+        enrollment.certificate_no
+        and not enrollment.certificate_non_graduate
+        and body.status != st.GRADUATE
+    ):
         raise DomainError(CERTIFICATE_ISSUED)
     before = enrollment.status
     enrollment.status = body.status

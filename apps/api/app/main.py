@@ -16,6 +16,7 @@ from app.campaigns.api import router as campaigns_router
 from app.certificates.api import router as certificates_router
 from app.certificates.bulk import router as cert_bulk_router
 from app.certificates.editor import router as cert_editor_router
+from app.certificates.public import router as cert_public_router
 from app.certificates.registry import router as cert_registry_router
 from app.cohorts.api import router as cohorts_router
 from app.cohorts.settings_api import router as academy_settings_router
@@ -100,6 +101,7 @@ for router in (
     cert_editor_router,
     cert_registry_router,
     cert_bulk_router,
+    cert_public_router,
     employment_router,
     academy_goal_router,
     goals_router,

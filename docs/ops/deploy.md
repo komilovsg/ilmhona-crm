@@ -78,6 +78,7 @@ Use the **direct** (non-pooled) Neon host. SQLAlchemy URLs are
 | Render env | `DATABASE_URL` | `ilm_app` URL |
 | Render env | `SENTRY_DSN` | API Sentry project (monitoring.md) |
 | Render env | `JWT_SECRET`, `PROXY_SHARED_SECRET` | 32+ random characters; the app refuses to start in production without them |
+| Render env | `CERT_VERIFY_BASE_URL` | `https://ilmhona-crm.vercel.app`: the certificate QR links to `<it>/v/<code>` (the superadmin can set another address in the certificate settings) |
 | Vercel env (production) | `API_URL` | `https://ilmhona-api-1oaz.onrender.com` |
 | Vercel env (production) | `PROXY_SHARED_SECRET` | same value as on Render (sensitive) |
 | GitHub env `api-production` | `MIGRATION_DATABASE_URL` | owner URL (asyncpg form) |
