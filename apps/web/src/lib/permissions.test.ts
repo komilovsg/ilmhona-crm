@@ -6,9 +6,12 @@ import {
   canOpen,
   fromMatrix,
   homePath,
+  activeHub,
   NAV_ITEMS,
   splitNav,
+  tabOf,
   toMatrix,
+  visibleHubs,
   visibleNav,
   type MatrixChoice,
   type Permissions,
@@ -79,24 +82,86 @@ test("every backend section has a nav item", () => {
   assert.equal(sections.size, 16);
 });
 
-test("phone: four main items, the rest goes to «Ещё»", () => {
-  const all = Object.fromEntries(NAV_ITEMS.map((i) => [i.section, "change"])) as Permissions;
-  const { main, more } = splitNav(visibleNav(all, "manager"));
-  assert.equal(main.length, 4);
-  assert.equal(more.length, NAV_ITEMS.length - 1 - 4); // minus «Мои выплаты» (instructor only)
-  assert.deepEqual(splitNav(visibleNav(instructor, "instructor", true)).more, []);
+const everything = Object.fromEntries(NAV_ITEMS.flatMap((i) => [[i.section, "change"], ...(i.alsoSection ? [[i.alsoSection, "change"]] : [])])) as Permissions;
+const hubTabs = (p: Permissions, role: string, teaches?: boolean) =>
+  Object.fromEntries(visibleHubs(p, role, teaches).map((h) => [h.key, h.tabs.map((t) => t.href)]));
+
+test("hubs per role: instructor", () => {
+  const hubs = visibleHubs(instructor, "instructor", true);
+  assert.deepEqual(hubs.map((h) => h.key), ["today", "study", "finance"]);
+  // the instructor sees one tab in «Обучение» and «Финансы»: plain links, no tab bar
+  assert.deepEqual(hubs.map((h) => h.tabs.length), [1, 1, 1]);
+  assert.deepEqual(hubs.map((h) => h.href), ["/today", "/cohorts", "/my-payouts"]);
 });
 
-test("phone: users who see payments get Дашборд, Лиды, Студенты, Оплаты; «Сегодня» goes to «Ещё»", () => {
+test("hubs per role: manager", () => {
   const withToday = { ...manager, attendance: "view" } as Permissions;
-  const { main, more } = splitNav(visibleNav(withToday, "manager"), "manager");
-  assert.deepEqual(main.map((i) => i.href), ["/dashboard", "/leads", "/students", "/payments"]);
-  assert.ok(more.some((i) => i.href === "/today"));
-  // without payments nothing changes: the first four
-  const noPay = { ...withToday, payments: undefined } as Permissions;
-  assert.deepEqual(splitNav(visibleNav(noPay, "manager"), "manager").main.map((i) => i.href), ["/dashboard", "/today", "/leads", "/students"]);
-  // the instructor's bar is unchanged
-  assert.deepEqual(splitNav(visibleNav(instructor, "instructor", true), "instructor").main.map((i) => i.href), splitNav(visibleNav(instructor, "instructor", true)).main.map((i) => i.href));
+  assert.deepEqual(hubTabs(withToday, "manager"), {
+    dashboard: ["/dashboard"],
+    today: ["/today"],
+    sales: ["/leads"],
+    study: ["/students", "/cohorts", "/rooms"],
+    finance: ["/payments"],
+    settings: ["/settings/grading"],
+  });
+  // a hub without a visible tab is gone
+  assert.equal(visibleHubs(manager, "manager").some((h) => h.key === "settings"), false);
+});
+
+test("hubs per role: superadmin sees every hub with all its tabs; settings is pinned", () => {
+  const hubs = visibleHubs(everything, "superadmin", true);
+  assert.deepEqual(hubs.map((h) => h.key), ["dashboard", "today", "sales", "study", "finance", "settings"]);
+  assert.deepEqual(hubs.find((h) => h.key === "study")?.tabs.map((t) => t.label), ["Студенты", "Потоки", "Расписание", "Инструкторы", "Выпускники", "Сертификаты"]);
+  assert.deepEqual(hubs.find((h) => h.key === "finance")?.tabs.map((t) => t.label), ["Оплаты", "Мастер-лист", "Зарплаты", "Мои выплаты"]);
+  assert.deepEqual(hubs.find((h) => h.key === "settings")?.tabs.map((t) => t.href), ["/users", "/roles", "/audit", "/settings/grading", "/settings/donors"]);
+  assert.deepEqual(hubs.filter((h) => h.pinned).map((h) => h.key), ["settings"]);
+  // a click on a hub goes to its first visible tab
+  assert.equal(hubs.find((h) => h.key === "sales")?.href, "/leads");
+  assert.equal(visibleHubs({ audit: "view" }, "manager")[0].href, "/audit");
+});
+
+test("a hub with one visible tab acts as a link to that tab", () => {
+  const [hub] = visibleHubs({ marketing: "view" }, "manager");
+  assert.equal(hub.key, "sales");
+  assert.equal(hub.tabs.length, 1);
+  assert.equal(hub.href, "/marketing");
+});
+
+test("active hub holds detail pages and aliases", () => {
+  const hubs = visibleHubs(everything, "superadmin", true);
+  const at = (path: string) => {
+    const found = activeHub(hubs, path);
+    return found && [found.hub.key, found.tab.href];
+  };
+  assert.deepEqual(at("/students/123"), ["study", "/students"]);
+  assert.deepEqual(at("/cohorts/x"), ["study", "/cohorts"]);
+  assert.deepEqual(at("/certificates"), ["study", "/certificates"]);
+  assert.deepEqual(at("/settings/certificates/abc"), ["study", "/certificates"]);
+  assert.deepEqual(at("/employment"), ["study", "/graduates"]);
+  assert.deepEqual(at("/payments"), ["finance", "/payments"]);
+  assert.deepEqual(at("/settings/grading"), ["settings", "/settings/grading"]);
+  assert.deepEqual(at("/leads/42"), ["sales", "/leads"]);
+  assert.equal(at("/profile"), undefined);
+  assert.equal(at("/studentsx"), undefined);
+  // a page of a tab the user cannot see belongs to no hub
+  assert.equal(activeHub(visibleHubs(instructor, "instructor", true), "/students/1"), undefined);
+  assert.equal(tabOf(hubs[3], "/rooms")?.label, "Расписание");
+});
+
+test("phone: four hubs in the bar, the rest goes to «Ещё»", () => {
+  const { main, more } = splitNav(visibleHubs(everything, "manager"), "manager");
+  assert.deepEqual(main.map((h) => h.key), ["dashboard", "sales", "study", "finance"]);
+  assert.deepEqual(more.map((h) => h.key), ["today", "settings"]); // «Настройки» last
+  assert.deepEqual(splitNav(visibleHubs(instructor, "instructor", true), "instructor").more, []);
+});
+
+test("phone: without finance (or for the instructor) the bar is the first four hubs", () => {
+  const withToday = { ...manager, attendance: "view", payments: undefined } as Permissions;
+  assert.deepEqual(splitNav(visibleHubs(withToday, "manager"), "manager").main.map((h) => h.key), ["dashboard", "today", "sales", "study"]);
+  const boss = visibleHubs(everything, "instructor", true);
+  // the instructor role never sees «Дашборд» (staff only)
+  assert.deepEqual(splitNav(boss, "instructor").main.map((h) => h.key), ["today", "sales", "study", "finance"]);
+  assert.deepEqual(splitNav(boss, "instructor").more.map((h) => h.key), ["settings"]);
 });
 
 test("home is the first visible section, the profile when there is none", () => {

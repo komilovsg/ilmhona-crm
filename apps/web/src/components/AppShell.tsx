@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,13 +22,9 @@ import { useMe, useResetRequests } from "@/hooks/queries";
 import { SIDEBAR_STORAGE_KEY } from "@/context/theme-init";
 import { api } from "@/lib/api";
 import { useBrowserValue } from "@/lib/client-store";
-import { NAV_GROUPS, can, canOpen, splitNav, visibleNav, type NavGroup, type NavItem } from "@/lib/permissions";
+import { activeHub, can, canOpen, hubsOf, splitNav, tabOf, visibleNav, type HubView } from "@/lib/permissions";
 import type { Me } from "@/lib/types";
 import { useOverlayMotion } from "@/lib/motion";
-
-function isActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
 
 function useLogout() {
   const router = useRouter();
@@ -91,6 +87,11 @@ function useSidebarCollapsed() {
 
 type Badges = Record<string, number>;
 
+/** A hub shows the sum of its tabs' counters (e.g. reset requests on «Пользователи» -> «Настройки»). */
+function hubBadge(hub: HubView, badges: Badges): number {
+  return hub.tabs.reduce((sum, t) => sum + (badges[t.href] ?? 0), 0);
+}
+
 function Badge({ n }: { n: number | undefined }) {
   if (!n) return null;
 
@@ -103,39 +104,131 @@ function Badge({ n }: { n: number | undefined }) {
 
 const ROW = "relative flex min-h-9 items-center gap-3 rounded-lg px-[15px] py-2 text-sm transition-colors";
 
-const GROUPS_KEY = "ilm-nav-closed";
-const GROUPS_EVENT = "ilm-nav-groups";
-const NO_GROUPS: NavGroup[] = [];
-let cachedGroups: { raw: string; list: NavGroup[] } = { raw: "", list: NO_GROUPS };
-
-/** The sidebar groups the user folded (the same array while the stored value is the same). */
-function readClosedGroups(): NavGroup[] {
-  let raw = cachedGroups.raw;
-
-  try {
-    raw = localStorage.getItem(GROUPS_KEY) ?? "";
-  } catch {
-    // private mode
-  }
-  if (raw !== cachedGroups.raw) cachedGroups = { raw, list: raw ? (raw.split(",") as NavGroup[]) : NO_GROUPS };
-
-  return cachedGroups.list;
+function rowClass(active: boolean) {
+  return `${ROW} w-full text-left ${active ? "sb-active bg-white/[0.07] font-medium text-white" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"}`;
 }
 
-function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: string; badges: Badges }) {
+function HubIcon({ hub, active, badge }: { hub: HubView; active: boolean; badge: number }) {
+  return (
+    <span className={`relative shrink-0 ${active ? "text-[#38BDF0]" : ""}`}>
+      <Icon name={hub.icon} size={18} />
+      {/* collapsed rail: the count shows as a dot on the icon */}
+      {badge ? <span className="sb-dot absolute -right-1.5 -top-1 hidden size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+    </span>
+  );
+}
+
+/** Collapsed rail: the tabs of a hub in a small panel next to the rail. Esc, outside click or a pick closes it. */
+function HubFlyout({ hub, pathname, badges, anchor, top, onClose }: { hub: HubView; pathname: string; badges: Badges; anchor: HTMLElement | null; top: number; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const current = tabOf(hub, pathname);
+
+  useEffect(() => {
+    ref.current?.querySelector<HTMLElement>("a")?.focus();
+
+    const close = (focusBack: boolean) => {
+      onClose();
+      if (focusBack) anchor?.focus();
+    };
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+
+      if (!ref.current?.contains(target) && !anchor?.contains(target)) close(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close(true);
+    };
+
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [anchor, onClose]);
+
+  return (
+    <div
+      ref={ref}
+      aria-label={hub.label}
+      className="fixed left-[var(--sb-w)] z-40 ml-1 min-w-48 rounded-xl border border-divider bg-content1 p-1.5 text-sm shadow-lg"
+      role="group"
+      style={{ top }}
+      onBlur={(e) => {
+        if (!e.relatedTarget || ref.current?.contains(e.relatedTarget as Node) || anchor?.contains(e.relatedTarget as Node)) return;
+        onClose();
+      }}
+    >
+      <div className="px-2.5 pb-1 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-default-500">{hub.label}</div>
+      {hub.tabs.map((tab) => (
+        <Link
+          key={tab.href}
+          aria-current={current === tab ? "page" : undefined}
+          className={`flex min-h-9 items-center gap-2 rounded-lg px-2.5 py-2 hover:bg-default-100 ${current === tab ? "font-medium text-brand-text" : ""}`}
+          href={tab.href}
+          onClick={onClose}
+        >
+          {tab.label}
+          {badges[tab.href] ? <span className="ml-auto min-w-5 rounded-full bg-[#E26A3D] px-1.5 text-center text-xs font-semibold leading-5 text-[#0A0F14]">{badges[tab.href]}</span> : null}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function HubRow({ hub, active, badges, collapsed, pathname }: { hub: HubView; active: boolean; badges: Badges; collapsed: boolean; pathname: string }) {
+  const overlayMotion = useOverlayMotion();
+  // the page the panel was opened on (and its top edge): another page closes it without an effect
+  const [opened, setOpened] = useState<{ path: string; top: number } | null>(null);
+  const open = opened?.path === pathname;
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const badge = hubBadge(hub, badges);
+  const close = useCallback(() => setOpened(null), []);
+  const content = (
+    <>
+      <HubIcon active={active} badge={badge} hub={hub} />
+      <span className="sb-label">{hub.label}</span>
+      <Badge n={badge} />
+    </>
+  );
+  const flyout = collapsed && hub.tabs.length > 1;
+
+  return (
+    <Tooltip closeDelay={0} content={hub.label} delay={300} isDisabled={!collapsed || open} motionProps={overlayMotion} placement="right">
+      {flyout ? (
+        <div>
+          <button
+            ref={setAnchor}
+            aria-controls={undefined}
+            aria-current={active ? "page" : undefined}
+            aria-expanded={open}
+            aria-haspopup="true"
+            aria-label={hub.label}
+            className={rowClass(active)}
+            type="button"
+            onClick={(e) => setOpened(open ? null : { path: pathname, top: e.currentTarget.getBoundingClientRect().top })}
+          >
+            {content}
+          </button>
+          {open && <HubFlyout anchor={anchor} top={opened.top} badges={badges} hub={hub} pathname={pathname} onClose={close} />}
+        </div>
+      ) : (
+        <Link aria-current={active ? "page" : undefined} className={rowClass(active)} href={hub.href}>
+          {content}
+        </Link>
+      )}
+    </Tooltip>
+  );
+}
+
+function Sidebar({ hubs, current, pathname, badges }: { hubs: HubView[]; current: HubView | undefined; pathname: string; badges: Badges }) {
   const { collapsed, toggle } = useSidebarCollapsed();
   const overlayMotion = useOverlayMotion();
-  const closed = useBrowserValue(readClosedGroups, NO_GROUPS, GROUPS_EVENT);
-  const toggleGroup = (key: NavGroup) => {
-    const next = closed.includes(key) ? closed.filter((k) => k !== key) : [...closed, key];
-
-    try {
-      localStorage.setItem(GROUPS_KEY, next.join(","));
-    } catch {
-      // private mode: the groups stay open
-    }
-    window.dispatchEvent(new Event(GROUPS_EVENT));
-  };
+  const row = (hub: HubView) => (
+    <HubRow key={hub.key} active={current === hub} badges={badges} collapsed={collapsed} hub={hub} pathname={pathname} />
+  );
+  const pinned = hubs.filter((h) => h.pinned);
 
   return (
     <aside className="sb-aside fixed inset-y-0 left-0 hidden flex-col bg-sidebar md:flex">
@@ -148,64 +241,11 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
           </span>
         </Link>
       </div>
-      <nav aria-label="Разделы" className="flex-1 overflow-y-auto overflow-x-hidden px-3 pb-3">
-        {NAV_GROUPS.map((group) => {
-          const rows = items.filter((i) => i.group === group.key);
-
-          if (rows.length === 0) return null;
-          const here = rows.some((i) => isActive(pathname, i.href));
-          // the group of the open page never hides it
-          const open = here || !closed.includes(group.key);
-
-          return (
-            <div key={group.key} className="sb-group">
-              {group.label && (
-                <button
-                  aria-expanded={open}
-                  className="sb-label flex min-h-8 w-full items-center gap-1.5 rounded-md px-[15px] text-left text-[11px] font-medium uppercase tracking-[0.08em] text-[#6f7c88] hover:text-[#aab5bf]"
-                  type="button"
-                  onClick={() => toggleGroup(group.key)}
-                >
-                  <span className="flex-1">{group.label}</span>
-                  <Icon className={`transition-transform duration-150 ${open ? "" : "-rotate-90"}`} name="chevron-down" size={12} />
-                </button>
-              )}
-              {open &&
-                rows.map((item) => {
-                  const active = isActive(pathname, item.href);
-                  const badge = badges[item.href];
-
-                  return (
-                    <Tooltip
-                      key={item.href}
-                      closeDelay={0}
-                      content={item.label}
-                      delay={300}
-                      isDisabled={!collapsed}
-                      motionProps={overlayMotion}
-                      placement="right"
-                    >
-                      <Link
-                        aria-current={active ? "page" : undefined}
-                        className={`${ROW} ${
-                          active ? "sb-active bg-white/[0.07] font-medium text-white" : "text-[#aab5bf] hover:bg-white/5 hover:text-white"
-                        }`}
-                        href={item.href}
-                      >
-                        <span className={`relative shrink-0 ${active ? "text-[#38BDF0]" : ""}`}>
-                          <Icon name={item.icon} size={18} />
-                          {/* collapsed rail: the count shows as a dot on the icon */}
-                          {badge ? <span className="sb-dot absolute -right-1.5 -top-1 hidden size-2.5 rounded-full bg-[#E26A3D]" /> : null}
-                        </span>
-                        <span className="sb-label">{item.label}</span>
-                        <Badge n={badge} />
-                      </Link>
-                    </Tooltip>
-                  );
-                })}
-            </div>
-          );
-        })}
+      <nav aria-label="Разделы" className="flex flex-1 flex-col gap-0.5 overflow-y-auto overflow-x-hidden px-3 pb-3">
+        {hubs.filter((h) => !h.pinned).map(row)}
+        {pinned.length > 0 && (
+          <div className="mt-auto flex flex-col gap-0.5 border-t border-white/[0.08] pt-2">{pinned.map(row)}</div>
+        )}
       </nav>
       <div className="px-3 pb-4">
         <Tooltip closeDelay={0} content="Развернуть  [" delay={300} isDisabled={!collapsed} motionProps={overlayMotion} placement="right">
@@ -224,6 +264,36 @@ function Sidebar({ items, pathname, badges }: { items: NavItem[]; pathname: stri
         </Tooltip>
       </div>
     </aside>
+  );
+}
+
+/** Tabs of the hub the page belongs to: underline links, scroll sideways inside their own box on a phone. */
+function HubTabs({ hub, pathname, badges }: { hub: HubView; pathname: string; badges: Badges }) {
+  const current = tabOf(hub, pathname);
+
+  return (
+    <nav aria-label={hub.label} className="mb-5 overflow-x-auto border-b border-divider [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <ul className="flex w-max min-w-full gap-1">
+        {hub.tabs.map((tab) => {
+          const active = current === tab;
+
+          return (
+            <li key={tab.href} className="shrink-0">
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={`-mb-px flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm transition-colors ${
+                  active ? "border-brand-text font-medium text-brand-text" : "border-transparent text-default-500 hover:text-foreground"
+                }`}
+                href={tab.href}
+              >
+                {tab.label}
+                {badges[tab.href] ? <span className="min-w-5 rounded-full bg-[#E26A3D] px-1.5 text-center text-xs font-semibold leading-5 text-[#0A0F14]">{badges[tab.href]}</span> : null}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 
@@ -261,13 +331,13 @@ function UserMenu({ me }: { me: Me }) {
   );
 }
 
-function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: NavItem[]; pathname: string; badges: Badges }) {
+function BottomNav({ main, more, current, pathname, badges }: { main: HubView[]; more: HubView[]; current: HubView | undefined; pathname: string; badges: Badges }) {
   const [moreOpen, setMoreOpen] = useState(false);
   const overlayMotion = useOverlayMotion();
   const logout = useLogout();
-  const moreActive = more.some((i) => isActive(pathname, i.href)) || pathname === "/profile";
+  const moreActive = (!!current && more.includes(current)) || pathname === "/profile";
   const tab = (active: boolean) =>
-    `flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ${active ? "text-brand-text" : "text-default-500"}`;
+    `flex min-w-0 flex-1 flex-col items-center gap-0.5 py-2 text-[11px] ${active ? "text-brand-text" : "text-default-500"}`;
 
   return (
     <>
@@ -275,19 +345,19 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
         aria-label="Основное меню"
         className="fixed inset-x-0 bottom-0 z-30 flex border-t border-[var(--hairline)] bg-content1/75 backdrop-blur-xl backdrop-saturate-150 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] md:hidden"
       >
-        {main.map((item) => (
-          <Link key={item.href} className={tab(isActive(pathname, item.href))} href={item.href}>
+        {main.map((hub) => (
+          <Link key={hub.key} aria-current={current === hub ? "page" : undefined} className={tab(current === hub)} href={hub.href}>
             <span className="relative">
-              <Icon name={item.icon} />
-              {badges[item.href] ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+              <Icon name={hub.icon} />
+              {hubBadge(hub, badges) ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
             </span>
-            <span className="max-w-full truncate px-1">{item.label.split(" ")[0]}</span>
+            <span className="max-w-full truncate px-1">{hub.label}</span>
           </Link>
         ))}
         <button className={tab(moreActive)} type="button" onClick={() => setMoreOpen(true)}>
           <span className="relative">
             <Icon name="more" />
-            {more.some((i) => badges[i.href]) ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
+            {more.some((h) => hubBadge(h, badges)) ? <span className="absolute -right-1.5 -top-1 size-2.5 rounded-full bg-[#E26A3D]" /> : null}
           </span>
           Ещё
         </button>
@@ -299,16 +369,16 @@ function BottomNav({ main, more, pathname, badges }: { main: NavItem[]; more: Na
               <SheetHandle onBackdrop={close} onClose={close} />
               <DrawerHeader>Ещё</DrawerHeader>
               <DrawerBody className="gap-1 pb-8">
-                {[...more, { section: "", href: "/profile", label: "Профиль", icon: "profile" }].map((item) => (
+                {[...more, { key: "profile", href: "/profile", label: "Профиль", icon: "profile", tabs: [] as HubView["tabs"] }].map((item) => (
                   <Link
-                    key={item.href}
+                    key={item.key}
                     className="flex items-center gap-3 rounded-lg px-3 py-3 hover:bg-default-100"
                     href={item.href}
                     onClick={close}
                   >
                     <Icon name={item.icon} />
                     {item.label}
-                    <Badge n={badges[item.href]} />
+                    <Badge n={item.tabs.reduce((sum, t) => sum + (badges[t.href] ?? 0), 0)} />
                   </Link>
                 ))}
                 <button
@@ -360,14 +430,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  const items = visibleNav(me.permissions, me.role.code, me.teaches);
+  const hubs = hubsOf(visibleNav(me.permissions, me.role.code, me.teaches));
   const badges: Badges = { "/users": requests?.total ?? 0 };
-  const { main, more } = splitNav(items, me.role.code);
+  const { main, more } = splitNav(hubs, me.role.code);
+  const here = activeHub(hubs, pathname);
+  const allowed = canOpen(me.permissions, pathname, me.role.code, me.teaches);
 
   return (
     <div className="sb-shell min-h-dvh">
       <TopProgress />
-      <Sidebar badges={badges} items={items} pathname={pathname} />
+      <Sidebar badges={badges} current={here?.hub} hubs={hubs} pathname={pathname} />
       <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--hairline)] bg-content1/70 backdrop-blur-xl backdrop-saturate-150 pb-2 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.5rem+env(safe-area-inset-top))] md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))]">
         <Logo tagline={false} className="md:hidden [&>div]:text-xl" tone="text-brand-text dark:text-white" />
         <div className="hidden text-sm text-default-500 md:block">
@@ -381,7 +453,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <main className="mx-auto min-w-0 max-w-[88rem] pb-[calc(7rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 md:pb-10 md:pl-[max(2rem,env(safe-area-inset-left))] md:pr-[max(2rem,env(safe-area-inset-right))] md:pt-8">
-        {canOpen(me.permissions, pathname, me.role.code, me.teaches) ? (
+        {allowed && here && here.hub.tabs.length > 1 && <HubTabs badges={badges} hub={here.hub} pathname={pathname} />}
+        {allowed ? (
           <div key={pathname} className="page-in">
             {children}
           </div>
@@ -389,7 +462,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <p className="rounded-xl bg-content1 p-6 text-default-600">У вас нет доступа к этому разделу.</p>
         )}
       </main>
-      <BottomNav badges={badges} main={main} more={more} pathname={pathname} />
+      <BottomNav badges={badges} current={here?.hub} main={main} more={more} pathname={pathname} />
     </div>
   );
 }

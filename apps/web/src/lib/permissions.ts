@@ -18,15 +18,24 @@ export function can(
   return allows(permissions?.[section], need);
 }
 
-export type NavGroup = "main" | "sales" | "study" | "money" | "admin";
+export type HubKey = "dashboard" | "today" | "sales" | "study" | "finance" | "settings";
 
-/** The sidebar sections, top to bottom. «main» has no heading. */
-export const NAV_GROUPS: { key: NavGroup; label: string }[] = [
-  { key: "main", label: "" },
-  { key: "sales", label: "Продажи" },
-  { key: "study", label: "Обучение" },
-  { key: "money", label: "Финансы" },
-  { key: "admin", label: "Управление" },
+export type Hub = {
+  key: HubKey;
+  label: string;
+  icon: string;
+  /** Pinned at the bottom of the sidebar, after a divider. */
+  pinned?: boolean;
+};
+
+/** The sidebar sections (hubs), top to bottom. Each hub holds the pages that show as its tabs. */
+export const HUBS: Hub[] = [
+  { key: "dashboard", label: "Дашборд", icon: "dashboard" },
+  { key: "today", label: "Сегодня", icon: "attendance" },
+  { key: "sales", label: "Продажи", icon: "trending-up" },
+  { key: "study", label: "Обучение", icon: "students" },
+  { key: "finance", label: "Финансы", icon: "wallet" },
+  { key: "settings", label: "Настройки", icon: "settings", pinned: true },
 ];
 
 export type NavItem = {
@@ -37,38 +46,38 @@ export type NavItem = {
   href: string;
   label: string;
   icon: string;
-  /** Where the item sits in the desktop sidebar (`NAV_GROUPS`). */
-  group: NavGroup;
+  /** The hub this page is a tab of. */
+  hub: HubKey;
   /** `own`: only for users who teach (any role); `staff`: only for everybody but the instructor role; default: all. */
   audience?: "own" | "staff";
 };
 
-// Order = order in the sidebar. `section` keys are the backend's (app/permissions.py).
+// Order = order of the tabs inside a hub. `section` keys are the backend's (app/permissions.py).
 export const NAV_ITEMS: NavItem[] = [
-  { section: "dashboard", group: "main", href: "/dashboard", label: "Дашборд", icon: "dashboard", audience: "staff" },
+  { section: "dashboard", hub: "dashboard", href: "/dashboard", label: "Дашборд", icon: "dashboard", audience: "staff" },
   // the instructor's home (a manager with the attendance right sees it too): today's lessons, «не заполнено»
-  { section: "attendance", group: "main", href: "/today", label: "Сегодня", icon: "attendance" },
-  { section: "leads", group: "sales", href: "/leads", label: "Лиды", icon: "leads" },
-  { section: "students", group: "study", href: "/students", label: "Студенты", icon: "students" },
-  { section: "cohorts", group: "study", href: "/cohorts", label: "Потоки", icon: "cohorts" },
-  { section: "payments", group: "money", href: "/payments", label: "Оплаты", icon: "payments" },
-  { section: "rooms", group: "study", href: "/rooms", label: "Расписание", icon: "rooms" },
-  { section: "graduates", group: "study", href: "/graduates", label: "Выпускники и трудоустройство", icon: "graduates", audience: "staff" },
+  { section: "attendance", hub: "today", href: "/today", label: "Сегодня", icon: "attendance" },
+  { section: "leads", hub: "sales", href: "/leads", label: "Лиды", icon: "leads" },
+  { section: "marketing", hub: "sales", href: "/marketing", label: "Маркетинг", icon: "marketing" },
+  { section: "students", hub: "study", href: "/students", label: "Студенты", icon: "students" },
+  { section: "cohorts", hub: "study", href: "/cohorts", label: "Потоки", icon: "cohorts" },
+  { section: "rooms", hub: "study", href: "/rooms", label: "Расписание", icon: "rooms" },
+  { section: "instructors", hub: "study", href: "/instructors", label: "Инструкторы", icon: "instructors", audience: "staff" },
+  { section: "graduates", hub: "study", href: "/graduates", label: "Выпускники", icon: "graduates", audience: "staff" },
   // one item for the registry and the templates (tabs inside); templates alone also open it
-  { section: "certificates", alsoSection: "cert_templates", group: "study", href: "/certificates", label: "Сертификаты", icon: "certificate", audience: "staff" },
-  { section: "master_list", group: "money", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
-  { section: "marketing", group: "sales", href: "/marketing", label: "Маркетинг", icon: "marketing" },
+  { section: "certificates", alsoSection: "cert_templates", hub: "study", href: "/certificates", label: "Сертификаты", icon: "certificate", audience: "staff" },
+  { section: "payments", hub: "finance", href: "/payments", label: "Оплаты", icon: "payments" },
+  { section: "master_list", hub: "finance", href: "/master-list", label: "Мастер-лист", icon: "master", audience: "staff" },
+  { section: "instructors", hub: "finance", href: "/salaries", label: "Зарплаты", icon: "payments", audience: "staff" },
   // the instructor sees only their own money: one page instead of the instructors and salaries tables
-  { section: "instructors", group: "money", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
-  { section: "instructors", group: "study", href: "/instructors", label: "Инструкторы", icon: "instructors", audience: "staff" },
-  { section: "instructors", group: "money", href: "/salaries", label: "Зарплаты", icon: "payments", audience: "staff" },
-  { section: "users", group: "admin", href: "/users", label: "Пользователи", icon: "users" },
-  { section: "users", group: "admin", href: "/roles", label: "Роли и права", icon: "roles" },
-  { section: "audit", group: "admin", href: "/audit", label: "Журнал", icon: "audit" },
+  { section: "instructors", hub: "finance", href: "/my-payouts", label: "Мои выплаты", icon: "payments", audience: "own" },
+  { section: "users", hub: "settings", href: "/users", label: "Пользователи", icon: "users" },
+  { section: "users", hub: "settings", href: "/roles", label: "Роли и права", icon: "roles" },
+  { section: "audit", hub: "settings", href: "/audit", label: "Журнал", icon: "audit" },
   // «Настройки → Стандарты академии»: staff who grade read it, the superadmin changes it (an
   // instructor sees the scheme of their cohort on the cohort page)
-  { section: "attendance", group: "admin", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
-  { section: "donors", group: "admin", href: "/settings/donors", label: "Доноры", icon: "cross", audience: "staff" },
+  { section: "attendance", hub: "settings", href: "/settings/grading", label: "Стандарты академии", icon: "sliders", audience: "staff" },
+  { section: "donors", hub: "settings", href: "/settings/donors", label: "Доноры", icon: "cross", audience: "staff" },
 ];
 
 function forRole(item: NavItem, roleCode: string | null | undefined, teaches?: boolean): boolean {
@@ -93,21 +102,74 @@ export function visibleNav(permissions: Permissions | undefined, roleCode?: stri
   return NAV_ITEMS.filter((item) => shown(item, permissions, roleCode, teaches));
 }
 
+/** A hub the user can open: its visible tabs (never empty). One tab = a plain link, no tab bar. */
+export type HubView = Hub & {
+  tabs: NavItem[];
+  /** The first visible tab: where a click on the hub goes. */
+  href: string;
+};
+
+/** Hubs with at least one visible tab, in sidebar order. */
+export function hubsOf(items: NavItem[]): HubView[] {
+  return HUBS.flatMap((hub) => {
+    const tabs = items.filter((i) => i.hub === hub.key);
+
+    return tabs.length > 0 ? [{ ...hub, tabs, href: tabs[0].href }] : [];
+  });
+}
+
+export function visibleHubs(permissions: Permissions | undefined, roleCode?: string | null, teaches?: boolean): HubView[] {
+  return hubsOf(visibleNav(permissions, roleCode, teaches));
+}
+
+/** Pages that are not a tab themselves but belong to one. */
+const TAB_ALIASES: [prefix: string, href: string][] = [
+  ["/employment", "/graduates"],
+  ["/settings/certificates", "/certificates"],
+];
+
+function tabPath(pathname: string): string {
+  const alias = TAB_ALIASES.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+  return alias ? alias[1] : pathname;
+}
+
+/** The tab of `hub` that holds `pathname` (detail pages included), if any. */
+export function tabOf(hub: HubView, pathname: string): NavItem | undefined {
+  const path = tabPath(pathname);
+
+  return hub.tabs
+    .filter((t) => path === t.href || path.startsWith(`${t.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+}
+
+/** The hub (and its tab) that holds the current page. */
+export function activeHub(hubs: HubView[], pathname: string): { hub: HubView; tab: NavItem } | undefined {
+  for (const hub of hubs) {
+    const tab = tabOf(hub, pathname);
+
+    if (tab) return { hub, tab };
+  }
+
+  return undefined;
+}
+
 export const BOTTOM_NAV_SIZE = 4;
 
-const MONEY_NAV = ["/dashboard", "/leads", "/students", "/payments"];
+const MONEY_HUBS: HubKey[] = ["dashboard", "sales", "study", "finance"];
 
 /**
- * Phone: four visible items go to the bottom bar, the rest to the «Ещё» sheet. A user who sees payments
- * (not an instructor) gets Дашборд · Лиды · Студенты · Оплаты; «Сегодня» moves to «Ещё». Others: the first four.
+ * Phone: four hubs go to the bottom bar, the rest to the «Ещё» sheet. A user who sees finance
+ * (not an instructor) gets Дашборд · Продажи · Обучение · Финансы; «Сегодня» and «Настройки» go to «Ещё».
+ * Others: the first four.
  */
-export function splitNav(items: NavItem[], roleCode?: string | null): { main: NavItem[]; more: NavItem[] } {
-  const money = roleCode !== "instructor" && items.some((i) => i.href === "/payments");
-  const main = money ? MONEY_NAV.flatMap((href) => items.filter((i) => i.href === href)) : [];
+export function splitNav(hubs: HubView[], roleCode?: string | null): { main: HubView[]; more: HubView[] } {
+  const money = roleCode !== "instructor" && hubs.some((h) => h.key === "finance");
+  const main = money ? hubs.filter((h) => MONEY_HUBS.includes(h.key)) : [];
 
-  for (const item of items) if (main.length < BOTTOM_NAV_SIZE && !main.includes(item)) main.push(item);
+  for (const hub of hubs) if (main.length < BOTTOM_NAV_SIZE && !main.includes(hub)) main.push(hub);
 
-  return { main: items.filter((i) => main.includes(i)), more: items.filter((i) => !main.includes(i)) };
+  return { main: hubs.filter((h) => main.includes(h)), more: hubs.filter((h) => !main.includes(h)) };
 }
 
 /** Where to land after sign-in: the dashboard, else the first allowed section, else the profile. */
